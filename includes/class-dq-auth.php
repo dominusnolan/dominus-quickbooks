@@ -1,0 +1,181 @@
+<?php
+/**
+ * OAuth handler for Dominus QuickBooks
+ */
+
+if ( ! defined( 'ABSPATH' ) ) exit;
+
+class DQ_Auth {
+
+    /**
+     * Build the QuickBooks OAuth authorization URL
+     */
+    public static function get_connect_url() {
+        $s = dq_get_settings();
+        $state = wp_create_nonce( 'dq_oauth_state' );
+
+        $params = [
+            'client_id'     => trim( $s['client_id'] ?? '' ),
+            'response_type' => 'code',
+            'scope'         => dq_scopes(),
+            'redirect_uri'  => admin_url( 'admin-post.php?action=dq_oauth_callback' ),
+            'state'         => $state,
+        ];
+
+        return dq_auth_url() . '?' . http_build_query( $params, '', '&', PHP_QUERY_RFC3986 );
+    }
+
+    /**
+     * Handle the OAuth callback from Intuit
+     */
+    public static function handle_callback() {
+        if ( ! current_user_can( 'manage_options' ) ) {
+            status_header( 403 );
+            wp_die( 'Forbidden' );
+        }
+
+        error_log('DQ CALLBACK STARTED');
+        error_log('DQ CALLBACK PARAMS: ' . print_r($_GET, true));
+
+        // Verify OAuth state (protects against CSRF)
+        if ( empty($_GET['state']) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['state'] ) ), 'dq_oauth_state' ) ) {
+            wp_die('Invalid OAuth state. Please reconnect.');
+        }
+
+        $code    = isset($_GET['code']) ? sanitize_text_field( wp_unslash( $_GET['code'] ) ) : '';
+        $realmId = isset($_GET['realmId']) ? sanitize_text_field( wp_unslash( $_GET['realmId'] ) ) : '';
+
+        if ( empty( $code ) ) {
+            wp_die( 'Authorization code missing. Please reconnect.' );
+        }
+
+        $s = dq_get_settings();
+
+        // Prepare token request
+        $body = [
+            'grant_type'   => 'authorization_code',
+            'code'         => $code,
+            'redirect_uri' => admin_url( 'admin-post.php?action=dq_oauth_callback' ),
+        ];
+
+        $token_url = dq_token_url();
+        error_log( 'DQ CALLBACK REQUEST TO TOKEN URL: ' . $token_url );
+
+        $resp = wp_remote_post( $token_url, [
+            'timeout' => 30,
+            'sslverify' => true,
+            'headers' => [
+                'Accept'        => 'application/json',
+                'Content-Type'  => 'application/x-www-form-urlencoded',
+                'Authorization' => 'Basic ' . base64_encode( trim( $s['client_id'] ) . ':' . trim( $s['client_secret'] ) ),
+            ],
+            'body' => http_build_query( $body, '', '&', PHP_QUERY_RFC3986 ),
+        ]);
+
+        if ( is_wp_error( $resp ) ) {
+            error_log( 'DQ TOKEN REQUEST ERROR: ' . $resp->get_error_message() );
+            wp_safe_redirect( dq_admin_url( [ 'error' => 'token_request' ] ) );
+            exit;
+        }
+
+        $code_resp = wp_remote_retrieve_response_code( $resp );
+        $body_json = json_decode( wp_remote_retrieve_body( $resp ), true );
+        error_log( 'DQ CALLBACK TOKEN RESPONSE: ' . wp_remote_retrieve_body( $resp ) );
+
+        if ( $code_resp !== 200 || empty( $body_json['access_token'] ) ) {
+            error_log( 'DQ TOKEN RESPONSE ERROR: ' . print_r( $body_json, true ) );
+            wp_safe_redirect( dq_admin_url( [ 'error' => 'token_invalid' ] ) );
+            exit;
+        }
+
+        // Calculate expiry timestamp (with 60s safety margin)
+        $expires_at = time() + (int) $body_json['expires_in'] - 60;
+
+        // Save settings safely and persistently
+        $settings = dq_get_settings();
+        $settings['realm_id']      = $realmId ?: ( $body_json['realmId'] ?? 'sandbox-company' );
+        $settings['access_token']  = $body_json['access_token'];
+        $settings['refresh_token'] = $body_json['refresh_token'] ?? '';
+        $settings['expires_at']    = $expires_at;
+
+        update_option( 'dq_settings', $settings, 'no' );
+        error_log( 'DQ CALLBACK FORCE-SAVED SETTINGS: ' . print_r( $settings, true ) );
+
+        // Output buffer fix before redirect
+        if ( ob_get_length() ) {
+            @ob_end_clean();
+        }
+
+        wp_safe_redirect( dq_admin_url( [ 'connected' => '1' ] ) );
+        exit;
+    }
+
+    /**
+     * Refresh the access token using the stored refresh token
+     */
+    public static function refresh_access_token() {
+        $s = dq_get_settings();
+
+        if ( empty( $s['refresh_token'] ) ) {
+            return new WP_Error( 'dq_missing_refresh_token', 'No refresh token available.' );
+        }
+
+        $body = [
+            'grant_type'    => 'refresh_token',
+            'refresh_token' => $s['refresh_token'],
+            'redirect_uri'  => admin_url( 'admin-post.php?action=dq_oauth_callback' ),
+        ];
+
+        $resp = wp_remote_post( dq_token_url(), [
+            'timeout' => 30,
+            'sslverify' => true,
+            'headers' => [
+                'Accept'        => 'application/json',
+                'Content-Type'  => 'application/x-www-form-urlencoded',
+                'Authorization' => 'Basic ' . base64_encode( trim( $s['client_id'] ) . ':' . trim( $s['client_secret'] ) ),
+            ],
+            'body' => http_build_query( $body, '', '&', PHP_QUERY_RFC3986 ),
+        ]);
+
+        if ( is_wp_error( $resp ) ) {
+            return $resp;
+        }
+
+        $code = wp_remote_retrieve_response_code( $resp );
+        $body_json = json_decode( wp_remote_retrieve_body( $resp ), true );
+
+        if ( $code !== 200 || empty( $body_json['access_token'] ) ) {
+            return new WP_Error( 'dq_refresh_failed', 'Token refresh failed: ' . print_r( $body_json, true ) );
+        }
+
+        $s['access_token']  = $body_json['access_token'];
+        $s['refresh_token'] = $body_json['refresh_token'] ?? $s['refresh_token'];
+        $s['expires_at']    = time() + (int) $body_json['expires_in'] - 60;
+
+        update_option( 'dq_settings', $s, 'no' );
+        error_log( 'DQ REFRESHED TOKENS: ' . print_r( $s, true ) );
+
+        return $s['access_token'];
+    }
+
+    /**
+     * Retrieve the current access token (refresh automatically if expired)
+     */
+    public static function get_access_token() {
+        $s = dq_get_settings();
+
+        if ( empty( $s['access_token'] ) ) {
+            return new WP_Error( 'dq_no_token', 'No access token stored.' );
+        }
+
+        if ( time() >= (int) ( $s['expires_at'] ?? 0 ) ) {
+            $new = self::refresh_access_token();
+            if ( is_wp_error( $new ) ) {
+                return $new;
+            }
+            return $new;
+        }
+
+        return $s['access_token'];
+    }
+}
