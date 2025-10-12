@@ -37,9 +37,9 @@ add_action( 'admin_post_nopriv_dq_oauth_callback', ['DQ_Auth', 'handle_callback'
 
 // Boot admin area
 add_action( 'plugins_loaded', function() {
-	if ( is_admin() ) {
-		new DQ_Admin();
-	}
+    if ( is_admin() ) {
+        new DQ_Admin();
+    }
 });
 
 
