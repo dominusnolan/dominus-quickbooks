@@ -3,12 +3,11 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 
 /**
  * Class DQ_Metabox
- * Version: 4.6.5
+ * Version: 4.7.0
  * - Adds Send/Update/Refresh buttons
- * - Updates ACF fields (wo_invoice_id, wo_invoice_no)
- * - Displays and saves QuickBooks invoice totals (Total, Paid, Balance)
- * - Admin notices for Send/Update/Refresh
- * - Refresh button asks for confirmation
+ * - Redesigned UI (matches QuickBooks Integration look)
+ * - Shows green PAID badge when fully paid
+ * - Keeps ACF/meta update logic intact
  */
 class DQ_Metabox {
 
@@ -35,13 +34,25 @@ class DQ_Metabox {
         $invoice_id  = function_exists('get_field') ? get_field( 'wo_invoice_id', $post->ID ) : get_post_meta( $post->ID, 'wo_invoice_id', true );
         $invoice_no  = function_exists('get_field') ? get_field( 'wo_invoice_no', $post->ID ) : get_post_meta( $post->ID, 'wo_invoice_no', true );
 
-        echo '<p><strong>QuickBooks Invoice</strong><br/>';
-        if ( $invoice_id ) echo 'ID: ' . esc_html( $invoice_id ) . '<br/>';
-        if ( $invoice_no ) echo 'Number: ' . esc_html( $invoice_no ) . '<br/>';
-        if ( ! $invoice_id && ! $invoice_no ) echo '<em>No invoice found yet.</em>';
-        echo '</p>';
+        echo '<div style="padding:6px;font-size:13px;">';
 
-        // Fetch & display current totals from QuickBooks if ID exists
+        // --- Invoice Info ---
+        echo '<div style="margin-bottom:10px;">';
+        echo '<h4 style="margin:0 0 8px;border-bottom:1px solid #ddd;">Invoice Info</h4>';
+        if ( $invoice_no ) {
+            echo '<p style="margin:4px 0;"><span class="dashicons dashicons-media-text" style="vertical-align:middle;"></span> <strong>No:</strong> <input type="text" readonly value="' . esc_attr( $invoice_no ) . '" style="width:70px;text-align:center;background:#f9f9f9;border:1px solid #ccc;border-radius:3px;padding:2px 4px;"></p>';
+        }
+        if ( $invoice_id ) {
+            echo '<p style="margin:4px 0;"><span class="dashicons dashicons-media-spreadsheet" style="vertical-align:middle;"></span> <strong>ID:</strong> <input type="text" readonly value="' . esc_attr( $invoice_id ) . '" style="width:70px;text-align:center;background:#f9f9f9;border:1px solid #ccc;border-radius:3px;padding:2px 4px;"></p>';
+        }
+        if ( ! $invoice_id && ! $invoice_no ) echo '<em>No invoice found yet.</em>';
+        echo '</div>';
+
+        // --- Invoice Totals (with fetch if ID exists) ---
+        echo '<div style="margin-bottom:10px;">';
+        echo '<h4 style="margin:0 0 8px;border-bottom:1px solid #ddd;">Invoice Totals</h4>';
+        $total = $paid = $balance = 0.00;
+
         if ( $invoice_id ) {
             $invoice_data = DQ_API::get_invoice( $invoice_id );
             if ( ! is_wp_error( $invoice_data ) && ! empty( $invoice_data['Invoice'] ) ) {
@@ -55,11 +66,6 @@ class DQ_Metabox {
                 update_post_meta( $post->ID, 'wo_total_paid', $paid );
                 update_post_meta( $post->ID, 'wo_balance_due', $balance );
 
-                echo '<hr><p><strong>Invoice Totals</strong><br/>';
-                echo 'Total: $'   . number_format( $total, 2 ) . '<br/>';
-                echo 'Paid: $'    . number_format( $paid, 2 )  . '<br/>';
-                echo 'Balance: $' . number_format( $balance, 2 ) . '</p>';
-
                 DQ_Logger::info( "Fetched QuickBooks totals for invoice #$invoice_id", [
                     'Total' => $total,
                     'Paid' => $paid,
@@ -70,17 +76,45 @@ class DQ_Metabox {
             }
         }
 
+        echo '<p style="margin:3px 0;"><strong>Total:</strong> $'   . number_format( $total, 2 ) . '</p>';
+        echo '<p style="margin:3px 0;"><strong>Paid:</strong> $'    . number_format( $paid, 2 )  . '</p>';
+        echo '<p style="margin:3px 0;"><strong>Balance:</strong> $' . number_format( $balance, 2 ) . '</p>';
+
+        if ( $balance <= 0 && $total > 0 ) {
+            echo '<div style="background:#e7f6ec;color:#22863a;font-weight:bold;padding:6px 10px;border:1px solid #c7ebd3;border-radius:3px;margin-top:8px;text-align:center;">
+                    <span class="dashicons dashicons-yes"></span> PAID
+                  </div>';
+        }
+        echo '</div>';
+
+        // --- Buttons ---
         $send_url    = wp_nonce_url( admin_url( 'admin-post.php?action=dq_send_to_qbo&post=' . $post->ID ), 'dq_send_' . $post->ID );
         $update_url  = wp_nonce_url( admin_url( 'admin-post.php?action=dq_update_qbo&post=' . $post->ID ), 'dq_update_' . $post->ID );
         $refresh_url = wp_nonce_url( admin_url( 'admin-post.php?action=dq_refresh_qbo&post=' . $post->ID ), 'dq_refresh_' . $post->ID );
 
-        echo '<p><a href="' . esc_url( $send_url ) . '" class="button button-primary">Send to QuickBooks</a></p>';
-        echo '<p><a href="' . esc_url( $update_url ) . '" class="button">Update QuickBooks</a></p>';
-
-        if ( $invoice_id ) {
-            // Confirmation via onclick confirm()
-            echo '<p><a href="' . esc_url( $refresh_url ) . '" class="button" onclick="return confirm(`Refresh invoice data from QuickBooks? This will overwrite totals stored on this Work Order.`);">Refresh from QuickBooks</a></p>';
+        if ( empty( $invoice_id ) ) {
+            echo '<p><a href="' . esc_url( $send_url ) . '" class="button button-primary" style="width:100%;">Send to QuickBooks</a></p>';
+        } else {
+            echo '<p><a href="' . esc_url( $update_url ) . '" class="button button-primary" style="width:100%;margin-bottom:5px;">Update QuickBooks</a></p>';
+            echo '<p><a href="' . esc_url( $refresh_url ) . '" class="button" style="width:100%;" onclick="return confirm(\'Refresh invoice data from QuickBooks? This will overwrite totals stored on this Work Order.\');">Refresh from QuickBooks</a></p>';
         }
+        
+        // Add link to QuickBooks invoice
+        if ( $invoice_id ) {
+            $is_sandbox  = defined('DQ_QB_ENV') && DQ_QB_ENV === 'sandbox';
+            $realm_id    = defined('DQ_QB_REALM_ID') ? DQ_QB_REALM_ID : get_option('dq_qb_realm_id'); // store your realm ID in an option or constant
+            $base_url    = $is_sandbox ? 'https://sandbox.qbo.intuit.com/app/invoice' : 'https://app.qbo.intuit.com/app/invoice';
+            $invoice_url = esc_url( $base_url . '?txnId=' . $invoice_id . '&companyId=' . $realm_id );
+        
+            echo '<p style="margin:6px 0;">
+                    <a href="' . $invoice_url . '" target="_blank" style="text-decoration:none;">
+                        <span class="dashicons dashicons-external" style="vertical-align:middle;"></span>
+                        View in QuickBooks
+                    </a>
+                  </p>';
+        }
+
+        echo '</div>'; // end wrapper
     }
 
     /** Send to QuickBooks */
@@ -95,7 +129,7 @@ class DQ_Metabox {
         $response = DQ_API::create_invoice( $payload );
         if ( is_wp_error( $response ) ) wp_die( 'QuickBooks error: ' . $response->get_error_message() );
 
-        $invoice = isset( $response['Invoice'] ) ? $response['Invoice'] : $response;
+        $invoice = $response['Invoice'] ?? $response;
 
         if ( function_exists( 'update_field' ) ) {
             if ( isset( $invoice['Id'] ) ) update_field( 'wo_invoice_id', $invoice['Id'], $post_id );
@@ -125,7 +159,7 @@ class DQ_Metabox {
         $response = DQ_API::update_invoice( $invoice_id, $payload );
         if ( is_wp_error( $response ) ) wp_die( 'QuickBooks error: ' . $response->get_error_message() );
 
-        $invoice = isset( $response['Invoice'] ) ? $response['Invoice'] : $response;
+        $invoice = $response['Invoice'] ?? $response;
 
         if ( function_exists( 'update_field' ) ) {
             if ( isset( $invoice['Id'] ) ) update_field( 'wo_invoice_id', $invoice['Id'], $post_id );
@@ -150,28 +184,21 @@ class DQ_Metabox {
         if ( ! $invoice_id ) wp_die( 'No QuickBooks Invoice ID found for this Work Order.' );
 
         $invoice_data = DQ_API::get_invoice( $invoice_id );
-        if ( is_wp_error( $invoice_data ) ) {
-            wp_die( 'QuickBooks error: ' . $invoice_data->get_error_message() );
-        }
+        if ( is_wp_error( $invoice_data ) ) wp_die( 'QuickBooks error: ' . $invoice_data->get_error_message() );
 
         if ( ! empty( $invoice_data['Invoice'] ) ) {
             $invoice = $invoice_data['Invoice'];
-
-            // Save DocNumber if present
             if ( isset( $invoice['DocNumber'] ) ) {
-                if ( function_exists( 'update_field' ) ) {
+                if ( function_exists( 'update_field' ) )
                     update_field( 'wo_invoice_no', $invoice['DocNumber'], $post_id );
-                } else {
+                else
                     update_post_meta( $post_id, 'wo_invoice_no', $invoice['DocNumber'] );
-                }
             }
 
-            // Compute totals
             $total   = isset( $invoice['TotalAmt'] ) ? floatval( $invoice['TotalAmt'] ) : 0;
             $balance = isset( $invoice['Balance'] ) ? floatval( $invoice['Balance'] ) : 0;
             $paid    = max( $total - $balance, 0 );
 
-            // Save totals
             update_post_meta( $post_id, 'wo_total_billed', $total );
             update_post_meta( $post_id, 'wo_total_paid', $paid );
             update_post_meta( $post_id, 'wo_balance_due', $balance );
@@ -185,14 +212,12 @@ class DQ_Metabox {
             wp_redirect( admin_url( 'post.php?post=' . $post_id . '&action=edit&dq_msg=refreshed' ) );
             exit;
         }
-
         wp_die( 'QuickBooks response did not include an Invoice object.' );
     }
 
-    /** Display admin notices after redirect */
+    /** Display admin notices */
     public static function admin_notices() {
         if ( empty( $_GET['dq_msg'] ) ) return;
-
         $msg = sanitize_text_field( $_GET['dq_msg'] );
         $messages = [
             'sent'      => '✅ Invoice successfully sent to QuickBooks!',
@@ -200,7 +225,6 @@ class DQ_Metabox {
             'refreshed' => '✅ Invoice refreshed from QuickBooks successfully!',
             'error'     => '❌ QuickBooks action failed. Check logs for details.',
         ];
-
         if ( isset( $messages[ $msg ] ) ) {
             echo '<div class="notice notice-success is-dismissible"><p><strong>' . esc_html( $messages[ $msg ] ) . '</strong></p></div>';
         }
