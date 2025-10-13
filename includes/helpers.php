@@ -1,131 +1,129 @@
 <?php
 /**
- * Helper functions for Dominus QuickBooks plugin
+ * Dominus QuickBooks — Helper functions
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 /**
- * Get plugin option settings
+ * Retrieve plugin settings safely.
+ *
+ * @return array
  */
 function dq_get_settings() {
     $defaults = [
-        'client_id'     => '',
-        'client_secret' => '',
-        'redirect_uri'  => '',
-        'environment'   => 'sandbox',
-        'realm_id'      => '',
-        'access_token'  => '',
-        'refresh_token' => '',
-        'expires_at'    => 0,
+        'client_id'        => '',
+        'client_secret'    => '',
+        'environment'      => 'sandbox',
+        'realm_id'         => '',
+        'access_token'     => '',
+        'refresh_token'    => '',
+        'expires_at'       => 0,
+        'default_tax_code' => 'NON',
+        'default_terms_ref'=> '',
     ];
 
     $settings = get_option( 'dq_settings', [] );
+
     if ( ! is_array( $settings ) ) {
         $settings = [];
     }
 
-    return wp_parse_args( $settings, $defaults );
+    return array_merge( $defaults, $settings );
 }
 
 /**
- * Save / merge new settings into dq_settings
+ * Save plugin settings.
+ *
+ * @param array $new_settings
  */
-function dq_update_settings( $new_data = [] ) {
+function dq_save_settings( $new_settings = [] ) {
     $settings = dq_get_settings();
-    $updated  = array_merge( $settings, $new_data );
-    update_option( 'dq_settings', $updated, 'no' );
+    $merged   = array_merge( $settings, (array) $new_settings );
+    update_option( 'dq_settings', $merged, 'no' );
 }
 
 /**
- * Return QuickBooks OAuth base URL based on environment
+ * Build the QuickBooks OAuth authorization base URL.
+ *
+ * @return string
  */
 function dq_auth_url() {
-    $s = dq_get_settings();
+    $s   = dq_get_settings();
     $env = strtolower( $s['environment'] ?? 'sandbox' );
 
     if ( $env === 'production' ) {
         return 'https://appcenter.intuit.com/connect/oauth2';
     }
 
-    return 'https://appcenter.intuit.com/connect/oauth2'; // same for sandbox
+    // Sandbox environment by default
+    return 'https://appcenter.intuit.com/connect/oauth2';
 }
 
 /**
- * Return QuickBooks OAuth token URL
+ * Get the QuickBooks token endpoint URL.
+ *
+ * @return string
  */
 function dq_token_url() {
-    $s = dq_get_settings();
-    $env = strtolower( $s['environment'] ?? 'sandbox' );
-
-    if ( $env === 'production' ) {
-        return 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
-    }
-
     return 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
 }
 
 /**
- * Return required QuickBooks API scopes
+ * Build a link to the Dominus QB admin page with query params.
+ *
+ * @param array $args
+ * @return string
  */
-function dq_scopes() {
-    // You can expand as needed (eg. for Payments, Payroll, etc.)
-    $scopes = [
-        'com.intuit.quickbooks.accounting',
-        'openid',
-        'profile',
-        'email',
-        'phone',
-        'address'
-    ];
-    return implode( ' ', $scopes );
-}
+function dq_admin_url( $args = [] ) {
+    $url = admin_url( 'admin.php?page=dqqb' );
 
-/**
- * Get admin settings page URL
- */
-function dq_admin_url( $params = [] ) {
-    $url = admin_url( 'options-general.php?page=dominus-quickbooks' );
-    if ( ! empty( $params ) ) {
-        $url = add_query_arg( $params, $url );
+    if ( ! empty( $args ) ) {
+        $url = add_query_arg( $args, $url );
     }
+
     return $url;
 }
 
 /**
- * Check if the plugin has valid credentials saved
+ * Return a scope string for QuickBooks authorization.
+ *
+ * @return string
  */
-function dq_is_configured() {
-    $s = dq_get_settings();
-    return ! empty( $s['client_id'] ) && ! empty( $s['client_secret'] );
+function dq_scopes() {
+    // You can extend this later with additional scopes if needed
+    return 'com.intuit.quickbooks.accounting openid profile email';
 }
 
 /**
- * Determine if plugin is connected to QuickBooks
+ * Write a quick log message (shortcut for DQ_Logger).
+ *
+ * @param string $msg
+ * @param mixed  $ctx
  */
-function dq_is_connected() {
-    $s = dq_get_settings();
-    return ! empty( $s['access_token'] ) && ( time() < (int) $s['expires_at'] );
+function dq_log( $msg, $ctx = null ) {
+    if ( class_exists( 'DQ_Logger' ) ) {
+        DQ_Logger::info( $msg, $ctx );
+    } else {
+        $upload = wp_upload_dir();
+        $path   = trailingslashit( $upload['basedir'] ) . 'dq-log.txt';
+        $line   = '[' . date( 'c' ) . '] ' . $msg;
+        if ( $ctx ) {
+            $line .= ' ' . ( is_string( $ctx ) ? $ctx : wp_json_encode( $ctx ) );
+        }
+        $line .= "\n";
+        error_log( $line, 3, $path );
+    }
 }
 
 /**
- * Get the currently stored access token
+ * Retrieve a specific plugin option value.
+ *
+ * @param string $key
+ * @param mixed  $default
+ * @return mixed
  */
-function dq_get_access_token() {
-    $s = dq_get_settings();
-    return $s['access_token'] ?? '';
-}
-
-/**
- * Get plugin base directory
- */
-function dq_plugin_dir() {
-    return plugin_dir_path( __FILE__ );
-}
-
-/**
- * Get plugin base URL
- */
-function dq_plugin_url() {
-    return plugin_dir_url( __FILE__ );
+function dqqb_option( $key, $default = '' ) {
+    $opts = dq_get_settings();
+    return $opts[ $key ] ?? $default;
 }

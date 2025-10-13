@@ -1,64 +1,96 @@
 <?php
 /**
- * Dominus QuickBooks Logger
- * Writes all plugin logs to a dedicated dq-log.txt file.
+ * Dominus QuickBooks — Logger
+ * Writes plugin events to /wp-content/uploads/dq-log.txt
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 class DQ_Logger {
 
-    private static $log_file = '';
-
     /**
-     * Initialize log path
+     * Get the absolute path to the log file.
+     *
+     * @return string
      */
-    private static function get_log_path() {
-        if ( ! self::$log_file ) {
-            $upload_dir = wp_upload_dir();
-            $path = trailingslashit( $upload_dir['basedir'] ) . 'dq-log.txt';
-            self::$log_file = $path;
+    private static function path() {
+        $upload = wp_upload_dir();
+        $path   = trailingslashit( $upload['basedir'] ) . 'dq-log.txt';
+
+        if ( ! file_exists( $path ) ) {
+            file_put_contents( $path, '[' . date('c') . "] Log initialized\n" );
         }
-        return self::$log_file;
+
+        return $path;
     }
 
     /**
-     * Write message to dq-log.txt
+     * Write a message to the log file.
+     *
+     * @param string $level  INFO|ERROR|WARN|DEBUG
+     * @param string $msg    Message text
+     * @param mixed  $context Optional context data
      */
-    public static function log( $message, $context = '' ) {
-        $file = self::get_log_path();
-        $timestamp = gmdate( 'Y-m-d H:i:s' );
+    public static function write( $level, $msg, $context = null ) {
+        $path = self::path();
+        $line = sprintf( "[%s] [%s] %s", date( 'Y-m-d H:i:s' ), strtoupper( $level ), $msg );
 
-        // Prefix context like [INVOICE UPDATE] or [AUTH]
-        $prefix = $context ? '[' . strtoupper( $context ) . '] ' : '';
+        if ( $context !== null ) {
+            if ( is_array( $context ) || is_object( $context ) ) {
+                $line .= ' ' . wp_json_encode( $context, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+            } else {
+                $line .= ' ' . $context;
+            }
+        }
 
-        $entry = sprintf( "[%s] %s%s\n", $timestamp, $prefix, is_string( $message ) ? $message : print_r( $message, true ) );
+        $line .= "\n";
 
-        // Try writing to dq-log.txt
-        $result = @file_put_contents( $file, $entry, FILE_APPEND | LOCK_EX );
+        error_log( $line, 3, $path );
+    }
 
-        // Fallback to default error_log if write fails
-        if ( false === $result ) {
-            error_log( "DQ_LOG_FALLBACK: " . $entry );
+    /**
+     * Log an info message.
+     */
+    public static function info( $msg, $context = null ) {
+        self::write( 'INFO', $msg, $context );
+    }
+
+    /**
+     * Log a warning.
+     */
+    public static function warn( $msg, $context = null ) {
+        self::write( 'WARN', $msg, $context );
+    }
+
+    /**
+     * Log an error.
+     */
+    public static function error( $msg, $context = null ) {
+        self::write( 'ERROR', $msg, $context );
+    }
+
+    /**
+     * Log debug-level info (only if WP_DEBUG is true).
+     */
+    public static function debug( $msg, $context = null ) {
+        if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+            self::write( 'DEBUG', $msg, $context );
         }
     }
 
     /**
-     * Clear log file manually (for admin tools)
+     * Rotate the log (keep last 500 lines only).
      */
-    public static function clear() {
-        $file = self::get_log_path();
-        if ( file_exists( $file ) ) {
-            @unlink( $file );
-            self::log( 'dq-log.txt cleared manually.', 'SYSTEM' );
-        }
-    }
+    public static function rotate() {
+        $path = self::path();
+        if ( ! file_exists( $path ) ) return;
 
-    /**
-     * Get current log file path (for admin links)
-     */
-    public static function get_file_url() {
-        $upload_dir = wp_upload_dir();
-        return trailingslashit( $upload_dir['baseurl'] ) . 'dq-log.txt';
+        $lines = file( $path );
+        $max   = 500;
+
+        if ( count( $lines ) > $max ) {
+            $lines = array_slice( $lines, -$max );
+            file_put_contents( $path, implode( '', $lines ) );
+        }
     }
 }
