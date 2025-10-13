@@ -3,11 +3,11 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 
 /**
  * Class DQ_Metabox
- * Version: 4.7.0
+ * Version: 4.8.1
  * - Adds Send/Update/Refresh buttons
- * - Redesigned UI (matches QuickBooks Integration look)
- * - Shows green PAID badge when fully paid
- * - Keeps ACF/meta update logic intact
+ * - Displays PAID / UNPAID badges
+ * - Adds correct "View in QuickBooks" link (with companyId / txnId)
+ * - Supports Sandbox or Production environments
  */
 class DQ_Metabox {
 
@@ -43,16 +43,38 @@ class DQ_Metabox {
             echo '<p style="margin:4px 0;"><span class="dashicons dashicons-media-text" style="vertical-align:middle;"></span> <strong>No:</strong> <input type="text" readonly value="' . esc_attr( $invoice_no ) . '" style="width:70px;text-align:center;background:#f9f9f9;border:1px solid #ccc;border-radius:3px;padding:2px 4px;"></p>';
         }
         if ( $invoice_id ) {
-            echo '<p style="margin:4px 0;"><span class="dashicons dashicons-media-spreadsheet" style="vertical-align:middle;"></span> <strong>ID:</strong> <input type="text" readonly value="' . esc_attr( $invoice_id ) . '" style="width:70px;text-align:center;background:#f9f9f9;border:1px solid #ccc;border-radius:3px;padding:2px 4px;"></p>';
+            echo '<p style="margin:4px 0;"><span class="dashicons dashicons-media-spreadsheet" style="vertical-align:middle;"></span> <strong>ID:</strong> <input type="text" readonly value="' . esc_attr( $invoice_id ) . '" style="width:80px;text-align:center;background:#f9f9f9;border:1px solid #ccc;border-radius:3px;padding:2px 4px;"></p>';
         }
-        if ( ! $invoice_id && ! $invoice_no ) echo '<em>No invoice found yet.</em>';
+
+        // Add working "View in QuickBooks" link
+        if ( $invoice_id ) {
+            $is_sandbox  = defined('DQ_QB_ENV') && DQ_QB_ENV === 'sandbox';
+            $realm_id    = defined('DQ_QB_REALM_ID') ? DQ_QB_REALM_ID : get_option('dq_qb_realm_id');
+            $base_url    = $is_sandbox ? 'https://sandbox.qbo.intuit.com/app/invoice' : 'https://app.qbo.intuit.com/app/invoice';
+
+            if ( $realm_id ) {
+                $invoice_url = esc_url( $base_url . '?txnId=' . $invoice_id . '&companyId=' . $realm_id );
+                echo '<p style="margin:6px 0;">
+                        <a href="' . $invoice_url . '" target="_blank" style="text-decoration:none;">
+                            <span class="dashicons dashicons-external" style="vertical-align:middle;"></span>
+                            View in QuickBooks
+                        </a>
+                      </p>';
+            } else {
+                echo '<p><em style="color:#d63638;">Realm ID not configured. Define DQ_QB_REALM_ID or save dq_qb_realm_id option.</em></p>';
+            }
+        }
+
+        if ( ! $invoice_id && ! $invoice_no ) {
+            echo '<em>No invoice found yet.</em>';
+        }
         echo '</div>';
 
-        // --- Invoice Totals (with fetch if ID exists) ---
+        // --- Invoice Totals ---
         echo '<div style="margin-bottom:10px;">';
         echo '<h4 style="margin:0 0 8px;border-bottom:1px solid #ddd;">Invoice Totals</h4>';
-        $total = $paid = $balance = 0.00;
 
+        $total = $paid = $balance = 0.00;
         if ( $invoice_id ) {
             $invoice_data = DQ_API::get_invoice( $invoice_id );
             if ( ! is_wp_error( $invoice_data ) && ! empty( $invoice_data['Invoice'] ) ) {
@@ -61,7 +83,7 @@ class DQ_Metabox {
                 $balance = isset( $invoice['Balance'] ) ? floatval( $invoice['Balance'] ) : 0;
                 $paid    = max( $total - $balance, 0 );
 
-                // Save totals into meta/ACF
+                // Save totals
                 update_post_meta( $post->ID, 'wo_total_billed', $total );
                 update_post_meta( $post->ID, 'wo_total_paid', $paid );
                 update_post_meta( $post->ID, 'wo_balance_due', $balance );
@@ -80,11 +102,19 @@ class DQ_Metabox {
         echo '<p style="margin:3px 0;"><strong>Paid:</strong> $'    . number_format( $paid, 2 )  . '</p>';
         echo '<p style="margin:3px 0;"><strong>Balance:</strong> $' . number_format( $balance, 2 ) . '</p>';
 
-        if ( $balance <= 0 && $total > 0 ) {
-            echo '<div style="background:#e7f6ec;color:#22863a;font-weight:bold;padding:6px 10px;border:1px solid #c7ebd3;border-radius:3px;margin-top:8px;text-align:center;">
-                    <span class="dashicons dashicons-yes"></span> PAID
-                  </div>';
+        // PAID / UNPAID badge
+        if ( $total > 0 ) {
+            if ( $balance <= 0 ) {
+                echo '<div style="background:#e7f6ec;color:#22863a;font-weight:bold;padding:6px 10px;border:1px solid #c7ebd3;border-radius:3px;margin-top:8px;text-align:center;">
+                        <span class="dashicons dashicons-yes"></span> PAID
+                      </div>';
+            } else {
+                echo '<div style="background:#fbeaea;color:#d63638;font-weight:bold;padding:6px 10px;border:1px solid #f3b7b7;border-radius:3px;margin-top:8px;text-align:center;">
+                        <span class="dashicons dashicons-dismiss"></span> UNPAID
+                      </div>';
+            }
         }
+
         echo '</div>';
 
         // --- Buttons ---
@@ -98,23 +128,8 @@ class DQ_Metabox {
             echo '<p><a href="' . esc_url( $update_url ) . '" class="button button-primary" style="width:100%;margin-bottom:5px;">Update QuickBooks</a></p>';
             echo '<p><a href="' . esc_url( $refresh_url ) . '" class="button" style="width:100%;" onclick="return confirm(\'Refresh invoice data from QuickBooks? This will overwrite totals stored on this Work Order.\');">Refresh from QuickBooks</a></p>';
         }
-        
-        // Add link to QuickBooks invoice
-        if ( $invoice_id ) {
-            $is_sandbox  = defined('DQ_QB_ENV') && DQ_QB_ENV === 'sandbox';
-            $realm_id    = defined('DQ_QB_REALM_ID') ? DQ_QB_REALM_ID : get_option('dq_qb_realm_id'); // store your realm ID in an option or constant
-            $base_url    = $is_sandbox ? 'https://sandbox.qbo.intuit.com/app/invoice' : 'https://app.qbo.intuit.com/app/invoice';
-            $invoice_url = esc_url( $base_url . '?txnId=' . $invoice_id . '&companyId=' . $realm_id );
-        
-            echo '<p style="margin:6px 0;">
-                    <a href="' . $invoice_url . '" target="_blank" style="text-decoration:none;">
-                        <span class="dashicons dashicons-external" style="vertical-align:middle;"></span>
-                        View in QuickBooks
-                    </a>
-                  </p>';
-        }
 
-        echo '</div>'; // end wrapper
+        echo '</div>'; // wrapper
     }
 
     /** Send to QuickBooks */
@@ -174,7 +189,7 @@ class DQ_Metabox {
         exit;
     }
 
-    /** Refresh invoice data from QuickBooks (totals + DocNumber) */
+    /** Refresh invoice data */
     public static function refresh() {
         if ( empty( $_GET['post'] ) ) wp_die( 'Invalid Work Order.' );
         $post_id = intval( $_GET['post'] );
@@ -188,6 +203,7 @@ class DQ_Metabox {
 
         if ( ! empty( $invoice_data['Invoice'] ) ) {
             $invoice = $invoice_data['Invoice'];
+
             if ( isset( $invoice['DocNumber'] ) ) {
                 if ( function_exists( 'update_field' ) )
                     update_field( 'wo_invoice_no', $invoice['DocNumber'], $post_id );
@@ -212,6 +228,7 @@ class DQ_Metabox {
             wp_redirect( admin_url( 'post.php?post=' . $post_id . '&action=edit&dq_msg=refreshed' ) );
             exit;
         }
+
         wp_die( 'QuickBooks response did not include an Invoice object.' );
     }
 
