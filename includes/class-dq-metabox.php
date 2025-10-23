@@ -17,6 +17,38 @@ class DQ_Metabox {
         add_action( 'admin_post_dq_update_qbo', [ __CLASS__, 'update' ] );
         add_action( 'admin_post_dq_refresh_qbo', [ __CLASS__, 'refresh' ] );
         add_action( 'admin_notices', [ __CLASS__, 'admin_notices' ] );
+        
+            /**
+             * Pre-populate ACF select field "_dq_purchase_order" with taxonomy "purchase_order" terms
+             * Applies only to post type "workorder"
+             */
+            add_filter( 'acf/load_field/name=_dq_purchase_order', function( $field ) {
+
+                // Only populate for Work Order CPT
+                global $post;
+                if ( empty( $post ) || $post->post_type !== 'workorder' ) {
+                    return $field;
+                }
+
+                // Clear existing choices
+                $field['choices'] = [];
+
+                // Get all taxonomy terms
+                $terms = get_terms([
+                    'taxonomy'   => 'purchase_order',
+                    'hide_empty' => false,
+                    'orderby'    => 'name',
+                    'order'      => 'ASC',
+                ]);
+
+                if ( ! is_wp_error( $terms ) && ! empty( $terms ) ) {
+                    foreach ( $terms as $term ) {
+                        $field['choices'][ $term->term_id ] = $term->name;
+                    }
+                }
+
+                return $field;
+            });
     }
 
     public static function add_metabox() {
@@ -32,8 +64,7 @@ class DQ_Metabox {
 
     public static function render( $post ) {
         $invoice_id  = function_exists('get_field') ? get_field( 'wo_invoice_id', $post->ID ) : get_post_meta( $post->ID, 'wo_invoice_id', true );
-        $invoice_no  = function_exists('get_field') ? get_field( 'wo_invoice_no', $post->ID ) : get_post_meta( $post->ID, 'wo_invoice_no', true );
-
+        $invoice_no  = function_exists('get_field') ? get_field( 'wo_invoice_no', $post->ID ) : get_post_meta( $post->ID, 'wo_invoice_no', true );              
         echo '<div style="padding:6px;font-size:13px;">';
 
         // --- Invoice Info ---

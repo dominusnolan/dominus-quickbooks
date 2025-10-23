@@ -47,11 +47,11 @@ class DQ_API {
         $data = json_decode( $body, true );
 
         if ( $code >= 200 && $code < 300 && is_array($data) ) {
-            DQ_Logger::debug( "QBO Response OK ($context)", $data );
+            //DQ_Logger::debug( "QBO Response OK ($context)", $data );
             return $data;
         }
 
-        DQ_Logger::error( "QBO API error ($context)", [ 'code' => $code, 'body' => $body ] );
+       // DQ_Logger::error( "QBO API error ($context)", [ 'code' => $code, 'body' => $body ] );
         return new WP_Error( 'dq_qbo_error', "QuickBooks API returned error ($code): $body" );
     }
 
@@ -78,7 +78,7 @@ class DQ_API {
         $url = self::base_url() . $realm . '/' . ltrim( $path, '/' ) . '?minorversion=65';
 
         $json = wp_json_encode( $data );
-        DQ_Logger::debug( "QBO POST $url", $json );
+        //DQ_Logger::debug( "QBO POST $url", $json );
 
         $resp = wp_remote_post( $url, [
             'headers' => self::headers(),
@@ -96,7 +96,7 @@ class DQ_API {
      * NOTE: Correct syntax is PrimaryEmailAddr = 'email'
      */
     public static function get_customer_by_email( $email ) {
-        DQ_Logger::debug( 'QBO QUERY Customer', $email );
+       // DQ_Logger::debug( 'QBO QUERY Customer', $email );
 
         $s = get_option('dq_settings', []);
         $realm = $s['realm_id'] ?? ( DQ_Auth::get_tokens()['realm_id'] ?? '' );
@@ -121,7 +121,7 @@ class DQ_API {
      * Create a customer, gracefully handling duplicate-name (6240).
      */
     public static function create_customer( $data ) {
-        DQ_Logger::info( 'Creating QuickBooks customer', $data );
+       // DQ_Logger::info( 'Creating QuickBooks customer', $data );
 
         $email = $data['PrimaryEmailAddr']['Address'] ?? '';
         $display_name = $data['DisplayName'] ?? '';
@@ -130,7 +130,7 @@ class DQ_API {
         if ( $email ) {
             $existing = self::get_customer_by_email( $email );
             if ( $existing ) {
-                DQ_Logger::info( 'Customer already exists (via email)', $existing );
+               // DQ_Logger::info( 'Customer already exists (via email)', $existing );
                 return $existing;
             }
         }
@@ -169,12 +169,13 @@ class DQ_API {
      * Robust update method with guaranteed SyncToken fetch for Sandbox/Prod.
      */
     public static function update_invoice( $invoice_id, $payload ) {
+        // Log start
         DQ_Logger::info( "Updating QuickBooks invoice #$invoice_id", $payload );
 
         $s = get_option('dq_settings', []);
         $realm = $s['realm_id'] ?? ( DQ_Auth::get_tokens()['realm_id'] ?? '' );
 
-        // STEP 1: Fetch the current invoice to retrieve SyncToken
+        // STEP 1: Fetch current invoice to get SyncToken
         $get_url = self::base_url() . $realm . '/invoice/' . intval($invoice_id) . '?minorversion=65';
         $resp = wp_remote_get( $get_url, [
             'headers' => self::headers(false),
@@ -183,43 +184,58 @@ class DQ_API {
         $data = self::handle( $resp, "Fetch Invoice #$invoice_id (for update)" );
         if ( is_wp_error( $data ) ) return $data;
 
-        // After fetching invoice
         $invoice = $data['Invoice'] ?? $data;
-        
-        // Force ensure SyncToken
-        if ( ! empty( $invoice['Id'] ) && isset( $invoice['SyncToken'] ) ) {
-            $sync_token = (string) $invoice['SyncToken'];
-        } else {
-            DQ_Logger::error( 'Invoice fetch did not include SyncToken', $invoice );
-            return new WP_Error( 'dq_no_sync_token', 'QuickBooks did not return SyncToken; verify token and invoice ID.' );
+        if ( empty( $invoice['Id'] ) || ! isset( $invoice['SyncToken'] ) ) {
+            return new WP_Error( 'dq_no_sync_token', 'QuickBooks did not return SyncToken; verify invoice ID.' );
         }
+        $sync_token = (string) $invoice['SyncToken'];
 
-        // STEP 2: Build sparse update payload (EDITABLE FIELDS ONLY)
+        // STEP 2: Build robust update payload (include CustomerMemo + CustomField)
         $update_payload = [
-            'Id'         => (string) $invoice_id,
-            'SyncToken'  => $sync_token,
-            'Line'       => $payload['Line'] ?? [],
-            'CustomerRef'=> $payload['CustomerRef'] ?? $invoice['CustomerRef'] ?? null,
-            'PrivateNote'=> $payload['PrivateNote'] ?? '',
-            'sparse'     => true,
+            'Id'          => (string) $invoice_id,
+            'SyncToken'   => $sync_token,
+            'sparse'      => false, // full update
+            'Line'        => $payload['Line'] ?? [],
+            'CustomerRef' => $payload['CustomerRef'] ?? $invoice['CustomerRef'] ?? null,
+            'PrivateNote' => $payload['PrivateNote'] ?? '',
         ];
 
-        // STEP 3: Send sparse update
+        // Add CustomerMemo if present
+        if ( ! empty( $payload['CustomerMemo'] ) ) {
+            $update_payload['CustomerMemo'] = $payload['CustomerMemo'];
+        }
+
+        // Add CustomField if present (for Purchase Order)
+        if ( ! empty( $payload['CustomField'] ) ) {
+            $update_payload['CustomField'] = $payload['CustomField'];
+        }
+
+        // Optional: preserve existing tax info to avoid "Business Validation Error"
+        if ( isset( $invoice['TxnTaxDetail'] ) ) {
+            $update_payload['TxnTaxDetail'] = $invoice['TxnTaxDetail'];
+        }
+
+        // STEP 3: Send the update
         $post_url = self::base_url() . $realm . '/invoice?minorversion=65';
         DQ_Logger::debug( 'QBO UPDATE Payload', $update_payload );
+
         $resp2 = wp_remote_post( $post_url, [
             'headers' => self::headers(),
             'body'    => wp_json_encode( $update_payload ),
             'timeout' => 30,
         ]);
+
         $result = self::handle( $resp2, "Update Invoice #$invoice_id" );
 
         if ( ! is_wp_error( $result ) && isset( $result['Invoice'] ) ) {
-            DQ_Logger::info( 'QuickBooks invoice updated successfully', $result['Invoice'] );
+            DQ_Logger::info( "QuickBooks invoice #$invoice_id updated successfully", $result['Invoice'] );
+        } else {
+            DQ_Logger::error( "QuickBooks update failed for invoice #$invoice_id", $result );
         }
 
         return $result;
     }
+
 
     public static function get_invoice( $id ) {
         return self::get( 'invoice/' . intval($id) . '?minorversion=65', 'Get Invoice' );
