@@ -27,7 +27,10 @@ require_once DQQB_PATH . 'includes/class-dq-settings.php';
 require_once DQQB_PATH . 'includes/class-dq-auth.php';
 require_once DQQB_PATH . 'includes/class-dq-api.php';
 require_once DQQB_PATH . 'includes/class-dq-invoice.php';
+
+require_once DQQB_PATH . 'includes/acf-invoice-addresses.php';
 require_once DQQB_PATH . 'includes/class-dq-metabox.php';
+
 
 // -----------------------------------------------------------------------------
 // Initialize Plugin

@@ -250,6 +250,41 @@ class DQ_Metabox {
             update_post_meta( $post_id, 'wo_total_paid', $paid );
             update_post_meta( $post_id, 'wo_balance_due', $balance );
             update_post_meta( $post_id, 'wo_last_synced', current_time( 'mysql' ) );
+            
+             
+            // --- NEW: Save Due Date and Terms ---
+            $due_date = isset($invoice['DueDate']) ? (string) $invoice['DueDate'] : '';
+            $terms    = '';
+
+            if (!empty($invoice['SalesTermRef'])) {
+                // Prefer the name, else fallback to the id value
+                if (isset($invoice['SalesTermRef']['name']) && $invoice['SalesTermRef']['name'] !== '') {
+                    $terms = (string) $invoice['SalesTermRef']['name'];
+                } elseif (isset($invoice['SalesTermRef']['value'])) {
+                    $terms = (string) $invoice['SalesTermRef']['value']; // e.g. "3" when "Net 30" isn't expanded
+                }
+            }
+
+            // Save to ACF if available, else post meta
+            if (function_exists('update_field')) {
+                update_field('wo_due_date', $due_date, $post_id);
+                update_field('wo_terms',    $terms,    $post_id);
+            } else {
+                update_post_meta($post_id, 'wo_due_date', $due_date);
+                update_post_meta($post_id, 'wo_terms',    $terms);
+            }
+            
+            // --- NEW: Save Invoice Date on refresh ---
+            $invoice_date = isset($invoice['TxnDate']) ? (string) $invoice['TxnDate'] : '';
+            if (function_exists('update_field')) {
+                update_field('wo_invoice_date', $invoice_date, $post_id);
+            } else {
+                update_post_meta($post_id, 'wo_invoice_date', $invoice_date);
+            }
+
+   
+            // 2) After you have both $post_id and the $invoice object/array:
+            dominus_qb_update_acf_bill_ship($post_id, $invoice);
 
             DQ_Logger::info( "Refreshed invoice #$invoice_id from QuickBooks", [
                 'DocNumber' => $invoice['DocNumber'] ?? null,
