@@ -31,6 +31,20 @@ require_once DQQB_PATH . 'includes/class-dq-invoice.php';
 require_once DQQB_PATH . 'includes/acf-invoice-addresses.php';
 require_once DQQB_PATH . 'includes/class-dq-metabox.php';
 
+require_once __DIR__ . '/includes/class-dq-gmail-settings.php';
+require_once __DIR__ . '/includes/class-dq-gmail.php';
+require_once __DIR__ . '/includes/class-dq-gmail-emailshot.php';
+
+
+
+add_action('plugins_loaded', function(){
+    DQ_Gmail_Settings::init();
+    DQ_Gmail::init();
+    DQ_Gmail_Emailshot::init();
+});
+
+
+
 
 // -----------------------------------------------------------------------------
 // Initialize Plugin
