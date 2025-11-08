@@ -48,6 +48,19 @@ class DQ_Invoice {
         }
 
         // --- Build Line items from ACF repeater wo_invoice --- //
+        // Fetch all active QuickBooks items (Products/Services) and map Name to Id
+        $item_map = [];
+        $query    = "SELECT Name, Id FROM Item WHERE Active = true";
+        $qbo_items = DQ_API::query( $query );
+        if ( ! is_wp_error( $qbo_items ) && ! empty( $qbo_items['QueryResponse']['Item'] ) ) {
+            foreach ( $qbo_items['QueryResponse']['Item'] as $qb_item ) {
+                $name = $qb_item['Name'];
+                $id   = (string) $qb_item['Id'];
+                $item_map[ $name ] = $id;
+            }
+        }
+        
+        DQ_Logger::debug( 'Products Query', $item_map );
         $lines = [];
         if ( function_exists( 'have_rows' ) && have_rows( 'wo_invoice', $post_id ) ) {
             while ( have_rows( 'wo_invoice', $post_id ) ) {
@@ -72,8 +85,15 @@ class DQ_Invoice {
                     //DQ_Logger::warn( 'Skipping invalid line item', compact('date','activity','desc','qty_raw','rate_raw','amount_raw') );
                     continue;
                 }
+                
+                // Determine QuickBooks ItemRef by exact name match. Fallback to default item if not found.
+                $default_item_id = get_option( 'dq_default_item_id' ) ?: '1';  // Plugin’s configured default or ID 1
+                $itemRefValue = $default_item_id;
+                if ( $activity !== '' && isset( $item_map[ $activity ] ) ) {
+                    $itemRefValue = $item_map[ $activity ];
+                }
 
-                $line_desc = $activity ? ($activity . ': ' . $desc) : $desc;
+                $line_desc = $desc;
         
                 $lines[] = [
                     'Amount'      => $amount_num + 0, // ensure numeric
@@ -81,7 +101,7 @@ class DQ_Invoice {
                     'DetailType'  => 'SalesItemLineDetail',
                     'SalesItemLineDetail' => [
                         // QBO requires ItemRef (only value is allowed in requests)
-                        'ItemRef'   => [ 'value' => '1' ],
+                        'ItemRef'   => [ 'value' => $itemRefValue ],
                         // Use "raw but cleaned" values
                         'Qty'       => $qty_num + 0,
                         'UnitPrice' => $rate_num + 0,
@@ -173,7 +193,7 @@ class DQ_Invoice {
         ];
 
         // Log final JSON for debugging
-        DQ_Logger::debug( 'Invoice JSON', $payload );
+        //DQ_Logger::debug( 'Invoice JSON', $payload );
         //DQ_Logger::debug('QBO Preferences', DQ_API::get('/company/' . DQ_QB_REALM_ID . '/preferences'));
         return $payload;
     }
