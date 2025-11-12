@@ -362,10 +362,11 @@ class DQ_Metabox {
             return new WP_Error('dq_acf_missing', 'ACF not active.');
         }
     
-        $invoice_id = sanitize_text_field( (string) get_field('wo_invoice_id', $post_id) );
-        if ( ! $invoice_id ) return new WP_Error('dq_no_invoice_id', 'This Work Order has no wo_invoice_id.');
-    
-        $invoice = DQ_API::get_invoice_by_id( $invoice_id );
+        $invoice_no = sanitize_text_field((string) get_field('wo_invoice_no', $post_id));
+        if (!$invoice_no) return new WP_Error('dq_no_invoice_no', 'This Work Order has no wo_invoice_no.');
+        $invoice = DQ_API::get_invoice_by_docnumber($invoice_no); // <--- You need a helper for this!
+        
+
         if ( is_wp_error($invoice) ) {
             if ( defined('WP_DEBUG') && WP_DEBUG ) error_log('[DQ] QBO get_invoice_by_id error: '. $invoice->get_error_message());
             return $invoice;
@@ -468,11 +469,11 @@ class DQ_Metabox {
         $error    = null;
     
         // 1) Fetch invoice
-        $invoice_id = sanitize_text_field( (string) get_field('wo_invoice_id', $post_id) );
-        if ( ! $invoice_id ) {
-            $error = new WP_Error('dq_no_invoice_id', 'This Work Order has no wo_invoice_id.');
+        $invoice_no = sanitize_text_field((string) get_field('wo_invoice_no', $post_id));
+        if ( ! $invoice_no ) {
+            $error = new WP_Error('dq_no_invoice_id', 'This Work Order has no wo_invoice_no.');
         } else {
-            $invoice = DQ_API::get_invoice_by_id( $invoice_id );
+            $invoice = DQ_API::get_invoice_by_docnumber($invoice_no);
             if ( is_wp_error($invoice) ) {
                 $error = $invoice;
             } else {

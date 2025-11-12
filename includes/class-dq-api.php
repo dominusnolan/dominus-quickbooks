@@ -355,6 +355,13 @@ class DQ_API {
         $rid = apply_filters( 'dq_realm_id', '' );
         return (string) $rid;
     }
+    
+    public static function get_invoice_by_docnumber($docnumber) {
+        $query = "SELECT * FROM Invoice WHERE DocNumber = '$docnumber'";
+        $resp = self::query($query);
+        if (is_wp_error($resp) || empty($resp['QueryResponse']['Invoice'])) return new WP_Error('no_invoice', 'Invoice not found by DocNumber');
+        return $resp['QueryResponse']['Invoice'][0];
+    }
 
 
 }
