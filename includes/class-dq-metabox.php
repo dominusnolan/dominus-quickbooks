@@ -83,7 +83,7 @@ class DQ_Metabox {
             echo '<p style="margin:4px 0;"><span class="dashicons dashicons-media-text" style="vertical-align:middle;"></span> <strong>No:</strong> <input type="text" readonly value="' . esc_attr( $invoice_no ) . '" style="width:70px;text-align:center;background:#f9f9f9;border:1px solid #ccc;border-radius:3px;padding:2px 4px;"></p>';
         }
         if ( $invoice_id ) {
-            echo '<p style="margin:4px 0;"><span class="dashicons dashicons-media-spreadsheet" style="vertical-align:middle;"></span> <strong>ID:</strong> <input type="text" readonly value="' . esc_attr( $invoice_id ) . '" style="width:80px;text-align:center;background:#f9f9f9;border:1px solid #ccc;border-radius:3px;padding:2px 4px;"></p>';
+            echo '<p style="margin:4px 0;"><span class="dashicons dashicons-media-spreadsheet" style="vertical-align:middle;"></span> <strong>ID:</strong> <input type="text" readonly value="' . esc_attr( $invoice_id ) . '" style="width:70px;text-align:center;background:#f0f0f0;border:1px solid #ccc;border-radius:3px;padding:2px 4px;"></p>';
         }
 
         // Add working "View in QuickBooks" link
@@ -115,6 +115,7 @@ class DQ_Metabox {
         echo '<h4 style="margin:0 0 8px;border-bottom:1px solid #ddd;">Invoice Totals</h4>';
 
         $total = $paid = $balance = 0.00;
+        $bill_to = $ship_to = $invoice_date = $due_date = $terms = $payment_status = '';
         if ( $invoice_id ) {
             $invoice_data = DQ_API::get_invoice( $invoice_id );
             if ( ! is_wp_error( $invoice_data ) && ! empty( $invoice_data['Invoice'] ) ) {
@@ -122,16 +123,42 @@ class DQ_Metabox {
                 $total   = isset( $invoice['TotalAmt'] ) ? floatval( $invoice['TotalAmt'] ) : 0;
                 $balance = isset( $invoice['Balance'] ) ? floatval( $invoice['Balance'] ) : 0;
                 $paid    = max( $total - $balance, 0 );
+                $payment_status = ($balance <= 0 && $total > 0) ? 'PAID' : 'UNPAID';
+
+                if (!empty($invoice['BillAddr'])) {
+                    $bill_to = dq_format_address($invoice['BillAddr']); // Use helper
+                }
+                if (!empty($invoice['ShipAddr'])) {
+                    $ship_to = dq_format_address($invoice['ShipAddr']);
+                }
+                if (!empty($invoice['TxnDate'])) {
+                    $invoice_date = esc_html($invoice['TxnDate']);
+                }
+                if (!empty($invoice['DueDate'])) {
+                    $due_date = esc_html($invoice['DueDate']);
+                }
+                if (!empty($invoice['SalesTermRef'])) {
+                    $terms = esc_html(
+                        isset($invoice['SalesTermRef']['name']) ? $invoice['SalesTermRef']['name'] : $invoice['SalesTermRef']['value']
+                    );
+                }
 
                 // Save totals
                 update_post_meta( $post->ID, 'wo_total_billed', $total );
                 update_post_meta( $post->ID, 'wo_total_paid', $paid );
                 update_post_meta( $post->ID, 'wo_balance_due', $balance );
+                update_post_meta( $post->ID, 'wo_payment_status', $payment_status );
+                update_post_meta( $post->ID, 'wo_bill_to', $invoice['BillAddr'] );
+                update_post_meta( $post->ID, 'wo_ship_to', $invoice['ShipAddr'] );
+                update_post_meta( $post->ID, 'wo_invoice_date', $invoice_date );
+                update_post_meta( $post->ID, 'wo_due_date', $due_date );
+                update_post_meta( $post->ID, 'wo_terms', $terms );
 
                 DQ_Logger::info( "Fetched QuickBooks totals for invoice #$invoice_id", [
                     'Total' => $total,
                     'Paid' => $paid,
                     'Balance' => $balance,
+                    'Status' => $payment_status,
                 ] );
             } else {
                 echo '<p><em>Unable to retrieve totals from QuickBooks.</em></p>';
@@ -141,6 +168,14 @@ class DQ_Metabox {
         echo '<p style="margin:3px 0;"><strong>Total:</strong> $'   . number_format( $total, 2 ) . '</p>';
         echo '<p style="margin:3px 0;"><strong>Paid:</strong> $'    . number_format( $paid, 2 )  . '</p>';
         echo '<p style="margin:3px 0;"><strong>Balance:</strong> $' . number_format( $balance, 2 ) . '</p>';
+        echo '<p style="margin:3px 0;"><strong>Status:</strong> ' . esc_html($payment_status) . '</p>';
+
+        // Bill and Ship To Display
+        echo '<p style="margin:3px 0;"><strong>Bill To:</strong> ' . $bill_to . '</p>';
+        echo '<p style="margin:3px 0;"><strong>Ship To:</strong> ' . $ship_to . '</p>';
+        echo '<p style="margin:3px 0;"><strong>Invoice Date:</strong> ' . $invoice_date . '</p>';
+        echo '<p style="margin:3px 0;"><strong>Due Date:</strong> ' . $due_date . '</p>';
+        echo '<p style="margin:3px 0;"><strong>Terms:</strong> ' . $terms . '</p>';
 
         // PAID / UNPAID badge
         if ( $total > 0 ) {
@@ -166,20 +201,17 @@ class DQ_Metabox {
             echo '<p><a href="' . esc_url( $send_url ) . '" class="button button-primary" style="width:100%;">Send to QuickBooks</a></p>';
         } else {
             echo '<p><a href="' . esc_url( $update_url ) . '" class="button button-primary" style="width:100%;margin-bottom:5px;">Update QuickBooks</a></p>';
-            //echo '<p><a href="' . esc_url( $refresh_url ) . '" class="button" style="width:100%;" onclick="return confirm(\'Refresh invoice data from QuickBooks? This will overwrite totals stored on this Work Order.\');">Refresh from QuickBooks</a></p>';
         }
-        
-        
-       $nonce = wp_create_nonce( 'dq_pull_from_qb_' . $post->ID );
-    $href  = add_query_arg([
-        'action'  => 'dq_pull_from_qb',
-        'post_id' => $post->ID,
-        '_wpnonce'=> $nonce,
-    ], admin_url('admin-post.php') );
-    
-    echo '<a class="button button-secondary" href="' . esc_url($href) . '">Pull from QuickBooks</a>';
 
-        
+        $nonce = wp_create_nonce( 'dq_pull_from_qb_' . $post->ID );
+        $href  = add_query_arg([
+            'action'  => 'dq_pull_from_qb',
+            'post_id' => $post->ID,
+            '_wpnonce'=> $nonce,
+        ], admin_url('admin-post.php') );
+
+        echo '<a class="button button-secondary" href="' . esc_url($href) . '">Pull from QuickBooks</a>';
+
         echo '</div>'; // wrapper
     }
 
@@ -455,7 +487,7 @@ class DQ_Metabox {
     
     public static function handle_pull_from_qb() {
         if ( ! current_user_can('edit_posts') ) wp_die('Permission denied');
-    
+
         $post_id = isset($_GET['post_id']) ? absint($_GET['post_id']) : 0;
         $nonce   = isset($_GET['_wpnonce']) ? $_GET['_wpnonce'] : '';
         $ok = $post_id && (
@@ -464,52 +496,96 @@ class DQ_Metabox {
             wp_verify_nonce( $nonce, 'dq_refresh_from_qb_' . $post_id )
         );
         if ( ! $ok ) wp_die('Nonce failed');
-    
+
         $messages = [];
         $error    = null;
-    
+
         // 1) Fetch invoice
         $invoice_no = sanitize_text_field((string) get_field('wo_invoice_no', $post_id));
         if ( ! $invoice_no ) {
-            $error = new WP_Error('dq_no_invoice_id', 'This Work Order has no wo_invoice_no.');
+            $error = new WP_Error('dq_no_invoice_no', 'This Work Order has no wo_invoice_no.');
         } else {
             $invoice = DQ_API::get_invoice_by_docnumber($invoice_no);
             if ( is_wp_error($invoice) ) {
                 $error = $invoice;
             } else {
-                // Update invoice number
+                // --- BEGIN FIELD MAPPING ---
+                if (function_exists('update_field')) {
+                    // Map core financial data
+                    if (!empty($invoice['Id'])) {
+                        update_field('wo_invoice_id', $invoice['Id'], $post_id);
+                    }
+                    if (!empty($invoice['TotalAmt'])) {
+                        update_field('wo_total_billed', $invoice['TotalAmt'], $post_id);
+                    }
+                    if (!empty($invoice['Balance'])) {
+                        update_field('wo_balance_due', $invoice['Balance'], $post_id);
+                    }
+                    if (isset($invoice['TotalAmt']) && isset($invoice['Balance'])) {
+                        $paid = max(floatval($invoice['TotalAmt']) - floatval($invoice['Balance']), 0);
+                        update_field('wo_total_paid', $paid, $post_id);
+                        update_field('wo_payment_status', ($invoice['Balance'] > 0 ? 'UNPAID' : 'PAID'), $post_id);
+                    }
+                    update_field('wo_last_synced', current_time('mysql'), $post_id);
+
+                    // Map Billing and Shipping addresses               
+                    // For BillAddr
+                    if (!empty($invoice['BillAddr'])) {
+                        update_field('wo_bill_to', dq_format_address($invoice['BillAddr']), $post_id);
+                    }
+                    // For ShipAddr
+                    if (!empty($invoice['ShipAddr'])) {
+                        update_field('wo_ship_to', dq_format_address($invoice['ShipAddr']), $post_id);
+                    }
+
+                    // Map date and terms
+                    if (!empty($invoice['TxnDate'])) {
+                        update_field('wo_invoice_date', $invoice['TxnDate'], $post_id);
+                    }
+                    if (!empty($invoice['DueDate'])) {
+                        update_field('wo_due_date', $invoice['DueDate'], $post_id);
+                    }
+                    if (!empty($invoice['SalesTermRef'])) {
+                        update_field('wo_terms', isset($invoice['SalesTermRef']['name']) ? $invoice['SalesTermRef']['name'] : $invoice['SalesTermRef']['value'], $post_id);
+                    }
+                }
+                // --- END FIELD MAPPING ---
+
+                // Always refresh the human-readable invoice number
                 if ( ! empty($invoice['DocNumber']) ) {
                     update_field( 'wo_invoice_no', (string) $invoice['DocNumber'], $post_id );
                 }
-    
-                // Optional: refresh totals if those fields exist in ACF
-                if ( function_exists('get_field') && function_exists('update_field') ) {
-                    $total   = isset($invoice['TotalAmt']) ? (float)$invoice['TotalAmt'] : null;
-                    $balance = isset($invoice['Balance'])  ? (float)$invoice['Balance']  : null;
-                    if ( get_field('wo_total', $post_id)   !== null && $total   !== null ) update_field('wo_total',   $total,   $post_id);
-                    if ( get_field('wo_balance', $post_id) !== null && $balance !== null ) update_field('wo_balance', $balance, $post_id);
-                    if ( get_field('wo_paid', $post_id)    !== null && $total   !== null && $balance !== null ) {
-                        update_field('wo_paid', $total - $balance, $post_id);
-                    }
-                }
+
                 $messages[] = 'Header refreshed';
-    
+
                 // 2) Map line items → ACF repeater (activity, quantity, rate, amount)
                 $res = self::sync_qbo_invoice_lines_to_acf( $post_id );
                 if ( is_wp_error($res) ) $error = $res; else $messages[] = $res;
             }
         }
-    
+
         $msg = $error ? 'error:' . $error->get_error_message() : 'ok:' . implode(' • ', $messages);
         $redirect = add_query_arg([
             'post'   => $post_id,
             'action' => 'edit',
             'dq_msg' => $msg,
         ], admin_url('post.php'));
-    
+
         wp_safe_redirect($redirect);
         exit;
     }
+}
 
-
+function dq_format_address($addr) {
+    if (!is_array($addr)) {
+        return (string)$addr;
+    }
+    return trim(implode(', ', array_filter([
+        $addr['Line1'] ?? '',
+        $addr['Line2'] ?? '',
+        $addr['City']  ?? '',
+        $addr['CountrySubDivisionCode'] ?? '',
+        $addr['PostalCode'] ?? '',
+        $addr['Country'] ?? '',
+    ])));
 }
