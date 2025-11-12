@@ -148,8 +148,9 @@ class DQ_Metabox {
                 update_post_meta( $post->ID, 'wo_total_paid', $paid );
                 update_post_meta( $post->ID, 'wo_balance_due', $balance );
                 update_post_meta( $post->ID, 'wo_payment_status', $payment_status );
-                update_post_meta( $post->ID, 'wo_bill_to', $invoice['BillAddr'] );
-                update_post_meta( $post->ID, 'wo_ship_to', $invoice['ShipAddr'] );
+                if (!empty($invoice['BillAddr']) || !empty($invoice['ShipAddr'])) {
+                    dominus_qb_update_acf_bill_ship($post->ID, $invoice); // safe!
+                }
                 update_post_meta( $post->ID, 'wo_invoice_date', $invoice_date );
                 update_post_meta( $post->ID, 'wo_due_date', $due_date );
                 update_post_meta( $post->ID, 'wo_terms', $terms );
