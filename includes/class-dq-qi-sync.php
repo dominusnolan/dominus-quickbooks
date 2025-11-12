@@ -119,6 +119,7 @@ class DQ_QI_Sync {
             while ( have_rows('qi_invoice', $post_id) ) {
                 the_row();
                 $activity = trim( (string) get_sub_field('activity') );
+                $desc     = trim( (string) get_sub_field('description') );
                 $qty      = self::num( get_sub_field('quantity') );
                 $rate     = self::num( get_sub_field('rate') );
                 $amount   = self::num( get_sub_field('amount') ); // will fallback to qty*rate if missing
@@ -135,9 +136,12 @@ class DQ_QI_Sync {
                     if ( $try ) $item_id = $try;
                 }
 
+                // Use description subfield when provided; otherwise fall back to activity or default
+                $line_description = $desc !== '' ? $desc : ($activity !== '' ? $activity : $fallback_name);
+
                 $rows[] = [
                     'Amount'      => (float)$amount,
-                    'Description' => $activity ?: $fallback_name,
+                    'Description' => $line_description,
                     'DetailType'  => 'SalesItemLineDetail',
                     'SalesItemLineDetail' => [
                         'ItemRef'   => [ 'value' => (string)$item_id ],
