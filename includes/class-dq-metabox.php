@@ -49,6 +49,15 @@ class DQ_Metabox {
 
                 return $field;
             });
+            
+        
+        add_action( 'admin_post_dq_pull_from_qb',   [ __CLASS__, 'handle_pull_from_qb' ] );
+
+        // Back-compat: if any old links still exist, route them here too.
+        add_action( 'admin_post_dq_request_from_qb', [ __CLASS__, 'handle_pull_from_qb' ] );
+        add_action( 'admin_post_dq_refresh_from_qb', [ __CLASS__, 'handle_pull_from_qb' ] );
+        
+        add_action( 'admin_notices', [ __CLASS__, 'admin_notice' ] );
     }
 
     public static function add_metabox() {
@@ -157,9 +166,19 @@ class DQ_Metabox {
             echo '<p><a href="' . esc_url( $send_url ) . '" class="button button-primary" style="width:100%;">Send to QuickBooks</a></p>';
         } else {
             echo '<p><a href="' . esc_url( $update_url ) . '" class="button button-primary" style="width:100%;margin-bottom:5px;">Update QuickBooks</a></p>';
-            echo '<p><a href="' . esc_url( $refresh_url ) . '" class="button" style="width:100%;" onclick="return confirm(\'Refresh invoice data from QuickBooks? This will overwrite totals stored on this Work Order.\');">Refresh from QuickBooks</a></p>';
+            //echo '<p><a href="' . esc_url( $refresh_url ) . '" class="button" style="width:100%;" onclick="return confirm(\'Refresh invoice data from QuickBooks? This will overwrite totals stored on this Work Order.\');">Refresh from QuickBooks</a></p>';
         }
         
+        
+       $nonce = wp_create_nonce( 'dq_pull_from_qb_' . $post->ID );
+    $href  = add_query_arg([
+        'action'  => 'dq_pull_from_qb',
+        'post_id' => $post->ID,
+        '_wpnonce'=> $nonce,
+    ], admin_url('admin-post.php') );
+    
+    echo '<a class="button button-secondary" href="' . esc_url($href) . '">Pull from QuickBooks</a>';
+
         
         echo '</div>'; // wrapper
     }
@@ -313,4 +332,183 @@ class DQ_Metabox {
             echo '<div class="notice notice-success is-dismissible"><p><strong>' . esc_html( $messages[ $msg ] ) . '</strong></p></div>';
         }
     }
+    
+    
+    public static function handle_request_from_qb() {
+        if ( ! current_user_can('edit_posts') ) wp_die('Permission denied');
+    
+        $post_id = isset($_GET['post_id']) ? absint($_GET['post_id']) : 0;
+        check_admin_referer( 'dq_request_from_qb_' . $post_id );
+    
+        $res = self::sync_qbo_invoice_lines_to_acf( $post_id );
+    
+        $redirect = add_query_arg([
+            'post'   => $post_id,
+            'action' => 'edit',
+            'dq_msg' => is_wp_error($res) ? ('error:' . $res->get_error_message()) : ('ok:' . $res),
+        ], admin_url('post.php'));
+    
+        wp_safe_redirect($redirect);
+        exit;
+    }
+
+    
+    /**
+     * Pulls QBO invoice lines and saves to ACF repeater "wo_invoice".
+     * Subfields expected: activity, quantity, rate, amount, tax
+     */
+    private static function sync_qbo_invoice_lines_to_acf( $post_id ) {
+        if ( ! function_exists('update_field') ) {
+            return new WP_Error('dq_acf_missing', 'ACF not active.');
+        }
+    
+        $invoice_id = sanitize_text_field( (string) get_field('wo_invoice_id', $post_id) );
+        if ( ! $invoice_id ) return new WP_Error('dq_no_invoice_id', 'This Work Order has no wo_invoice_id.');
+    
+        $invoice = DQ_API::get_invoice_by_id( $invoice_id );
+        if ( is_wp_error($invoice) ) {
+            if ( defined('WP_DEBUG') && WP_DEBUG ) error_log('[DQ] QBO get_invoice_by_id error: '. $invoice->get_error_message());
+            return $invoice;
+        }
+    
+        // --- NEW: store wo_invoice_no from QuickBooks DocNumber ---
+        $docno = '';
+        if ( ! empty($invoice['DocNumber']) ) {
+            $docno = (string) $invoice['DocNumber'];
+        } elseif ( ! empty($invoice['InvoiceNumber']) ) { // rare alternate
+            $docno = (string) $invoice['InvoiceNumber'];
+        }
+        if ( $docno !== '' ) {
+            update_field( 'wo_invoice_no', $docno, $post_id );
+        }
+        // ----------------------------------------------------------
+    
+        $lines = isset($invoice['Line']) ? $invoice['Line'] : [];
+        if ( empty($lines) ) {
+            update_field('wo_invoice', [], $post_id);
+            return 'No lines found on the QuickBooks invoice; cleared the repeater.'
+                . ( $docno !== '' ? " (Invoice No: {$docno})" : '' );
+        }
+    
+        // Get repeater + subfield KEYS (activity, quantity, rate, amount)
+        $rep = get_field_object('wo_invoice', $post_id);
+        if ( empty($rep) || empty($rep['key']) || empty($rep['sub_fields']) ) {
+            return new WP_Error('dq_acf_field_missing', 'ACF repeater "wo_invoice" or its subfields are not defined.');
+        }
+    
+        $keys = [];
+        foreach ( $rep['sub_fields'] as $sf ) {
+            $keys[$sf['name']] = $sf['key'];
+        }
+        foreach ( ['activity','quantity','rate','amount'] as $need ) {
+            if ( empty($keys[$need]) ) {
+                return new WP_Error('dq_acf_subfield_missing', 'ACF subfield missing: ' . $need);
+            }
+        }
+    
+        $allowed_activities = apply_filters('dq_wo_invoice_allowed_activities', ['Labor Rate HR']);
+        $rows = [];
+    
+        foreach ( $lines as $line ) {
+            if ( !isset($line['DetailType']) || $line['DetailType'] !== 'SalesItemLineDetail' ) continue;
+    
+            $d       = $line['SalesItemLineDetail'];
+            $name    = isset($d['ItemRef']['name']) ? trim($d['ItemRef']['name']) : '';
+            $qty     = isset($d['Qty'])       ? (float)$d['Qty']       : 0.0;
+            $rate    = isset($d['UnitPrice']) ? (float)$d['UnitPrice'] : 0.0;
+            $amount  = isset($line['Amount']) ? (float)$line['Amount'] : ($qty * $rate);
+    
+            $activity = 'Labor Rate HR';
+            foreach ( $allowed_activities as $a ) {
+                if ( strcasecmp($a, $name) === 0 ) { $activity = $a; break; }
+            }
+    
+            $rows[] = [
+                $keys['activity'] => $activity,
+                $keys['quantity'] => $qty,
+                $keys['rate']     => $rate,
+                $keys['amount']   => $amount,
+            ];
+        }
+    
+        update_field( $rep['key'], $rows, $post_id );
+    
+        return sprintf(
+            'Mapped %d line(s) from QBO invoice %s%s.',
+            count($rows),
+            $invoice_id,
+            $docno !== '' ? " (Invoice No: {$docno})" : ''
+        );
+    }
+
+    
+    public static function admin_notice() {
+        if ( empty($_GET['dq_msg']) ) return;
+        $msg = wp_unslash($_GET['dq_msg']);
+    
+        $class = (strpos($msg, 'error:') === 0) ? 'notice notice-error' : 'notice notice-success';
+        $text  = (strpos($msg, ':') !== false) ? substr($msg, strpos($msg, ':') + 1) : $msg;
+    
+        echo '<div class="'.esc_attr($class).'"><p>'.esc_html($text).'</p></div>';
+    }
+    
+    public static function handle_pull_from_qb() {
+        if ( ! current_user_can('edit_posts') ) wp_die('Permission denied');
+    
+        $post_id = isset($_GET['post_id']) ? absint($_GET['post_id']) : 0;
+        $nonce   = isset($_GET['_wpnonce']) ? $_GET['_wpnonce'] : '';
+        $ok = $post_id && (
+            wp_verify_nonce( $nonce, 'dq_pull_from_qb_' . $post_id ) ||
+            wp_verify_nonce( $nonce, 'dq_request_from_qb_' . $post_id ) ||
+            wp_verify_nonce( $nonce, 'dq_refresh_from_qb_' . $post_id )
+        );
+        if ( ! $ok ) wp_die('Nonce failed');
+    
+        $messages = [];
+        $error    = null;
+    
+        // 1) Fetch invoice
+        $invoice_id = sanitize_text_field( (string) get_field('wo_invoice_id', $post_id) );
+        if ( ! $invoice_id ) {
+            $error = new WP_Error('dq_no_invoice_id', 'This Work Order has no wo_invoice_id.');
+        } else {
+            $invoice = DQ_API::get_invoice_by_id( $invoice_id );
+            if ( is_wp_error($invoice) ) {
+                $error = $invoice;
+            } else {
+                // Update invoice number
+                if ( ! empty($invoice['DocNumber']) ) {
+                    update_field( 'wo_invoice_no', (string) $invoice['DocNumber'], $post_id );
+                }
+    
+                // Optional: refresh totals if those fields exist in ACF
+                if ( function_exists('get_field') && function_exists('update_field') ) {
+                    $total   = isset($invoice['TotalAmt']) ? (float)$invoice['TotalAmt'] : null;
+                    $balance = isset($invoice['Balance'])  ? (float)$invoice['Balance']  : null;
+                    if ( get_field('wo_total', $post_id)   !== null && $total   !== null ) update_field('wo_total',   $total,   $post_id);
+                    if ( get_field('wo_balance', $post_id) !== null && $balance !== null ) update_field('wo_balance', $balance, $post_id);
+                    if ( get_field('wo_paid', $post_id)    !== null && $total   !== null && $balance !== null ) {
+                        update_field('wo_paid', $total - $balance, $post_id);
+                    }
+                }
+                $messages[] = 'Header refreshed';
+    
+                // 2) Map line items → ACF repeater (activity, quantity, rate, amount)
+                $res = self::sync_qbo_invoice_lines_to_acf( $post_id );
+                if ( is_wp_error($res) ) $error = $res; else $messages[] = $res;
+            }
+        }
+    
+        $msg = $error ? 'error:' . $error->get_error_message() : 'ok:' . implode(' • ', $messages);
+        $redirect = add_query_arg([
+            'post'   => $post_id,
+            'action' => 'edit',
+            'dq_msg' => $msg,
+        ], admin_url('post.php'));
+    
+        wp_safe_redirect($redirect);
+        exit;
+    }
+
+
 }

@@ -266,5 +266,95 @@ class DQ_API {
                 return self::post($e, $payload, 'Create ' . ucfirst($e));
         }
     }
+    
+    
+    public static function get_invoice_by_id( $invoice_id ) {
+        if ( ! $invoice_id ) {
+            return new WP_Error('dq_no_invoice_id', 'Missing invoice id.');
+        }
+    
+        $realm_id = self::realm_id();
+        if ( ! $realm_id ) {
+            return new WP_Error(
+                'dq_no_realm',
+                'Missing QuickBooks realm/company id. Save it in the plugin settings or capture it during OAuth (realmId).'
+            );
+        }
+    
+        $url = trailingslashit( self::base_url() . $realm_id ) . 'invoice/' . urlencode( $invoice_id ) . '?minorversion=65';
+    
+        $res = wp_remote_get( $url, [ 'headers' => self::headers(true), 'timeout' => 20 ] );
+        if ( is_wp_error( $res ) ) return $res;
+    
+        $code = wp_remote_retrieve_response_code( $res );
+        $body = json_decode( wp_remote_retrieve_body( $res ), true );
+    
+        if ( $code !== 200 || empty( $body['Invoice'] ) ) {
+            // Fallback to query endpoint
+            $q = "select * from Invoice where Id = '{$invoice_id}'";
+            $fallback = self::query_raw( $q );
+            if ( ! is_wp_error( $fallback ) && ! empty( $fallback['QueryResponse']['Invoice'][0] ) ) {
+                return $fallback['QueryResponse']['Invoice'][0];
+            }
+            return new WP_Error('dq_qbo_fetch_failed', 'Unable to fetch invoice from QuickBooks.', [ 'code' => $code, 'body' => $body ]);
+        }
+    
+        return $body['Invoice'];
+    }
+
+    
+    /**
+     * Minimal query helper (used as a fallback above).
+     */
+    public static function query_raw( $sql ) {
+        $realm_id = DQ_Auth::realm_id();
+        if ( ! $realm_id ) return new WP_Error('dq_no_realm', 'Missing QuickBooks realm/company id.');
+    
+        $url = trailingslashit( self::base_url() . $realm_id ) . 'query?minorversion=65&query=' . rawurlencode( $sql );
+        $res = wp_remote_get( $url, [ 'headers' => self::headers(true), 'timeout' => 25 ] );
+        if ( is_wp_error( $res ) ) return $res;
+    
+        $code = wp_remote_retrieve_response_code( $res );
+        $body = json_decode( wp_remote_retrieve_body( $res ), true );
+    
+        if ( $code !== 200 ) {
+            return new WP_Error('dq_qbo_query_failed', 'Query endpoint returned an error.', [ 'code' => $code, 'body' => $body ]);
+        }
+        return $body;
+    }
+    
+    
+    // Inside class DQ_API
+
+    /**
+     * Resolve QuickBooks Realm (Company) ID.
+     */
+    private static function realm_id() {
+        // Allow a hard override if you ever need one
+        if ( defined('DQ_REALM_ID') && DQ_REALM_ID ) {
+            return (string) DQ_REALM_ID;
+        }
+    
+        // Look in stored WP options (your site uses "woqb_realm_id")
+        foreach ( ['woqb_realm_id', 'dq_realm_id', 'dq_company_id', 'qb_company_id', 'qbo_company_id'] as $opt ) {
+            $rid = get_option( $opt );
+            if ( ! empty( $rid ) ) {
+                return (string) $rid;
+            }
+        }
+    
+        // Ask the auth class if available
+        if ( class_exists('DQ_Auth') && method_exists('DQ_Auth', 'realm_id') ) {
+            $rid = DQ_Auth::realm_id();
+            if ( ! empty( $rid ) ) {
+                return (string) $rid;
+            }
+        }
+    
+        // Last chance: let themes/plugins provide it
+        $rid = apply_filters( 'dq_realm_id', '' );
+        return (string) $rid;
+    }
+
 
 }
