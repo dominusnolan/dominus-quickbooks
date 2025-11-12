@@ -30,9 +30,11 @@ require_once DQQB_PATH . 'includes/class-dq-invoice.php';
 
 require_once DQQB_PATH . 'includes/acf-invoice-addresses.php';
 require_once DQQB_PATH . 'includes/class-dq-metabox.php';
-
-
 require_once DQQB_PATH . 'includes/class-dq-csv-importer.php';
+
+// New: QuickBooks Invoice CPT sync
+require_once DQQB_PATH . 'includes/class-dq-qi-sync.php';
+require_once DQQB_PATH . 'includes/class-dq-qi-metabox.php';
 
 // -----------------------------------------------------------------------------
 // Initialize Plugin
@@ -53,12 +55,18 @@ add_action( 'plugins_loaded', function() {
                 echo '<div class="notice notice-warning"><p><strong>Dominus QuickBooks:</strong> Custom post type <code>workorder</code> not found. Please register it before syncing.</p></div>';
             });
         }
+        if ( ! post_type_exists( 'quickbooks_invoice' ) ) {
+            add_action( 'admin_notices', function() {
+                echo '<div class="notice notice-warning"><p><strong>Dominus QuickBooks:</strong> Custom post type <code>quickbooks_invoice</code> not found. Please register it before syncing.</p></div>';
+            });
+        }
     });
 
     if ( class_exists( 'DQ_Settings' ) ) DQ_Settings::init();
     if ( class_exists( 'DQ_Auth' ) ) DQ_Auth::init();
     if ( class_exists( 'DQ_API' ) ) DQ_API::init();
     if ( class_exists( 'DQ_Metabox' ) ) DQ_Metabox::init();
+    if ( class_exists( 'DQ_QI_Metabox' ) ) DQ_QI_Metabox::init();
 });
 
 // -----------------------------------------------------------------------------
