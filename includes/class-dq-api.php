@@ -251,4 +251,20 @@ class DQ_API {
         ] );
         return self::handle( $resp, 'Custom Query' );
     }
+    
+    // Convenience wrapper so older/import code can call DQ_API::create('Entity', $payload)
+    public static function create( $entity, $payload ) {
+        $e = strtolower(trim($entity));
+        switch ($e) {
+            case 'invoice':
+                // Use the dedicated method the plugin already provides
+                return self::create_invoice($payload);
+            case 'customer':
+                return self::create_customer($payload);
+            default:
+                // Generic POST for entities like item, payment, etc.
+                return self::post($e, $payload, 'Create ' . ucfirst($e));
+        }
+    }
+
 }
