@@ -93,16 +93,17 @@ class DQ_QI_Metabox {
         echo '</div>';
     }
 
+    <?php
+    // ... file header and other methods unchanged ...
+
     public static function update() {
         if ( empty($_GET['post']) ) wp_die('Invalid post');
         $post_id = absint($_GET['post']);
         check_admin_referer( 'dq_qi_update_' . $post_id );
 
-        // Get DocNumber
         $docnum = function_exists('get_field') ? get_field('qi_invoice_no', $post_id) : get_post_meta($post_id, 'qi_invoice_no', true);
         if ( ! $docnum ) wp_die('No qi_invoice_no found.');
 
-        // Find QBO invoice by DocNumber (used for QBO ID)
         $raw = DQ_API::get_invoice_by_docnumber( $docnum );
         if ( is_wp_error($raw) ) wp_die( 'QuickBooks error: ' . $raw->get_error_message() );
         $invoice = (isset($raw['QueryResponse']['Invoice'][0]) && is_array($raw['QueryResponse']['Invoice'][0]))
@@ -110,25 +111,59 @@ class DQ_QI_Metabox {
             : [];
         if ( empty($invoice['Id']) ) wp_die('QuickBooks invoice not found by DocNumber.');
 
-        // Build update payload from CPT ACF fields (this is what you want to push to QBO!)
         $payload = DQ_QI_Sync::build_payload_from_cpt( $post_id );
         if ( is_wp_error($payload) ) wp_die( $payload->get_error_message() );
 
-        // Push update to QBO: CPT -> QBO
         $resp = DQ_API::update_invoice( $invoice['Id'], $payload );
         if ( is_wp_error($resp) ) wp_die( 'QuickBooks error: ' . $resp->get_error_message() );
 
-        // Only update CPT QBO IDs, do NOT overwrite your CPT values with QBO financials
         $inv = $resp['Invoice'] ?? $resp;
+
         if (function_exists('update_field')) {
             if (!empty($inv['Id']))        update_field('qi_invoice_id', (string)$inv['Id'], $post_id);
             if (!empty($inv['DocNumber'])) update_field('qi_invoice_no', (string)$inv['DocNumber'], $post_id);
-            // Do NOT update qi_balance_due, qi_total_paid, qi_invoice_date, qi_due_date here!
         } else {
             if (!empty($inv['Id']))        update_post_meta($post_id, 'qi_invoice_id', (string)$inv['Id']);
             if (!empty($inv['DocNumber'])) update_post_meta($post_id, 'qi_invoice_no', (string)$inv['DocNumber']);
         }
         update_post_meta( $post_id, 'qi_last_synced', current_time('mysql') );
+
+        // OPTIONAL: auto-create a Payment so QBO Balance matches CPT “Paid/Balance”.
+        // Enable by: add_filter('dqqb_qi_auto_payment_on_update', '__return_true');
+        if ( apply_filters('dqqb_qi_auto_payment_on_update', false) && !empty($inv['Id']) ) {
+            $desired_paid  = (float) ( function_exists('get_field') ? ( get_field('qi_total_paid', $post_id) ?: 0 ) : ( get_post_meta($post_id, 'qi_total_paid', true) ?: 0 ) );
+            $desired_total = (float) ( function_exists('get_field') ? ( get_field('qi_total_billed', $post_id) ?: 0 ) : ( get_post_meta($post_id, 'qi_total_billed', true) ?: 0 ) );
+
+            $existing_total   = isset($inv['TotalAmt']) ? (float)$inv['TotalAmt'] : 0.0;
+            $existing_balance = isset($inv['Balance']) ? (float)$inv['Balance'] : $existing_total;
+            $existing_paid    = max(0.0, $existing_total - $existing_balance);
+
+            // Only add the delta needed
+            $delta = max(0.0, $desired_paid - $existing_paid);
+
+            if ( $delta > 0.0 && !empty($inv['CustomerRef']['value']) ) {
+                $payment_payload = [
+                    'CustomerRef' => [ 'value' => (string)$inv['CustomerRef']['value'] ],
+                    'TotalAmt'    => $delta,
+                    'TxnDate'     => (string) ( function_exists('get_field') ? ( get_field('qi_invoice_date', $post_id) ?: date('Y-m-d') ) : date('Y-m-d') ),
+                    'PrivateNote' => 'Auto-created by Update QuickBooks from CPT',
+                    'Line'        => [
+                        [
+                            'Amount'    => $delta,
+                            'LinkedTxn' => [
+                                [ 'TxnId' => (string)$inv['Id'], 'TxnType' => 'Invoice' ],
+                            ],
+                        ],
+                    ],
+                ];
+                $pay_resp = DQ_API::post( 'payment', $payment_payload, 'Create Payment (auto on update)' );
+                if ( is_wp_error($pay_resp) ) {
+                    DQ_Logger::error('Auto payment failed', [ 'post_id'=>$post_id, 'invoice_id'=>$inv['Id'], 'error'=>$pay_resp->get_error_message() ]);
+                } else {
+                    DQ_Logger::info('Auto payment created', [ 'post_id'=>$post_id, 'invoice_id'=>$inv['Id'], 'amount'=>$delta ]);
+                }
+            }
+        }
 
         if (function_exists('dqqb_sync_invoice_number_to_workorders')) {
             dqqb_sync_invoice_number_to_workorders($post_id);

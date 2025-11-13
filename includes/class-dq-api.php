@@ -127,6 +127,7 @@ class DQ_API {
             return new WP_Error( 'dq_no_sync_token', 'QuickBooks did not return SyncToken; verify invoice ID.' );
         }
 
+        // Build update payload
         $update_payload = [
             'Id'          => (string) $invoice_id,
             'SyncToken'   => (string) $invoice['SyncToken'],
@@ -137,13 +138,26 @@ class DQ_API {
                 ? $payload['PrivateNote']
                 : ($invoice['PrivateNote'] ?? ''),
         ];
+
+        // Pass-through supported header fields from caller payload
+        $header_fields = [
+            'TxnDate', 'DueDate', 'BillAddr', 'ShipAddr',
+            'SalesTermRef', 'DocNumber', 'ApplyTaxAfterDiscount'
+        ];
+        foreach ( $header_fields as $k ) {
+            if ( array_key_exists( $k, $payload ) ) {
+                $update_payload[ $k ] = $payload[ $k ];
+            }
+        }
+
         if ( ! empty( $payload['CustomerMemo'] ) ) {
             $update_payload['CustomerMemo'] = $payload['CustomerMemo'];
         }
         if ( ! empty( $payload['CustomField'] ) ) {
             $update_payload['CustomField'] = $payload['CustomField'];
         }
-        if ( isset( $invoice['TxnTaxDetail'] ) ) {
+        // Preserve existing tax detail unless caller provided override above
+        if ( isset( $invoice['TxnTaxDetail'] ) && ! isset( $update_payload['TxnTaxDetail'] ) ) {
             $update_payload['TxnTaxDetail'] = $invoice['TxnTaxDetail'];
         }
 
