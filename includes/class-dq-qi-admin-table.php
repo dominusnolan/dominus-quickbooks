@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 
 /**
  * Adds and customizes the admin columns for CPT quickbooks_invoice.
- * Reference: image1.png.
+ * Reference: image2.png.
  */
 class DQ_QI_Admin_Table {
 
@@ -28,9 +28,7 @@ class DQ_QI_Admin_Table {
         $new['customer']    = __('Customer', 'dqqb');
         $new['invoice_date'] = __('Invoice Date', 'dqqb');
         $new['due_date']    = __('Invoice Due Date', 'dqqb');
-        // Add Status and Date at the end (retain defaults)
-        $new['status']      = $columns['status'] ?? 'Status';
-        $new['date']        = $columns['date'];
+        // DO NOT include Status and Date columns
         return $new;
     }
 
@@ -118,7 +116,6 @@ class DQ_QI_Admin_Table {
                 break;
 
             default:
-                // For status and date, use default rendering
                 break;
         }
     }
