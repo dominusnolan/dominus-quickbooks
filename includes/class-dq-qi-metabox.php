@@ -102,7 +102,7 @@ class DQ_QI_Metabox {
         $docnum = function_exists('get_field') ? get_field('qi_invoice_no', $post_id) : get_post_meta($post_id, 'qi_invoice_no', true);
         if ( ! $docnum ) wp_die('No qi_invoice_no found.');
 
-        // Find invoice by DocNumber -- fixed: unpack QueryResponse
+        // Find QBO invoice by DocNumber (used for QBO ID)
         $raw = DQ_API::get_invoice_by_docnumber( $docnum );
         if ( is_wp_error($raw) ) wp_die( 'QuickBooks error: ' . $raw->get_error_message() );
         $invoice = (isset($raw['QueryResponse']['Invoice'][0]) && is_array($raw['QueryResponse']['Invoice'][0]))
@@ -110,42 +110,23 @@ class DQ_QI_Metabox {
             : [];
         if ( empty($invoice['Id']) ) wp_die('QuickBooks invoice not found by DocNumber.');
 
-        // Build payload from CPT (lines + header fields)
+        // Build update payload from CPT ACF fields (this is what you want to push to QBO!)
         $payload = DQ_QI_Sync::build_payload_from_cpt( $post_id );
         if ( is_wp_error($payload) ) wp_die( $payload->get_error_message() );
 
-        // Push update to QBO (includes header: Bill/Ship/Terms)
+        // Push update to QBO: CPT -> QBO
         $resp = DQ_API::update_invoice( $invoice['Id'], $payload );
         if ( is_wp_error($resp) ) wp_die( 'QuickBooks error: ' . $resp->get_error_message() );
 
-        // Update local fields
+        // Only update CPT QBO IDs, do NOT overwrite your CPT values with QBO financials
         $inv = $resp['Invoice'] ?? $resp;
-
         if (function_exists('update_field')) {
-            // Always update Invoice ID & Number
             if (!empty($inv['Id']))        update_field('qi_invoice_id', (string)$inv['Id'], $post_id);
             if (!empty($inv['DocNumber'])) update_field('qi_invoice_no', (string)$inv['DocNumber'], $post_id);
-
-            // --- MAP QBO Properties BACK TO ACF FIELDS ---
-            if (isset($inv['Balance']))         update_field('qi_balance_due', $inv['Balance'], $post_id);
-            if (isset($inv['TotalAmt']) && isset($inv['Balance'])) {
-                $total_paid = max((float)$inv['TotalAmt'] - (float)$inv['Balance'], 0);
-                update_field('qi_total_paid', $total_paid, $post_id);
-            }
-            if (isset($inv['TxnDate']))         update_field('qi_invoice_date', $inv['TxnDate'], $post_id);
-            if (isset($inv['DueDate']))         update_field('qi_due_date', $inv['DueDate'], $post_id);
-            // ... you can also map other fields if desired
+            // Do NOT update qi_balance_due, qi_total_paid, qi_invoice_date, qi_due_date here!
         } else {
-            // Map to post meta for fallback
             if (!empty($inv['Id']))        update_post_meta($post_id, 'qi_invoice_id', (string)$inv['Id']);
             if (!empty($inv['DocNumber'])) update_post_meta($post_id, 'qi_invoice_no', (string)$inv['DocNumber']);
-            if (isset($inv['Balance']))    update_post_meta($post_id, 'qi_balance_due', $inv['Balance']);
-            if (isset($inv['TotalAmt']) && isset($inv['Balance'])) {
-                $total_paid = max((float)$inv['TotalAmt'] - (float)$inv['Balance'], 0);
-                update_post_meta($post_id, 'qi_total_paid', $total_paid);
-            }
-            if (isset($inv['TxnDate']))    update_post_meta($post_id, 'qi_invoice_date', $inv['TxnDate']);
-            if (isset($inv['DueDate']))    update_post_meta($post_id, 'qi_due_date', $inv['DueDate']);
         }
         update_post_meta( $post_id, 'qi_last_synced', current_time('mysql') );
 
