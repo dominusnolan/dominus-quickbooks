@@ -120,12 +120,32 @@ class DQ_QI_Metabox {
 
         // Update local fields
         $inv = $resp['Invoice'] ?? $resp;
-        if ( function_exists('update_field') ) {
-            if ( ! empty($inv['Id']) )       update_field('qi_invoice_id', (string)$inv['Id'], $post_id);
-            if ( ! empty($inv['DocNumber']) ) update_field('qi_invoice_no', (string)$inv['DocNumber'], $post_id);
+
+        if (function_exists('update_field')) {
+            // Always update Invoice ID & Number
+            if (!empty($inv['Id']))        update_field('qi_invoice_id', (string)$inv['Id'], $post_id);
+            if (!empty($inv['DocNumber'])) update_field('qi_invoice_no', (string)$inv['DocNumber'], $post_id);
+
+            // --- MAP QBO Properties BACK TO ACF FIELDS ---
+            if (isset($inv['Balance']))         update_field('qi_balance_due', $inv['Balance'], $post_id);
+            if (isset($inv['TotalAmt']) && isset($inv['Balance'])) {
+                $total_paid = max((float)$inv['TotalAmt'] - (float)$inv['Balance'], 0);
+                update_field('qi_total_paid', $total_paid, $post_id);
+            }
+            if (isset($inv['TxnDate']))         update_field('qi_invoice_date', $inv['TxnDate'], $post_id);
+            if (isset($inv['DueDate']))         update_field('qi_due_date', $inv['DueDate'], $post_id);
+            // ... you can also map other fields if desired
         } else {
-            if ( ! empty($inv['Id']) )       update_post_meta($post_id, 'qi_invoice_id', (string)$inv['Id']);
-            if ( ! empty($inv['DocNumber']) ) update_post_meta($post_id, 'qi_invoice_no', (string)$inv['DocNumber']);
+            // Map to post meta for fallback
+            if (!empty($inv['Id']))        update_post_meta($post_id, 'qi_invoice_id', (string)$inv['Id']);
+            if (!empty($inv['DocNumber'])) update_post_meta($post_id, 'qi_invoice_no', (string)$inv['DocNumber']);
+            if (isset($inv['Balance']))    update_post_meta($post_id, 'qi_balance_due', $inv['Balance']);
+            if (isset($inv['TotalAmt']) && isset($inv['Balance'])) {
+                $total_paid = max((float)$inv['TotalAmt'] - (float)$inv['Balance'], 0);
+                update_post_meta($post_id, 'qi_total_paid', $total_paid);
+            }
+            if (isset($inv['TxnDate']))    update_post_meta($post_id, 'qi_invoice_date', $inv['TxnDate']);
+            if (isset($inv['DueDate']))    update_post_meta($post_id, 'qi_due_date', $inv['DueDate']);
         }
         update_post_meta( $post_id, 'qi_last_synced', current_time('mysql') );
 
