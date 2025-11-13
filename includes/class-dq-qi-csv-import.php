@@ -279,34 +279,34 @@ class DQ_QI_CSV_Import {
     }
 
     private static function format_date_for_meta( string $val, string $import_format ) : string {
-		$val = trim($val);
-		if ($val === '') return '';
-		$configured = dqqb_qi_date_format();
+        $val = trim($val);
+        if ($val === '') return '';
+        $configured = dqqb_qi_date_format();
 
-		// If import_format is provided explicitly from UI, prefer it; else use configured
-		$fmt = $import_format ?: $configured;
+        // If import_format is provided explicitly from UI, prefer it; else use configured
+        $fmt = $import_format ?: $configured;
 
-		// Fast path: if already Y-m-d
-		if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $val)) return $val;
+        // Fast path: if already Y-m-d
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $val)) return $val;
 
-		// Try exact format
-		$dt = DateTime::createFromFormat($fmt, $val);
-		if ($dt instanceof DateTime) return $dt->format('Y-m-d');
+        // Try exact format
+        $dt = DateTime::createFromFormat($fmt, $val);
+        if ($dt instanceof DateTime) return $dt->format('Y-m-d');
 
-		// Try slash-matching (handles n/j/Y vs m/d/Y vs d/m/Y)
-		if (preg_match('/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/', $val, $m)) {
-			$a=(int)$m[1]; $b=(int)$m[2]; $y=(int)$m[3];
-			if ($fmt === 'd/m/Y') {
-				return sprintf('%04d-%02d-%02d', $y, $b, $a);
-			} else { // treat as month/day
-				return sprintf('%04d-%02d-%02d', $y, $a, $b);
-			}
-		}
+        // Try slash-matching (handles n/j/Y vs m/d/Y vs d/m/Y)
+        if (preg_match('/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/', $val, $m)) {
+            $a=(int)$m[1]; $b=(int)$m[2]; $y=(int)$m[3];
+            if ($fmt === 'd/m/Y') {
+                return sprintf('%04d-%02d-%02d', $y, $b, $a);
+            } else { // treat as month/day
+                return sprintf('%04d-%02d-%02d', $y, $a, $b);
+            }
+        }
 
-		// Fallback
-		$ts = strtotime($val);
-		return $ts ? date('Y-m-d', $ts) : '';
-	}
+        // Fallback
+        $ts = strtotime($val);
+        return $ts ? date('Y-m-d', $ts) : '';
+    }
 
     private static function find_existing_invoice_post( string $docnumber ) {
         $q = new WP_Query([
