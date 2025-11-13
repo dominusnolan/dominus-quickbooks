@@ -22,13 +22,12 @@ class DQ_QI_Sync {
 
         // Always fetch and extract the invoice object
         $raw = DQ_API::get_invoice_by_docnumber( $docnum );
-        if ( is_wp_error( $raw ) ) return $raw;
+        if ( is_wp_error($raw) ) wp_die( 'QuickBooks error: ' . $raw->get_error_message() );
 
-        // PATCH: extract actual invoice object from API response
         $invoice_obj = (isset($raw['QueryResponse']['Invoice'][0]) && is_array($raw['QueryResponse']['Invoice'][0]))
             ? $raw['QueryResponse']['Invoice'][0]
             : [];
-        if ( empty($invoice_obj) ) return new WP_Error('dq_qbo_no_invoice_found', 'No invoice found in QuickBooks response.');
+        if ( empty($invoice_obj['Id']) ) wp_die('QuickBooks invoice not found by DocNumber.');
 
         // Use extracted object for ALL mapping
         $lines = isset($invoice_obj['Line']) ? $invoice_obj['Line'] : [];

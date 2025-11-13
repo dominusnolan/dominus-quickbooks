@@ -102,9 +102,12 @@ class DQ_QI_Metabox {
         $docnum = function_exists('get_field') ? get_field('qi_invoice_no', $post_id) : get_post_meta($post_id, 'qi_invoice_no', true);
         if ( ! $docnum ) wp_die('No qi_invoice_no found.');
 
-        // Find invoice by DocNumber
-        $invoice = DQ_API::get_invoice_by_docnumber( $docnum );
-        if ( is_wp_error($invoice) ) wp_die( 'QuickBooks error: ' . $invoice->get_error_message() );
+        // Find invoice by DocNumber -- fixed: unpack QueryResponse
+        $raw = DQ_API::get_invoice_by_docnumber( $docnum );
+        if ( is_wp_error($raw) ) wp_die( 'QuickBooks error: ' . $raw->get_error_message() );
+        $invoice = (isset($raw['QueryResponse']['Invoice'][0]) && is_array($raw['QueryResponse']['Invoice'][0]))
+            ? $raw['QueryResponse']['Invoice'][0]
+            : [];
         if ( empty($invoice['Id']) ) wp_die('QuickBooks invoice not found by DocNumber.');
 
         // Build payload from CPT (lines + header fields)
