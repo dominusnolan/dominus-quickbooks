@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 
 /**
  * Class DQ_Metabox
- * Version: 4.8.1
+ * Version: 4.8.1 (+ Pull from Invoice logic)
  * - Adds Send/Update/Refresh buttons
  * - Displays PAID / UNPAID badges
  * - Adds correct "View in QuickBooks" link (with companyId / txnId)
@@ -18,48 +18,47 @@ class DQ_Metabox {
         add_action( 'admin_post_dq_refresh_qbo', [ __CLASS__, 'refresh' ] );
         add_action( 'admin_notices', [ __CLASS__, 'admin_notices' ] );
         
-            /**
-             * Pre-populate ACF select field "_dq_purchase_order" with taxonomy "purchase_order" terms
-             * Applies only to post type "workorder"
-             */
-            add_filter( 'acf/load_field/name=_dq_purchase_order', function( $field ) {
+        /**
+         * Pre-populate ACF select field "_dq_purchase_order" with taxonomy "purchase_order" terms
+         * Applies only to post type "workorder"
+         */
+        add_filter( 'acf/load_field/name=_dq_purchase_order', function( $field ) {
 
-                // Only populate for Work Order CPT
-                global $post;
-                if ( empty( $post ) || $post->post_type !== 'workorder' ) {
-                    return $field;
-                }
-
-                // Clear existing choices
-                $field['choices'] = [];
-
-                // Get all taxonomy terms
-                $terms = get_terms([
-                    'taxonomy'   => 'purchase_order',
-                    'hide_empty' => false,
-                    'orderby'    => 'name',
-                    'order'      => 'ASC',
-                ]);
-
-                if ( ! is_wp_error( $terms ) && ! empty( $terms ) ) {
-                    foreach ( $terms as $term ) {
-                        $field['choices'][ $term->term_id ] = $term->name;
-                    }
-                }
-
+            // Only populate for Work Order CPT
+            global $post;
+            if ( empty( $post ) || $post->post_type !== 'workorder' ) {
                 return $field;
-            });
-            
+            }
+
+            // Clear existing choices
+            $field['choices'] = [];
+
+            // Get all taxonomy terms
+            $terms = get_terms([
+                'taxonomy'   => 'purchase_order',
+                'hide_empty' => false,
+                'orderby'    => 'name',
+                'order'      => 'ASC',
+            ]);
+
+            if ( ! is_wp_error( $terms ) && ! empty( $terms ) ) {
+                foreach ( $terms as $term ) {
+                    $field['choices'][ $term->term_id ] = $term->name;
+                }
+            }
+
+            return $field;
+        });
         
         add_action( 'admin_post_dq_pull_from_qb',   [ __CLASS__, 'handle_pull_from_qb' ] );
 
         // Back-compat: if any old links still exist, route them here too.
         add_action( 'admin_post_dq_request_from_qb', [ __CLASS__, 'handle_pull_from_qb' ] );
         add_action( 'admin_post_dq_refresh_from_qb', [ __CLASS__, 'handle_pull_from_qb' ] );
-        
-        
+
+        // NEW: Pull from Invoice logic
         add_action('admin_post_dq_pull_from_invoice', [__CLASS__, 'handle_pull_from_invoice']);
-         
+
         add_action( 'admin_notices', [ __CLASS__, 'admin_notice' ] );
     }
 
@@ -83,10 +82,10 @@ class DQ_Metabox {
         echo '<div style="margin-bottom:10px;">';
         echo '<h4 style="margin:0 0 8px;border-bottom:1px solid #ddd;">Invoice Info</h4>';
         if ( $invoice_no ) {
-            echo '<p style="margin:4px 0;"><span class="dashicons dashicons-media-text" style="vertical-align:middle;"></span> <strong>No:</strong> <input type="text" readonly value="' . esc_attr( $invoice_no ) . '" style="width:70px;text-align:center;background:#f9f9f9;border:1px solid #ccc;border-radius:3px;padding:2px 4px;"></p>';
+            echo '<p style="margin:4px 0;"><span class="dashicons dashicons-media-text" style="vertical-align:middle;"></span> <strong>No:</strong> <input type="text" readonly value="' . esc_attr( $invoice_no ) . '" style="width:100%;"></p>';
         }
         if ( $invoice_id ) {
-            echo '<p style="margin:4px 0;"><span class="dashicons dashicons-media-spreadsheet" style="vertical-align:middle;"></span> <strong>ID:</strong> <input type="text" readonly value="' . esc_attr( $invoice_id ) . '" style="width:70px;text-align:center;background:#f0f0f0;border:1px solid #ccc;border-radius:3px;padding:2px 4px;"></p>';
+            echo '<p style="margin:4px 0;"><span class="dashicons dashicons-media-spreadsheet" style="vertical-align:middle;"></span> <strong>ID:</strong> <input type="text" readonly value="' . esc_attr( $invoice_id ) . '" style="width:100%;"></p>';
         }
 
         // Add working "View in QuickBooks" link
@@ -200,11 +199,11 @@ class DQ_Metabox {
         $send_url    = wp_nonce_url( admin_url( 'admin-post.php?action=dq_send_to_qbo&post=' . $post->ID ), 'dq_send_' . $post->ID );
         $refresh_url = wp_nonce_url( admin_url( 'admin-post.php?action=dq_refresh_qbo&post=' . $post->ID ), 'dq_refresh_' . $post->ID );
 
-
         if ( empty( $invoice_id ) ) {
             echo '<p><a href="' . esc_url( $send_url ) . '" class="button button-primary" style="width:100%;">Send to QuickBooks</a></p>';
         }
 
+        // NEW: Pull from Invoice button
         $nonce = wp_create_nonce('dq_pull_from_invoice_' . $post->ID);
         $href = add_query_arg([
             'action'  => 'dq_pull_from_invoice',
@@ -305,7 +304,6 @@ class DQ_Metabox {
             update_post_meta( $post_id, 'wo_balance_due', $balance );
             update_post_meta( $post_id, 'wo_last_synced', current_time( 'mysql' ) );
             
-             
             // --- NEW: Save Due Date and Terms ---
             $due_date = isset($invoice['DueDate']) ? (string) $invoice['DueDate'] : '';
             $terms    = '';
@@ -336,7 +334,6 @@ class DQ_Metabox {
                 update_post_meta($post_id, 'wo_invoice_date', $invoice_date);
             }
 
-   
             // 2) After you have both $post_id and the $invoice object/array:
             dominus_qb_update_acf_bill_ship($post_id, $invoice);
 
@@ -367,7 +364,6 @@ class DQ_Metabox {
         }
     }
     
-    
     public static function handle_request_from_qb() {
         if ( ! current_user_can('edit_posts') ) wp_die('Permission denied');
     
@@ -386,7 +382,6 @@ class DQ_Metabox {
         exit;
     }
 
-    
     /**
      * Pulls QBO invoice lines and saves to ACF repeater "wo_invoice".
      * Subfields expected: activity, quantity, rate, amount, tax
@@ -395,17 +390,16 @@ class DQ_Metabox {
         if ( ! function_exists('update_field') ) {
             return new WP_Error('dq_acf_missing', 'ACF not active.');
         }
-    
+
         $invoice_no = sanitize_text_field((string) get_field('wo_invoice_no', $post_id));
         if (!$invoice_no) return new WP_Error('dq_no_invoice_no', 'This Work Order has no wo_invoice_no.');
         $invoice = DQ_API::get_invoice_by_docnumber($invoice_no); // <--- You need a helper for this!
-        
 
         if ( is_wp_error($invoice) ) {
             if ( defined('WP_DEBUG') && WP_DEBUG ) error_log('[DQ] QBO get_invoice_by_id error: '. $invoice->get_error_message());
             return $invoice;
         }
-    
+
         // --- NEW: store wo_invoice_no from QuickBooks DocNumber ---
         $docno = '';
         if ( ! empty($invoice['DocNumber']) ) {
@@ -417,20 +411,20 @@ class DQ_Metabox {
             update_field( 'wo_invoice_no', $docno, $post_id );
         }
         // ----------------------------------------------------------
-    
+
         $lines = isset($invoice['Line']) ? $invoice['Line'] : [];
         if ( empty($lines) ) {
             update_field('wo_invoice', [], $post_id);
             return 'No lines found on the QuickBooks invoice; cleared the repeater.'
                 . ( $docno !== '' ? " (Invoice No: {$docno})" : '' );
         }
-    
+
         // Get repeater + subfield KEYS (activity, quantity, rate, amount)
         $rep = get_field_object('wo_invoice', $post_id);
         if ( empty($rep) || empty($rep['key']) || empty($rep['sub_fields']) ) {
             return new WP_Error('dq_acf_field_missing', 'ACF repeater "wo_invoice" or its subfields are not defined.');
         }
-    
+
         $keys = [];
         foreach ( $rep['sub_fields'] as $sf ) {
             $keys[$sf['name']] = $sf['key'];
@@ -440,24 +434,24 @@ class DQ_Metabox {
                 return new WP_Error('dq_acf_subfield_missing', 'ACF subfield missing: ' . $need);
             }
         }
-    
+
         $allowed_activities = apply_filters('dq_wo_invoice_allowed_activities', ['Labor Rate HR']);
         $rows = [];
-    
+
         foreach ( $lines as $line ) {
             if ( !isset($line['DetailType']) || $line['DetailType'] !== 'SalesItemLineDetail' ) continue;
-    
+
             $d       = $line['SalesItemLineDetail'];
             $name    = isset($d['ItemRef']['name']) ? trim($d['ItemRef']['name']) : '';
             $qty     = isset($d['Qty'])       ? (float)$d['Qty']       : 0.0;
             $rate    = isset($d['UnitPrice']) ? (float)$d['UnitPrice'] : 0.0;
             $amount  = isset($line['Amount']) ? (float)$line['Amount'] : ($qty * $rate);
-    
+
             $activity = 'Labor Rate HR';
             foreach ( $allowed_activities as $a ) {
                 if ( strcasecmp($a, $name) === 0 ) { $activity = $a; break; }
             }
-    
+
             $rows[] = [
                 $keys['activity'] => $activity,
                 $keys['quantity'] => $qty,
@@ -465,9 +459,9 @@ class DQ_Metabox {
                 $keys['amount']   => $amount,
             ];
         }
-    
+
         update_field( $rep['key'], $rows, $post_id );
-    
+
         return sprintf(
             'Mapped %d line(s) from QBO invoice %s%s.',
             count($rows),
@@ -476,17 +470,16 @@ class DQ_Metabox {
         );
     }
 
-    
     public static function admin_notice() {
         if ( empty($_GET['dq_msg']) ) return;
         $msg = wp_unslash($_GET['dq_msg']);
-    
+
         $class = (strpos($msg, 'error:') === 0) ? 'notice notice-error' : 'notice notice-success';
         $text  = (strpos($msg, ':') !== false) ? substr($msg, strpos($msg, ':') + 1) : $msg;
-    
+
         echo '<div class="'.esc_attr($class).'"><p>'.esc_html($text).'</p></div>';
     }
-    
+
     public static function handle_pull_from_qb() {
         if ( ! current_user_can('edit_posts') ) wp_die('Permission denied');
 
@@ -577,8 +570,7 @@ class DQ_Metabox {
         exit;
     }
     
-    
-    
+    // --- NEW: Pull from Invoice handler ---
     public static function handle_pull_from_invoice() {
         if ( ! current_user_can('edit_posts') ) wp_die('Permission denied');
     
@@ -620,7 +612,7 @@ class DQ_Metabox {
                 else update_post_meta($post_id, $field, $val);
             };
     
-            // Map all fields
+            // --- Map header fields ---
             $field_map = [
                 'qi_total_billed'   => 'wo_total_billed',
                 'qi_balance_due'    => 'wo_balance_due',
@@ -636,7 +628,42 @@ class DQ_Metabox {
                 $val = $get($source);
                 $set($dest, $val);
             }
-            $msg = 'ok:Fields pulled from Invoice CPT (' . esc_html($wo_invoice_no) . ')';
+    
+            // --- Map repeater fields (qi_invoice --> wo_invoice) ---
+            // Get repeater rows on Invoice CPT
+            $qi_lines = $get('qi_invoice'); // This should be an array of rows
+            $rep_wo = function_exists('get_field_object') ? get_field_object('wo_invoice', $post_id) : null;
+            $subkeys = [];
+            if ($rep_wo && isset($rep_wo['sub_fields']) && is_array($rep_wo['sub_fields'])) {
+                foreach ($rep_wo['sub_fields'] as $sf) {
+                    $subkeys[$sf['name']] = $sf['key'];
+                }
+            }
+            $wo_lines = [];
+            if (is_array($qi_lines)) {
+                foreach ($qi_lines as $row) {
+                    $wo_row = [];
+                    foreach (['activity','description','quantity','rate','amount'] as $field) {
+                        if (!empty($subkeys[$field]) && isset($row[$field])) {
+                            $wo_row[$subkeys[$field]] = $row[$field];
+                        } elseif (!empty($subkeys[$field]) && is_array($row)) {
+                            foreach ($row as $rk => $rv) {
+                                if ($rk === $subkeys[$field]) $wo_row[$subkeys[$field]] = $rv;
+                            }
+                        }
+                    }
+                    if ($wo_row) $wo_lines[] = $wo_row;
+                }
+                if (!empty($wo_lines)) {
+                    $set('wo_invoice', $wo_lines);
+                    $msg = 'ok:Fields and lines pulled from Invoice CPT (' . esc_html($wo_invoice_no) . ')';
+                } else {
+                    $set('wo_invoice', []);
+                    $msg = 'ok:Fields pulled (no invoice lines present) from Invoice CPT (' . esc_html($wo_invoice_no) . ')';
+                }
+            } else {
+                $msg = 'ok:Fields pulled (no invoice lines found) from Invoice CPT (' . esc_html($wo_invoice_no) . ')';
+            }
         }
     
         // Redirect back to Workorder edit screen with notice
