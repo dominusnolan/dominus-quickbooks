@@ -121,32 +121,62 @@ class DQ_QI_Admin_Table {
      * Invoice/Due Date are now FROM/TO range fields with labels.
      */
     public static function filters() {
-        global $typenow;
-        if ($typenow != 'quickbooks_invoice') return;
-        echo '<style>
-            select[name="m"], select[name="cat"] {display:none !important;}
-            .dqqb-filter-label {font-weight: 500;font-size: 13px;margin-right: 4px;}
-            .dqqb-filter-sep {margin:0 4px;}
-        </style>';
-        
-        // Payment Status
-        $pstat = isset($_GET['qi_payment_status']) ? $_GET['qi_payment_status'] : '';
-        echo '<select name="qi_payment_status" style="margin-right:8px;"><option value="">Payment Status...</option><option value="Paid" '.selected($pstat,'Paid',false).'>Paid</option><option value="Unpaid" '.selected($pstat,'Unpaid',false).'>Unpaid</option></select>';
-        // Invoice Date Range
-        $inqd_from = isset($_GET['qi_invoice_date_from']) ? $_GET['qi_invoice_date_from'] : '';
-        $inqd_to = isset($_GET['qi_invoice_date_to']) ? $_GET['qi_invoice_date_to'] : '';
-        echo '<label for="dqqb-invoice-date-from" class="dqqb-filter-label">Invoice Date:</label>';
-        echo '<input type="date" name="qi_invoice_date_from" id="dqqb-invoice-date-from" value="' . esc_attr($inqd_from) . '" placeholder="mm/dd/yyyy" />';
-        echo '<span class="dqqb-filter-sep">–</span>';
-        echo '<input type="date" name="qi_invoice_date_to" id="dqqb-invoice-date-to" value="' . esc_attr($inqd_to) . '" placeholder="mm/dd/yyyy" style="margin-right:8px;" />';
-        // Due Date Range
-        $dud_from = isset($_GET['qi_due_date_from']) ? $_GET['qi_due_date_from'] : '';
-        $dud_to = isset($_GET['qi_due_date_to']) ? $_GET['qi_due_date_to'] : '';
-        echo '<label for="dqqb-due-date-from" class="dqqb-filter-label">Due Date:</label>';
-        echo '<input type="date" name="qi_due_date_from" id="dqqb-due-date-from" value="' . esc_attr($dud_from) . '" placeholder="mm/dd/yyyy" />';
-        echo '<span class="dqqb-filter-sep">–</span>';
-        echo '<input type="date" name="qi_due_date_to" id="dqqb-due-date-to" value="' . esc_attr($dud_to) . '" placeholder="mm/dd/yyyy" style="margin-right:8px;" />';
+    global $typenow;
+    if ($typenow != 'quickbooks_invoice') return;
+    echo '<style>
+        select[name="m"], select[name="cat"] {display:none !important;}
+        .dqqb-filter-label {font-weight: 500; font-size: 13px; margin-right: 4px;}
+        .dqqb-filter-sep {margin: 0 4px;}
+        .dqqb-date-range {display:inline-block;}
+    </style>';
+    // Payment Status
+    $pstat = isset($_GET['qi_payment_status']) ? $_GET['qi_payment_status'] : '';
+    echo '<select name="qi_payment_status" style="margin-right:8px;"><option value="">Payment Status...</option><option value="Paid" '.selected($pstat, 'Paid', false).'>Paid</option><option value="Unpaid" '.selected($pstat, 'Unpaid', false).'>Unpaid</option></select>';
+
+    // Date FIELD dropdown
+    $date_field = isset($_GET['qi_date_field']) ? $_GET['qi_date_field'] : 'invoice_date';
+    echo '<select name="qi_date_field" id="dqqb-date-field-select" style="margin-right:8px;">';
+    echo '<option value="invoice_date"'.selected($date_field, 'invoice_date', false).'>Invoice Date</option>';
+    echo '<option value="due_date"'.selected($date_field, 'due_date', false).'>Due Date</option>';
+    echo '</select>';
+
+    // Date ranges
+    $inqd_from = isset($_GET['qi_invoice_date_from']) ? $_GET['qi_invoice_date_from'] : '';
+    $inqd_to = isset($_GET['qi_invoice_date_to']) ? $_GET['qi_invoice_date_to'] : '';
+    $dud_from = isset($_GET['qi_due_date_from']) ? $_GET['qi_due_date_from'] : '';
+    $dud_to = isset($_GET['qi_due_date_to']) ? $_GET['qi_due_date_to'] : '';
+
+    // Only show relevant date range input
+    echo '<span id="dqqb-date-invoice" class="dqqb-date-range" style="'.($date_field=='invoice_date'?'':'display:none').'">';
+    echo '<label for="dqqb-invoice-date-from" class="dqqb-filter-label">Invoice Date:</label>';
+    echo '<input type="date" name="qi_invoice_date_from" id="dqqb-invoice-date-from" value="' . esc_attr($inqd_from) . '" placeholder="mm/dd/yyyy" />';
+    echo '<span class="dqqb-filter-sep">–</span>';
+    echo '<input type="date" name="qi_invoice_date_to" id="dqqb-invoice-date-to" value="' . esc_attr($inqd_to) . '" placeholder="mm/dd/yyyy" style="margin-right:8px;" />';
+    echo '</span>';
+    echo '<span id="dqqb-date-due" class="dqqb-date-range" style="'.($date_field=='due_date'?'':'display:none').'">';
+    echo '<label for="dqqb-due-date-from" class="dqqb-filter-label">Due Date:</label>';
+    echo '<input type="date" name="qi_due_date_from" id="dqqb-due-date-from" value="' . esc_attr($dud_from) . '" placeholder="mm/dd/yyyy" />';
+    echo '<span class="dqqb-filter-sep">–</span>';
+    echo '<input type="date" name="qi_due_date_to" id="dqqb-due-date-to" value="' . esc_attr($dud_to) . '" placeholder="mm/dd/yyyy" style="margin-right:8px;" />';
+    echo '</span>';
+
+    // JS: switch visible date range
+    echo <<<JS
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var select = document.getElementById('dqqb-date-field-select');
+    var invoice = document.getElementById('dqqb-date-invoice');
+    var due = document.getElementById('dqqb-date-due');
+    if(select && invoice && due) {
+        select.addEventListener('change', function() {
+            invoice.style.display = select.value === 'invoice_date' ? 'inline-block' : 'none';
+            due.style.display = select.value === 'due_date' ? 'inline-block' : 'none';
+        });
     }
+});
+</script>
+JS;
+}
 
     /**
      * Filtering logic to allow date range for invoice/due date.
@@ -156,17 +186,8 @@ class DQ_QI_Admin_Table {
         if (!is_admin() || $pagenow != 'edit.php') return;
         $post_type = isset($_GET['post_type']) ? $_GET['post_type'] : '';
         if ($post_type != 'quickbooks_invoice') return;
-
+    
         $meta_queries = [];
-        // Filter by month
-        if (!empty($_GET['qi_invoice_month'])) {
-            $prefix = esc_sql($_GET['qi_invoice_month']);
-            $meta_queries[] = [
-                'key'   => 'qi_invoice_date',
-                'value' => $prefix,
-                'compare'=>'LIKE'
-            ];
-        }
         // Payment status
         if (!empty($_GET['qi_payment_status'])) {
             $val = esc_sql($_GET['qi_payment_status']);
@@ -176,59 +197,61 @@ class DQ_QI_Admin_Table {
                 'compare'=>'='
             ];
         }
-        // Invoice Date (range)
-        $from = !empty($_GET['qi_invoice_date_from']) ? $_GET['qi_invoice_date_from'] : '';
-        $to = !empty($_GET['qi_invoice_date_to']) ? $_GET['qi_invoice_date_to'] : '';
-        if ($from && $to) {
-            $meta_queries[] = [
-                'key' => 'qi_invoice_date',
-                'value' => [$from, $to],
-                'type' => 'DATE',
-                'compare' => 'BETWEEN'
-            ];
-        } elseif ($from) {
-            $meta_queries[] = [
-                'key' => 'qi_invoice_date',
-                'value' => $from,
-                'type' => 'DATE',
-                'compare' => '>='
-            ];
-        } elseif ($to) {
-            $meta_queries[] = [
-                'key' => 'qi_invoice_date',
-                'value' => $to,
-                'type' => 'DATE',
-                'compare' => '<='
-            ];
+        // ONLY one date field active
+        $date_field = isset($_GET['qi_date_field']) ? $_GET['qi_date_field'] : 'invoice_date';
+        if ($date_field == 'invoice_date') {
+            $from = !empty($_GET['qi_invoice_date_from']) ? $_GET['qi_invoice_date_from'] : '';
+            $to = !empty($_GET['qi_invoice_date_to']) ? $_GET['qi_invoice_date_to'] : '';
+            if ($from && $to) {
+                $meta_queries[] = [
+                    'key' => 'qi_invoice_date',
+                    'value' => [$from, $to],
+                    'type' => 'DATE',
+                    'compare' => 'BETWEEN'
+                ];
+            } elseif ($from) {
+                $meta_queries[] = [
+                    'key' => 'qi_invoice_date',
+                    'value' => $from,
+                    'type' => 'DATE',
+                    'compare' => '>='
+                ];
+            } elseif ($to) {
+                $meta_queries[] = [
+                    'key' => 'qi_invoice_date',
+                    'value' => $to,
+                    'type' => 'DATE',
+                    'compare' => '<='
+                ];
+            }
+        } elseif ($date_field == 'due_date') {
+            $from = !empty($_GET['qi_due_date_from']) ? $_GET['qi_due_date_from'] : '';
+            $to = !empty($_GET['qi_due_date_to']) ? $_GET['qi_due_date_to'] : '';
+            if ($from && $to) {
+                $meta_queries[] = [
+                    'key' => 'qi_due_date',
+                    'value' => [$from, $to],
+                    'type' => 'DATE',
+                    'compare' => 'BETWEEN'
+                ];
+            } elseif ($from) {
+                $meta_queries[] = [
+                    'key' => 'qi_due_date',
+                    'value' => $from,
+                    'type' => 'DATE',
+                    'compare' => '>='
+                ];
+            } elseif ($to) {
+                $meta_queries[] = [
+                    'key' => 'qi_due_date',
+                    'value' => $to,
+                    'type' => 'DATE',
+                    'compare' => '<='
+                ];
+            }
         }
-        // Due Date (range)
-        $dfrom = !empty($_GET['qi_due_date_from']) ? $_GET['qi_due_date_from'] : '';
-        $dto = !empty($_GET['qi_due_date_to']) ? $_GET['qi_due_date_to'] : '';
-        if ($dfrom && $dto) {
-            $meta_queries[] = [
-                'key' => 'qi_due_date',
-                'value' => [$dfrom, $dto],
-                'type' => 'DATE',
-                'compare' => 'BETWEEN'
-            ];
-        } elseif ($dfrom) {
-            $meta_queries[] = [
-                'key' => 'qi_due_date',
-                'value' => $dfrom,
-                'type' => 'DATE',
-                'compare' => '>='
-            ];
-        } elseif ($dto) {
-            $meta_queries[] = [
-                'key' => 'qi_due_date',
-                'value' => $dto,
-                'type' => 'DATE',
-                'compare' => '<='
-            ];
-        }
-
         if (count($meta_queries) == 1) {
-            $query->set('meta_query', $meta_queries); // allow a single meta_query array
+            $query->set('meta_query', $meta_queries);
         } elseif (count($meta_queries) > 1) {
             $query->set('meta_query', ['relation' => 'AND'] + $meta_queries);
         }
