@@ -103,6 +103,14 @@ class DQ_API {
         return self::post( 'invoice', $payload, 'Create Invoice' );
     }
 
+    /**
+     * Convenience wrapper to create a Payment.
+     * @param array $payload QuickBooks Payment payload
+     */
+    public static function create_payment( $payload ) {
+        return self::post( 'payment', $payload, 'Create Payment' );
+    }
+
     public static function update_invoice( $invoice_id, $payload ) {
         $headers_fetch = self::headers(false);
         if ( is_wp_error( $headers_fetch ) ) return $headers_fetch;
