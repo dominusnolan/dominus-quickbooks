@@ -57,6 +57,9 @@ class DQ_Metabox {
         add_action( 'admin_post_dq_request_from_qb', [ __CLASS__, 'handle_pull_from_qb' ] );
         add_action( 'admin_post_dq_refresh_from_qb', [ __CLASS__, 'handle_pull_from_qb' ] );
         
+        
+        add_action('admin_post_dq_pull_from_invoice', [__CLASS__, 'handle_pull_from_invoice']);
+         
         add_action( 'admin_notices', [ __CLASS__, 'admin_notice' ] );
     }
 
@@ -202,15 +205,15 @@ class DQ_Metabox {
             echo '<p><a href="' . esc_url( $send_url ) . '" class="button button-primary" style="width:100%;">Send to QuickBooks</a></p>';
         }
 
-        $nonce = wp_create_nonce( 'dq_pull_from_qb_' . $post->ID );
-        $href  = add_query_arg([
-            'action'  => 'dq_pull_from_qb',
+        $nonce = wp_create_nonce('dq_pull_from_invoice_' . $post->ID);
+        $href = add_query_arg([
+            'action'  => 'dq_pull_from_invoice',
             'post_id' => $post->ID,
             '_wpnonce'=> $nonce,
-        ], admin_url('admin-post.php') );
-
-        echo '<a class="button button-secondary" href="' . esc_url($href) . '">Pull from QuickBooks</a>';
-
+        ], admin_url('admin-post.php'));
+    
+        echo '<a class="button button-secondary" href="' . esc_url($href) . '">Pull from Invoice</a>';
+    
         echo '</div>'; // wrapper
     }
 
@@ -570,6 +573,78 @@ class DQ_Metabox {
             'dq_msg' => $msg,
         ], admin_url('post.php'));
 
+        wp_safe_redirect($redirect);
+        exit;
+    }
+    
+    
+    
+    public static function handle_pull_from_invoice() {
+        if ( ! current_user_can('edit_posts') ) wp_die('Permission denied');
+    
+        $post_id = isset($_GET['post_id']) ? absint($_GET['post_id']) : 0;
+        $nonce   = isset($_GET['_wpnonce']) ? $_GET['_wpnonce'] : '';
+        if ( !$post_id || !wp_verify_nonce($nonce, 'dq_pull_from_invoice_' . $post_id)) wp_die('Nonce failed');
+    
+        // Step 1: Get wo_invoice_no from the workorder
+        $wo_invoice_no = function_exists('get_field') ? get_field('wo_invoice_no', $post_id) : get_post_meta($post_id, 'wo_invoice_no', true);
+        $wo_invoice_no = trim((string)$wo_invoice_no);
+    
+        // Step 2: Find quickbooks_invoice post with matching qi_invoice_no
+        $invoice_post_id = 0;
+        if ($wo_invoice_no !== '') {
+            $query = new WP_Query([
+                'post_type'      => 'quickbooks_invoice',
+                'post_status'    => 'any',
+                'fields'         => 'ids',
+                'meta_query'     => [[
+                    'key'     => 'qi_invoice_no',
+                    'value'   => $wo_invoice_no,
+                    'compare' => '='
+                ]],
+                'posts_per_page' => 1
+            ]);
+            if (!empty($query->posts)) $invoice_post_id = (int)$query->posts[0];
+        }
+    
+        if (!$invoice_post_id) {
+            $msg = 'error:No Invoice CPT found matching wo_invoice_no (' . esc_html($wo_invoice_no) . ')';
+        } else {
+            // Step 3: Pull fields and map
+            $get = function($field) use ($invoice_post_id) {
+                return function_exists('get_field') ? get_field($field, $invoice_post_id) : get_post_meta($invoice_post_id, $field, true);
+            };
+    
+            $set = function($field, $val) use ($post_id) {
+                if (function_exists('update_field')) update_field($field, $val, $post_id);
+                else update_post_meta($post_id, $field, $val);
+            };
+    
+            // Map all fields
+            $field_map = [
+                'qi_total_billed'   => 'wo_total_billed',
+                'qi_balance_due'    => 'wo_balance_due',
+                'qi_total_paid'     => 'wo_total_paid',
+                'qi_payment_status' => 'wo_payment_status',
+                'qi_bill_to'        => 'wo_bill_to',
+                'qi_ship_to'        => 'wo_ship_to',
+                'qi_invoice_date'   => 'wo_invoice_date',
+                'qi_due_date'       => 'wo_due_date',
+                'qi_terms'          => 'wo_terms',
+            ];
+            foreach ($field_map as $source => $dest) {
+                $val = $get($source);
+                $set($dest, $val);
+            }
+            $msg = 'ok:Fields pulled from Invoice CPT (' . esc_html($wo_invoice_no) . ')';
+        }
+    
+        // Redirect back to Workorder edit screen with notice
+        $redirect = add_query_arg([
+            'post'   => $post_id,
+            'action' => 'edit',
+            'dq_msg' => $msg,
+        ], admin_url('post.php'));
         wp_safe_redirect($redirect);
         exit;
     }
