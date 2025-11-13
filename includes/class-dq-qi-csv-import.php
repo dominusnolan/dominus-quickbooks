@@ -2,8 +2,7 @@
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 /**
- * CSV → CPT quickbooks_invoice importer (v13)
- * Maps CustomerMemo to qi_wo_number as ACF Post Object field (multiple), matching Work Order post titles, and logs unmatched.
+ * CSV → CPT quickbooks_invoice importer (hardcoded ACF keys, no date for qi_invoice)
  */
 class DQ_QI_CSV_Import {
 
@@ -24,15 +23,12 @@ class DQ_QI_CSV_Import {
 
     public static function render_page() {
         if ( ! current_user_can( 'edit_posts' ) ) wp_die( 'Permission denied' );
-
         $notice = '';
         if ( isset( $_POST['dq_qi_import_nonce'] ) && wp_verify_nonce( $_POST['dq_qi_import_nonce'], 'dq_qi_import' ) ) {
             $notice = self::handle_import();
         }
-
         echo '<div class="wrap"><h1>Import QuickBooks Invoices from CSV</h1>';
         if ( $notice ) echo wp_kses_post( $notice );
-
         echo '<form method="post" enctype="multipart/form-data">';
         wp_nonce_field( 'dq_qi_import', 'dq_qi_import_nonce' );
         echo '<table class="form-table"><tbody>';
@@ -77,6 +73,15 @@ class DQ_QI_CSV_Import {
         }
         $map = self::build_header_map($headers);
 
+        // HARDCODED subfield keys for qi_invoice, no date subfield
+        $subkeys = [
+            'activity'    => 'field_6914fa53a5070',
+            'description' => 'field_6914fa53a50a9',
+            'quantity'    => 'field_6914fa53a50e4',
+            'rate'        => 'field_6914fa53a5100',
+            'amount'      => 'field_6914fa53a5139',
+        ];
+
         $created = $updated = $skipped = $errors = 0;
         $msgs = [];
         while ( ($row = fgetcsv($fh,0,$delimiter)) !== false ) {
@@ -88,6 +93,10 @@ class DQ_QI_CSV_Import {
             $cust    = self::val($data, ['customer','displayname']);
             $memo    = self::val($data, ['customermemo','memo']);
             $due     = self::val($data, ['duedate']);
+            $activity= self::val($data, ['activity']);
+            $desc    = self::val($data, ['description','desc']);
+            $qty     = self::val($data, ['quantity','qty']);
+            $rate    = self::val($data, ['rate']);
             $total   = self::num(self::val($data, ['totalamt','total','amount']));
             $balance = self::num(self::val($data, ['balance','balance due']));
             $paid_csv= self::num(self::val($data, ['paid']));
@@ -157,7 +166,24 @@ class DQ_QI_CSV_Import {
             if ($po!=='') $set('qi_purchase_order',$po);
             $set('qi_terms', $terms!=='' ? $terms : $default_terms);
 
-            self::ensure_qi_invoice_line($post_id, ['total'=>$total]);
+            // Save single row to repeater -- NO date!
+            $row = [
+                $subkeys['activity']    => !empty($activity) ? $activity : 'Labor Rate HR',
+                $subkeys['description'] => !empty($desc) ? $desc : 'import',
+                $subkeys['quantity']    => ($qty !== '' ? self::num($qty) : 1),
+                $subkeys['rate']        => ($rate !== '' ? self::num($rate) : ($total !== null ? $total : 0)),
+                $subkeys['amount']      => ($total !== null ? $total : 0),
+            ];
+            DQ_Logger::info('qi_invoice row going into update_field', $row);
+
+            update_field('qi_invoice', [ $row ], $post_id);
+
+            $raw_meta = get_post_meta($post_id, 'qi_invoice', true);
+            $acf_value = function_exists('get_field') ? get_field('qi_invoice', $post_id) : null;
+            DQ_Logger::info('qi_invoice meta after import', [
+                'raw_meta' => $raw_meta,
+                'acf_value' => $acf_value
+            ]);
 
             $is_update ? $updated++ : $created++;
         }
@@ -173,7 +199,6 @@ class DQ_QI_CSV_Import {
     }
 
     private static function set_wo_number_from_memo( int $post_id, string $memo ) {
-        // Parse comma/semicolon/whitespace separated tokens
         $tokens = [];
         if ($memo !== '') {
             $memo_norm = preg_replace('/[;,]/', ' ', $memo);
@@ -191,8 +216,6 @@ class DQ_QI_CSV_Import {
                 $tokens[] = $t;
             }
         }
-
-        // Resolve to Work Order post IDs (by title exactly)
         $ids = [];
         $unmatched = [];
         foreach ($tokens as $title) {
@@ -203,21 +226,7 @@ class DQ_QI_CSV_Import {
                 $unmatched[] = $title;
             }
         }
-
-        // Save to Post Object field as multiple values
-        $field_obj = function_exists('get_field_object') ? get_field_object('qi_wo_number', $post_id) : null;
-        $is_post_obj = is_array($field_obj) && in_array($field_obj['type'], ['post_object','relationship'], true);
-        if ($is_post_obj) {
-            if (!empty($ids)) {
-                update_field($field_obj['key'], $ids, $post_id);
-            } else {
-                update_field($field_obj['key'], null, $post_id);
-            }
-        } else {
-            // Fallback: store matched tokens/IDs as array
-            update_field('qi_wo_number', $ids, $post_id);
-        }
-
+        update_field('qi_wo_number', $ids, $post_id);
         if ($unmatched) {
             DQ_Logger::info('Unmatched WO tokens (CSV import)', [
                 'post_id'=>$post_id,
@@ -301,31 +310,6 @@ class DQ_QI_CSV_Import {
             }
         }
         return 0;
-    }
-
-    private static function ensure_qi_invoice_line( int $post_id, array $src ) {
-        if ( ! function_exists('update_field') || ! function_exists('get_field_object') ) return;
-        $rep = get_field_object('qi_invoice',$post_id);
-        if ( empty($rep) || empty($rep['key']) || empty($rep['sub_fields']) ) return;
-
-        $keys = [];
-        foreach ($rep['sub_fields'] as $sf) $keys[$sf['name']] = $sf['key'];
-
-        $activity    = 'Labor Rate HR';
-        $description = 'Import';
-        $qty         = 1.0;
-        $rate        = isset($src['total']) && $src['total'] !== null ? (float)$src['total'] : 0.0;
-        $amount      = round($qty * $rate,2);
-
-        $row = [];
-        if ( ! empty($keys['activity']) )    $row[$keys['activity']]    = $activity;
-        if ( ! empty($keys['description']) ) $row[$keys['description']] = $description;
-        if ( ! empty($keys['quantity']) )    $row[$keys['quantity']]    = $qty;
-        if ( ! empty($keys['rate']) )        $row[$keys['rate']]        = $rate;
-        if ( ! empty($keys['amount']) )      $row[$keys['amount']]      = $amount;
-
-        $existing = get_field('qi_invoice',$post_id);
-        if ( empty($existing) ) update_field($rep['key'],[$row],$post_id);
     }
 }
 
