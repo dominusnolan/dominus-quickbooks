@@ -2,10 +2,8 @@
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 /**
- * CSV → CPT quickbooks_invoice importer
- * Enhancements:
- *  - Logs unmatched tokens when mapping CustomerMemo -> qi_wo_number
- *  - Toggle auto "WO-" prefix via option dqqb_auto_prefix_wo (1/0) or filter dqqb_auto_prefix_wo_prefix
+ * CSV → CPT quickbooks_invoice importer (v13)
+ * Maps CustomerMemo to qi_wo_number as ACF Post Object field (multiple), matching Work Order post titles, and logs unmatched.
  */
 class DQ_QI_CSV_Import {
 
@@ -54,7 +52,6 @@ class DQ_QI_CSV_Import {
     }
 
     private static function handle_import() {
-        // Persist toggle
         $auto_prefix = isset($_POST['auto_prefix_wo']) ? '1' : '0';
         update_option('dqqb_auto_prefix_wo', $auto_prefix, 'no');
 
@@ -175,6 +172,61 @@ class DQ_QI_CSV_Import {
         return $out;
     }
 
+    private static function set_wo_number_from_memo( int $post_id, string $memo ) {
+        // Parse comma/semicolon/whitespace separated tokens
+        $tokens = [];
+        if ($memo !== '') {
+            $memo_norm = preg_replace('/[;,]/', ' ', $memo);
+            $raw = preg_split('/\s+/', $memo_norm);
+            foreach ($raw as $t) {
+                $t = trim($t, " \t\n\r\0\x0B,;");
+                if ($t === '') continue;
+                if (preg_match('/^wo-/i', $t)) {
+                    $t = 'WO-' . substr($t, 3);
+                } elseif (preg_match('/^02\d{6}$/', $t)) {
+                    $t = 'WO-' . $t;
+                } elseif (preg_match('/^wo-02\d{6}$/i', $t)) {
+                    $t = 'WO-' . substr($t, 3);
+                }
+                $tokens[] = $t;
+            }
+        }
+
+        // Resolve to Work Order post IDs (by title exactly)
+        $ids = [];
+        $unmatched = [];
+        foreach ($tokens as $title) {
+            $p = get_page_by_title($title, OBJECT, 'workorder');
+            if ($p instanceof WP_Post) {
+                $ids[] = (int) $p->ID;
+            } else {
+                $unmatched[] = $title;
+            }
+        }
+
+        // Save to Post Object field as multiple values
+        $field_obj = function_exists('get_field_object') ? get_field_object('qi_wo_number', $post_id) : null;
+        $is_post_obj = is_array($field_obj) && in_array($field_obj['type'], ['post_object','relationship'], true);
+        if ($is_post_obj) {
+            if (!empty($ids)) {
+                update_field($field_obj['key'], $ids, $post_id);
+            } else {
+                update_field($field_obj['key'], null, $post_id);
+            }
+        } else {
+            // Fallback: store matched tokens/IDs as array
+            update_field('qi_wo_number', $ids, $post_id);
+        }
+
+        if ($unmatched) {
+            DQ_Logger::info('Unmatched WO tokens (CSV import)', [
+                'post_id'=>$post_id,
+                'docnumber'=>get_field('qi_invoice_no',$post_id),
+                'tokens'=>$unmatched
+            ]);
+        }
+    }
+
     private static function build_header_map( array $headers ) : array {
         $map = [];
         foreach ($headers as $i=>$h) {
@@ -249,82 +301,6 @@ class DQ_QI_CSV_Import {
             }
         }
         return 0;
-    }
-
-    private static function set_wo_number_from_memo( int $post_id, string $memo ) {
-        $vals = self::extract_work_order_titles( $memo );
-        if ( empty($vals) ) {
-            if ( function_exists('update_field') ) update_field('qi_wo_number', null, $post_id);
-            else update_post_meta($post_id,'qi_wo_number','');
-            return;
-        }
-
-        $field_obj = function_exists('get_field_object') ? get_field_object('qi_wo_number',$post_id) : null;
-        $type = is_array($field_obj) && ! empty($field_obj['type']) ? $field_obj['type'] : '';
-
-        $unmatched = [];
-        if ( in_array($type,['relationship','post_object'],true) ) {
-            $ids = [];
-            foreach ($vals as $title) {
-                $p = get_page_by_title($title, OBJECT, 'workorder');
-                if ( $p instanceof WP_Post ) $ids[] = (int)$p->ID;
-                else $unmatched[] = $title;
-            }
-            if ( $ids ) {
-                update_field('qi_wo_number',$ids,$post_id);
-            } else {
-                update_field('qi_wo_number', null, $post_id);
-            }
-        } else {
-            if ( function_exists('update_field') ) update_field('qi_wo_number',$vals,$post_id);
-            else update_post_meta($post_id,'qi_wo_number',$vals);
-        }
-
-        if ( $unmatched ) {
-            DQ_Logger::info('Unmatched WO tokens (CSV import)', [
-                'post_id'=>$post_id,
-                'docnumber'=>get_field('qi_invoice_no',$post_id),
-                'tokens'=>$unmatched
-            ]);
-        }
-    }
-
-    private static function extract_work_order_titles( string $memo ) : array {
-        $memo = trim($memo);
-        if ($memo==='') return [];
-        $normalized = preg_replace('/[;,]/',' ',$memo);
-        $raw_tokens = preg_split('/\s+/',$normalized);
-
-        $do_prefix_opt = get_option('dqqb_auto_prefix_wo','1') === '1';
-        $do_prefix = apply_filters('dqqb_auto_prefix_wo_prefix', $do_prefix_opt);
-
-        $candidates = [];
-        foreach ($raw_tokens as $tok) {
-            $t = trim($tok," \t\n\r\0\x0B,;");
-            if ($t==='') continue;
-
-            if ( preg_match('/^wo-/i',$t) ) {
-                $t = 'WO-' . substr($t,3);
-            } elseif ( $do_prefix && preg_match('/^02\d{6}$/',$t) ) {
-                $t = 'WO-' . $t;
-            } elseif ( preg_match('/^wo-02\d{6}$/i',$t) ) {
-                $t = 'WO-' . substr($t,3);
-            } elseif ( !$do_prefix && preg_match('/^02\d{6}$/',$t) ) {
-                // leave as-is if prefixing disabled
-            }
-
-            $candidates[] = $t;
-        }
-
-        $out = [];
-        $seen = [];
-        foreach ($candidates as $t) {
-            $key = strtolower($t);
-            if ( isset($seen[$key]) ) continue;
-            $seen[$key] = true;
-            $out[] = $t;
-        }
-        return $out;
     }
 
     private static function ensure_qi_invoice_line( int $post_id, array $src ) {
