@@ -30,20 +30,86 @@ class DQ_QI_Sync {
             : [];
         if ( empty($invoice_obj) ) return new WP_Error('dq_qbo_no_invoice_found', 'No invoice found in QuickBooks response.');
 
-        // From here on, use $invoice_obj (not $raw) for all mapping!
-        // For example:
+        // Use extracted object for ALL mapping
         $lines = isset($invoice_obj['Line']) ? $invoice_obj['Line'] : [];
         DQ_Logger::info('QuickBooks invoice lines pulled', ['lines'=>$lines, 'invoice'=>$invoice_obj, 'post_id'=>$post_id]);
-
-        // All your mapping logic below uses $invoice_obj
-        // Example:
+        
         // Header fields
         if ( ! empty( $invoice_obj['Id'] ) ) update_field( 'qi_invoice_id', $invoice_obj['Id'], $post_id );
-        // ...and so on for all fields...
+        if ( ! empty( $invoice_obj['DocNumber'] ) ) update_field( 'qi_invoice_no', (string)$invoice_obj['DocNumber'], $post_id );
+        if ( isset($invoice_obj['TotalAmt']) )   update_field( 'qi_total_billed', (float)$invoice_obj['TotalAmt'], $post_id );
+        if ( isset($invoice_obj['Balance']) )    update_field( 'qi_balance_due', (float)$invoice_obj['Balance'], $post_id );
+        if ( isset($invoice_obj['TotalAmt']) && isset($invoice_obj['Balance']) ) {
+            $paid = max( (float)$invoice_obj['TotalAmt'] - (float)$invoice_obj['Balance'], 0 );
+            update_field( 'qi_total_paid', $paid, $post_id );
+            update_field( 'qi_payment_status', ( $invoice_obj['Balance'] > 0 ? 'Unpaid' : 'Paid' ), $post_id );
+        }
+        update_field( 'qi_last_synced', current_time('mysql'), $post_id );
 
-        // Memo parsing, repeater population, etc. all use $invoice_obj!
+        // Bill/Ship Address
+        if ( ! empty( $invoice_obj['BillAddr'] ) || ! empty( $invoice_obj['ShipAddr'] ) ) {
+            dominus_qb_update_acf_bill_ship_qi( $post_id, $invoice_obj );
+        }
 
-        // Example repeater population:
+        // Dates/terms
+        if ( ! empty( $invoice_obj['TxnDate'] ) ) update_field( 'qi_invoice_date', (string)$invoice_obj['TxnDate'], $post_id );
+        if ( ! empty( $invoice_obj['DueDate'] ) ) update_field( 'qi_due_date', (string)$invoice_obj['DueDate'], $post_id );
+        if ( ! empty( $invoice_obj['SalesTermRef'] ) ) {
+            $terms = isset($invoice_obj['SalesTermRef']['name']) ? $invoice_obj['SalesTermRef']['name'] : $invoice_obj['SalesTermRef']['value'];
+            update_field( 'qi_terms', (string)$terms, $post_id );
+        }
+
+        // Memo parsing (CustomerMemo + PrivateNote)
+        $memo_sources = [];
+        if ( ! empty($invoice_obj['CustomerMemo']['value']) && is_string($invoice_obj['CustomerMemo']['value']) ) {
+            $memo_sources[] = (string) $invoice_obj['CustomerMemo']['value'];
+        } elseif ( ! empty($invoice_obj['CustomerMemo']) && is_string($invoice_obj['CustomerMemo']) ) {
+            $memo_sources[] = (string) $invoice_obj['CustomerMemo'];
+        }
+        if ( ! empty($invoice_obj['PrivateNote']) && is_string($invoice_obj['PrivateNote']) ) {
+            $memo_sources[] = (string) $invoice_obj['PrivateNote'];
+        }
+
+        if ( ! empty( $memo_sources ) ) {
+            $combined = implode(' ', $memo_sources);
+            $tokens   = self::extract_memo_work_orders( $combined );
+            $unmatched = [];
+            if ( ! empty( $tokens ) ) {
+                $field_obj = function_exists('get_field_object') ? get_field_object('qi_wo_number', $post_id) : null;
+                $type      = is_array($field_obj) && ! empty($field_obj['type']) ? $field_obj['type'] : '';
+
+                if ( in_array($type, ['relationship','post_object'], true) ) {
+                    $ids = [];
+                    foreach ( $tokens as $title ) {
+                        $p = get_page_by_title( $title, OBJECT, 'workorder' );
+                        if ( $p instanceof WP_Post ) {
+                            $ids[] = (int)$p->ID;
+                        } else {
+                            $unmatched[] = $title;
+                        }
+                    }
+                    if ( ! empty($ids) ) {
+                        update_field('qi_wo_number', $ids, $post_id);
+                    } else {
+                        update_field('qi_wo_number', null, $post_id);
+                    }
+                } else {
+                    // Non-relationship field: store raw tokens
+                    update_field('qi_wo_number', $tokens, $post_id);
+                }
+
+                if ( ! empty($unmatched) ) {
+                    DQ_Logger::info( 'Unmatched Work Order tokens (pull_from_qbo)', [
+                        'post_id' => $post_id,
+                        'docnumber' => $docnum,
+                        'tokens' => $unmatched
+                    ] );
+                }
+            } else {
+                update_field('qi_wo_number', null, $post_id);
+            }
+        }
+
         $res = self::map_lines_to_acf( $post_id, $invoice_obj );
         if ( is_wp_error($res) ) return $res;
 
@@ -56,7 +122,7 @@ class DQ_QI_Sync {
         if ( is_wp_error($lines) ) return $lines;
         if ( empty($lines) ) return new WP_Error('dq_qi_no_lines', 'No valid lines found in qi_invoice.');
         $payload['Line'] = $lines;
-        
+
         $customer_name = function_exists('get_field') ? get_field('qi_customer', $post_id) : get_post_meta($post_id, 'qi_customer', true);
         if ($customer_name) {
             $customer_id = self::get_or_create_customer_id($customer_name);
@@ -69,7 +135,7 @@ class DQ_QI_Sync {
             return new WP_Error('dq_qi_no_customer_field', "qi_customer ACF field is empty in CPT post ID $post_id");
         }
         $payload['DocNumber'] = get_the_title($post_id);
-        
+
         $invoice_date_raw = function_exists('get_field') ? get_field('qi_invoice_date', $post_id) : get_post_meta($post_id, 'qi_invoice_date', true);
         $invoice_date = self::normalize_qb_date($invoice_date_raw);
         if (!empty($invoice_date)) {
@@ -99,31 +165,27 @@ class DQ_QI_Sync {
 
         return $payload;
     }
-    
+
     private static function normalize_qb_date($val) {
         $val = trim((string)$val);
         if ($val === '') return '';
         // If already canonical
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $val)) return $val;
 
-        $fmt = dqqb_qi_date_format(); // new helper
+        $fmt = dqqb_qi_date_format();
 
         // Common slash format
         if (preg_match('/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/', $val, $m)) {
             $a = (int)$m[1]; $b = (int)$m[2]; $y = (int)$m[3];
 
             if ($fmt === 'd/m/Y') {
-                // First is day, second is month
-                // Ambiguous case: if both ≤12 we still trust configured format
                 return sprintf('%04d-%02d-%02d', $y, $b, $a);
             }
             if ($fmt === 'm/d/Y' || $fmt === 'n/j/Y') {
-                // First is month, second is day
                 return sprintf('%04d-%02d-%02d', $y, $a, $b);
             }
         }
 
-        // Attempt DateTime::createFromFormat if user chose explicit format
         $fmt_map = [
             'm/d/Y' => 'm/d/Y',
             'n/j/Y' => 'n/j/Y',
@@ -137,17 +199,15 @@ class DQ_QI_Sync {
             }
         }
 
-        // Fallback
         $ts = strtotime($val);
         return $ts ? date('Y-m-d', $ts) : '';
     }
-    
+
     private static function get_or_create_customer_id($customer_name) {
         $sql  = "SELECT Id FROM Customer WHERE DisplayName = '".addslashes($customer_name)."' STARTPOSITION 1 MAXRESULTS 1";
         $resp = DQ_API::query($sql);
         $arr = $resp['QueryResponse']['Customer'] ?? [];
         if (!empty($arr)) return $arr[0]['Id'];
-        // If not found, create
         $payload = [ 'DisplayName' => $customer_name ];
         $resp = DQ_API::create('customer', $payload);
         if (is_wp_error($resp)) return null;
@@ -200,11 +260,9 @@ class DQ_QI_Sync {
     }
 
     private static function map_lines_to_acf( $post_id, $invoice ) {
-        DQ_Logger::info('QuickBooks invoice lines pulled', ['lines'=>$lines, 'invoice'=>$invoice, 'post_id'=>$post_id]);
         if ( ! function_exists('update_field') ) return new WP_Error('dq_acf_missing', 'ACF is required.');
         $lines = isset($invoice['Line']) ? $invoice['Line'] : [];
         $rep = get_field_object('qi_invoice', $post_id);
-        //DQ_Logger::info('map_lines_to_acf field', ['rep'=>$rep]);
         if ( empty($rep) || empty($rep['key']) || empty($rep['sub_fields']) ) {
             DQ_Logger::error('qi_invoice repeater misconfigured', ['qi_invoice'=>$rep]);
             return 'Lines mapping skipped (qi_invoice repeater missing).';
@@ -212,13 +270,11 @@ class DQ_QI_Sync {
 
         $keys = [];
         foreach ( $rep['sub_fields'] as $sf ) $keys[$sf['name']] = $sf['key'];
-        foreach ( ['activity','quantity','rate','amount'] as $need ) {
+        foreach ( ['activity','description','quantity','rate','amount'] as $need ) {
             if ( empty($keys[$need]) ) return new WP_Error('dq_acf_subfield_missing', 'ACF subfield missing: ' . $need);
         }
 
-        $allowed_activities = apply_filters('dq_qi_allowed_activities', ['Labor Rate HR']);
         $rows = [];
-        
         foreach ($lines as $line) {
             if (!isset($line['DetailType']) || $line['DetailType'] !== 'SalesItemLineDetail') continue;
 
@@ -229,8 +285,7 @@ class DQ_QI_Sync {
             $amount = isset($line['Amount']) ? (float)$line['Amount'] : ($qty * $rate);
             $description = isset($line['Description']) ? trim($line['Description']) : '';
 
-            // Use the QuickBooks product/service name directly for Activity!
-            // Use the QuickBooks line Description directly.
+            // Direct mapping from QBO to ACF
             $rows[] = [
                 $keys['activity']    => $name,
                 $keys['description'] => $description,
@@ -332,10 +387,6 @@ class DQ_QI_Sync {
 
     /**
      * Extract work order tokens from memo string.
-     * Auto "WO-" prefix is controlled by:
-     *   Option: get_option('dqqb_auto_prefix_wo', '1') == '1'
-     *   Filter: apply_filters('dqqb_auto_prefix_wo_prefix', true)
-     * If either returns false, prefixing is disabled.
      */
     private static function extract_memo_work_orders( string $memo ) : array {
         $memo = trim($memo);
@@ -361,7 +412,6 @@ class DQ_QI_Sync {
                     $t = 'WO-' . substr($t, 3);
                 }
             } else {
-                // Still normalize case for existing prefixes
                 if ( preg_match('/^wo-/i', $t) ) {
                     $t = 'WO-' . substr($t, 3);
                 }
