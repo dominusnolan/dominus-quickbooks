@@ -129,11 +129,15 @@ class DQ_QI_Admin_Table {
         // Remove default "All Categories" and "All Dates" via CSS hack (WordPress doesn't provide a hook)
         echo '<style>
             select[name="m"], select[name="cat"] {display:none !important;}
+            .dqqb-filter-label {
+                font-weight: 500;
+                font-size: 13px;
+                margin-right: 4px;
+            }
         </style>';
-        // Custom: Filter by Month (qi_invoice_date)
+        // Month (qi_invoice_date)
         $month_filter_name = 'qi_invoice_month';
         $selected = isset($_GET[$month_filter_name]) ? $_GET[$month_filter_name] : '';
-        // Get unique months from posts
         global $wpdb;
         $months = $wpdb->get_col("SELECT DISTINCT SUBSTRING(meta_value,1,7) FROM {$wpdb->postmeta} pm JOIN {$wpdb->posts} p ON pm.post_id=p.ID WHERE pm.meta_key='qi_invoice_date' AND p.post_type='quickbooks_invoice' AND pm.meta_value<>'' ORDER BY meta_value DESC");
         echo '<select name="' . esc_attr($month_filter_name) . '" style="margin-right:8px;"><option value="">Month...</option>';
@@ -145,16 +149,17 @@ class DQ_QI_Admin_Table {
             }
         }
         echo '</select>';
-        // Filter by Invoice Date
-        $inqd = isset($_GET['qi_invoice_date']) ? $_GET['qi_invoice_date'] : '';
-        echo '<input type="date" name="qi_invoice_date" value="' . esc_attr($inqd) . '" placeholder="Invoice Date" style="margin-right:8px;" />';
-        // Filter by Due Date
-        $dud = isset($_GET['qi_due_date']) ? $_GET['qi_due_date'] : '';
-        echo '<input type="date" name="qi_due_date" value="' . esc_attr($dud) . '" placeholder="Due Date" style="margin-right:8px;" />';
-        // Filter by Payment Status
+        // Payment Status
         $pstat = isset($_GET['qi_payment_status']) ? $_GET['qi_payment_status'] : '';
         echo '<select name="qi_payment_status" style="margin-right:8px;"><option value="">Payment Status...</option><option value="Paid" '.selected($pstat,'Paid',false).'>Paid</option><option value="Unpaid" '.selected($pstat,'Unpaid',false).'>Unpaid</option></select>';
-        // Keep the "Filter"/search button as normal
+        // Invoice Date LABEL + Input
+        $inqd = isset($_GET['qi_invoice_date']) ? $_GET['qi_invoice_date'] : '';
+        echo '<label for="dqqb-invoice-date-filter" class="dqqb-filter-label">Invoice Date:</label> ';
+        echo '<input type="date" name="qi_invoice_date" id="dqqb-invoice-date-filter" value="' . esc_attr($inqd) . '" placeholder="mm/dd/yyyy" style="margin-right:8px;" />';
+        // Due Date LABEL + Input
+        $dud = isset($_GET['qi_due_date']) ? $_GET['qi_due_date'] : '';
+        echo '<label for="dqqb-due-date-filter" class="dqqb-filter-label">Due Date:</label> ';
+        echo '<input type="date" name="qi_due_date" id="dqqb-due-date-filter" value="' . esc_attr($dud) . '" placeholder="mm/dd/yyyy" style="margin-right:8px;" />';
     }
 
     /**
