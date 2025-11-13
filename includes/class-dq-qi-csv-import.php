@@ -200,7 +200,9 @@ class DQ_QI_CSV_Import {
         return $out;
     }
 
+    // CORRECTED: Handles comma, space, and semicolon separation robustly for WO tokens
     private static function set_wo_number_from_memo( int $post_id, string $memo ) {
+        // Parse comma/semicolon/whitespace separated tokens
         $tokens = [];
         if ($memo !== '') {
             $memo_norm = preg_replace('/[;,]/', ' ', $memo);
@@ -218,6 +220,8 @@ class DQ_QI_CSV_Import {
                 $tokens[] = $t;
             }
         }
+
+        // Resolve to Work Order post IDs (by title exactly)
         $ids = [];
         $unmatched = [];
         foreach ($tokens as $title) {
@@ -228,7 +232,21 @@ class DQ_QI_CSV_Import {
                 $unmatched[] = $title;
             }
         }
-        update_field('qi_wo_number', $ids, $post_id);
+
+        // Save to Post Object field as multiple values
+        $field_obj = function_exists('get_field_object') ? get_field_object('qi_wo_number', $post_id) : null;
+        $is_post_obj = is_array($field_obj) && in_array($field_obj['type'], ['post_object','relationship'], true);
+        if ($is_post_obj) {
+            if (!empty($ids)) {
+                update_field($field_obj['key'], $ids, $post_id);
+            } else {
+                update_field($field_obj['key'], null, $post_id);
+            }
+        } else {
+            // Fallback: store matched tokens/IDs as array
+            update_field('qi_wo_number', $ids, $post_id);
+        }
+
         if ($unmatched) {
             DQ_Logger::info('Unmatched WO tokens (CSV import)', [
                 'post_id'=>$post_id,
@@ -237,7 +255,6 @@ class DQ_QI_CSV_Import {
             ]);
         }
     }
-
     private static function build_header_map( array $headers ) : array {
         $map = [];
         foreach ($headers as $i=>$h) {
