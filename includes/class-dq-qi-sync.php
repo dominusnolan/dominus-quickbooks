@@ -109,7 +109,19 @@ class DQ_QI_Sync {
         if ( is_wp_error($lines) ) return $lines;
         if ( empty($lines) ) return new WP_Error('dq_qi_no_lines', 'No valid lines found in qi_invoice.');
         $payload['Line'] = $lines;
-
+		
+		$customer_name = function_exists('get_field') ? get_field('qi_customer', $post_id) : get_post_meta($post_id, 'qi_customer', true);
+		if ($customer_name) {
+			$customer_id = self::get_or_create_customer_id($customer_name);
+			if ($customer_id) {
+				$payload['CustomerRef'] = [ 'value' => (string)$customer_id ];
+			} else {
+				return new WP_Error('dq_qi_no_customer', "No QBO customer found/created for '$customer_name'");
+			}
+		} else {
+			return new WP_Error('dq_qi_no_customer_field', "qi_customer ACF field is empty in CPT post ID $post_id");
+		}
+		$payload['DocNumber'] = get_the_title($post_id);
         $bill_to = function_exists('get_field') ? get_field('qi_bill_to', $post_id) : get_post_meta($post_id, 'qi_bill_to', true);
         $ship_to = function_exists('get_field') ? get_field('qi_ship_to', $post_id) : get_post_meta($post_id, 'qi_ship_to', true);
         if ( is_string($bill_to) && trim($bill_to) !== '' ) $payload['BillAddr'] = dominus_qb_parse_address_string( $bill_to );
@@ -127,6 +139,18 @@ class DQ_QI_Sync {
 
         return $payload;
     }
+	
+	private static function get_or_create_customer_id($customer_name) {
+		$sql  = "SELECT Id FROM Customer WHERE DisplayName = '".addslashes($customer_name)."' STARTPOSITION 1 MAXRESULTS 1";
+		$resp = DQ_API::query($sql);
+		$arr = $resp['QueryResponse']['Customer'] ?? [];
+		if (!empty($arr)) return $arr[0]['Id'];
+		// If not found, create
+		$payload = [ 'DisplayName' => $customer_name ];
+		$resp = DQ_API::create('customer', $payload);
+		if (is_wp_error($resp)) return null;
+		return $resp['Customer']['Id'] ?? null;
+	}
 
     private static function build_lines_from_acf( $post_id ) {
         if ( ! function_exists('have_rows') ) return new WP_Error('dq_acf_missing', 'ACF is required.');

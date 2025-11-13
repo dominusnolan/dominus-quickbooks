@@ -39,6 +39,9 @@ require_once DQQB_PATH . 'includes/class-dq-qi-metabox.php';
 // New: CSV → CPT quickbooks_invoice importer
 require_once DQQB_PATH . 'includes/class-dq-qi-csv-import.php';
 
+// bulk send invoices
+require_once DQQB_PATH . 'includes/class-dq-qi-bulk-send.php';
+
 // -----------------------------------------------------------------------------
 // Initialize Plugin
 // -----------------------------------------------------------------------------
