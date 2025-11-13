@@ -93,8 +93,6 @@ class DQ_QI_Metabox {
         echo '</div>';
     }
 
-    <?php
-    // ... file header and other methods unchanged ...
 
     public static function update() {
         if ( empty($_GET['post']) ) wp_die('Invalid post');
