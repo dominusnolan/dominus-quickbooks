@@ -128,20 +128,7 @@ class DQ_QI_Admin_Table {
             .dqqb-filter-label {font-weight: 500;font-size: 13px;margin-right: 4px;}
             .dqqb-filter-sep {margin:0 4px;}
         </style>';
-        // Month
-        $month_filter_name = 'qi_invoice_month';
-        $selected = isset($_GET[$month_filter_name]) ? $_GET[$month_filter_name] : '';
-        global $wpdb;
-        $months = $wpdb->get_col("SELECT DISTINCT SUBSTRING(meta_value,1,7) FROM {$wpdb->postmeta} pm JOIN {$wpdb->posts} p ON pm.post_id=p.ID WHERE pm.meta_key='qi_invoice_date' AND p.post_type='quickbooks_invoice' AND pm.meta_value<>'' ORDER BY meta_value DESC");
-        echo '<select name="' . esc_attr($month_filter_name) . '" style="margin-right:8px;"><option value="">Month...</option>';
-        foreach ($months as $m) {
-            $y_m = explode('-', $m);
-            if (count($y_m) == 2) {
-                $txt = date('F Y', strtotime($m . '-01'));
-                echo '<option value="' . esc_attr($m) . '" ' . selected($selected, $m, false) . '>' . esc_html($txt) . '</option>';
-            }
-        }
-        echo '</select>';
+        
         // Payment Status
         $pstat = isset($_GET['qi_payment_status']) ? $_GET['qi_payment_status'] : '';
         echo '<select name="qi_payment_status" style="margin-right:8px;"><option value="">Payment Status...</option><option value="Paid" '.selected($pstat,'Paid',false).'>Paid</option><option value="Unpaid" '.selected($pstat,'Unpaid',false).'>Unpaid</option></select>';
