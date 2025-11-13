@@ -4,16 +4,12 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 /**
  * Class DQ_API
  * Handles QuickBooks Online REST API requests (customers, invoices, queries).
- * Version: 4.6.1 (Sandbox-ready)
+ * Version: 4.6.2 (adds header WP_Error guards)
  */
 class DQ_API {
 
     public static function init() {}
 
-    /**
-     * Resolve base URL from environment.
-     * Uses option 'dq_env' (sandbox|production). Defaults to sandbox.
-     */
     public static function base_url() {
         $env = get_option('dq_env', 'sandbox');
         return ($env === 'production')
@@ -22,10 +18,16 @@ class DQ_API {
     }
 
     /**
-     * Standard headers for QBO
+     * Return request headers OR WP_Error if token missing/expired.
      */
     public static function headers( $json = true ) {
         $access_token = DQ_Auth::get_access_token();
+        if ( is_wp_error( $access_token ) ) {
+            return new WP_Error(
+                'dq_access_token_missing',
+                'QuickBooks access token missing or expired. Please reconnect (Dominus QB → Connect to QuickBooks).'
+            );
+        }
         $headers = [
             'Authorization' => 'Bearer ' . $access_token,
             'Accept'        => 'application/json',
@@ -50,40 +52,49 @@ class DQ_API {
             return $data;
         }
 
-        return new WP_Error( 'dq_qbo_error', "QuickBooks API returned error ($code): $body" );
+        return new WP_Error( 'dq_qbo_error', "QuickBooks API returned error ($code): $body", [
+            'http_code' => $code,
+            'raw_body'  => $body,
+            'context'   => $context,
+        ] );
     }
 
-    /**
-     * Simple GET wrapper (with minorversion if caller includes it in path).
-     */
     public static function get( $path, $context = '' ) {
+        $headers = self::headers(false);
+        if ( is_wp_error( $headers ) ) return $headers;
+
         $s = get_option('dq_settings', []);
-        $realm = $s['realm_id'] ?? ( DQ_Auth::get_tokens()['realm_id'] ?? '' );
+        $realm = $s['realm_id'] ?? ( DQ_Auth::realm_id() ?? '' );
+        if ( ! $realm ) {
+            return new WP_Error('dq_no_realm_id', 'Realm ID missing: connect to QuickBooks first.');
+        }
         $url = self::base_url() . $realm . '/' . ltrim( $path, '/' );
         $resp = wp_remote_get( $url, [
-            'headers' => self::headers(false),
+            'headers' => $headers,
             'timeout' => 30,
         ] );
-        return self::handle( $resp, $context );
+        return self::handle( $resp, $context ?: "GET $path" );
     }
 
-    /**
-     * Simple POST wrapper (adds minorversion).
-     */
     public static function post( $path, $data, $context = '' ) {
+        $headers = self::headers();
+        if ( is_wp_error( $headers ) ) return $headers;
+
         $s = get_option('dq_settings', []);
-        $realm = $s['realm_id'] ?? ( DQ_Auth::get_tokens()['realm_id'] ?? '' );
+        $realm = $s['realm_id'] ?? ( DQ_Auth::realm_id() ?? '' );
+        if ( ! $realm ) {
+            return new WP_Error('dq_no_realm_id', 'Realm ID missing: connect to QuickBooks first.');
+        }
         $url = self::base_url() . $realm . '/' . ltrim( $path, '/' ) . '?minorversion=65';
 
         $json = wp_json_encode( $data );
-
         $resp = wp_remote_post( $url, [
-            'headers' => self::headers(),
+            'headers' => $headers,
             'body'    => $json,
             'timeout' => 30,
         ] );
 
-        return self::handle( $resp, "POST $path" );
+        return self::handle( $resp, $context ?: "POST $path" );
     }
 
     // -------------------------- INVOICE METHODS ----------------------------- //
@@ -92,19 +103,20 @@ class DQ_API {
         return self::post( 'invoice', $payload, 'Create Invoice' );
     }
 
-    /**
-     * Robust update method with guaranteed SyncToken fetch for Sandbox/Prod.
-     */
     public static function update_invoice( $invoice_id, $payload ) {
-        DQ_Logger::info( "Updating QuickBooks invoice #$invoice_id", $payload );
+        $headers_fetch = self::headers(false);
+        if ( is_wp_error( $headers_fetch ) ) return $headers_fetch;
 
         $s = get_option('dq_settings', []);
-        $realm = $s['realm_id'] ?? ( DQ_Auth::get_tokens()['realm_id'] ?? '' );
+        $realm = $s['realm_id'] ?? ( DQ_Auth::realm_id() ?? '' );
+        if ( ! $realm ) {
+            return new WP_Error('dq_no_realm_id', 'Realm ID missing: connect to QuickBooks first.');
+        }
 
-        // STEP 1: Fetch current invoice to get SyncToken
+        // STEP 1: Fetch current invoice for SyncToken
         $get_url = self::base_url() . $realm . '/invoice/' . intval($invoice_id) . '?minorversion=65';
         $resp = wp_remote_get( $get_url, [
-            'headers' => self::headers(false),
+            'headers' => $headers_fetch,
             'timeout' => 30,
         ]);
         $data = self::handle( $resp, "Fetch Invoice #$invoice_id (for update)" );
@@ -114,41 +126,35 @@ class DQ_API {
         if ( empty( $invoice['Id'] ) || ! isset( $invoice['SyncToken'] ) ) {
             return new WP_Error( 'dq_no_sync_token', 'QuickBooks did not return SyncToken; verify invoice ID.' );
         }
-        $sync_token = (string) $invoice['SyncToken'];
 
-        // STEP 2: Build update payload (preserve PrivateNote if not provided)
         $update_payload = [
             'Id'          => (string) $invoice_id,
-            'SyncToken'   => $sync_token,
-            'sparse'      => false, // full update
+            'SyncToken'   => (string) $invoice['SyncToken'],
+            'sparse'      => false,
             'Line'        => $payload['Line'] ?? [],
             'CustomerRef' => $payload['CustomerRef'] ?? $invoice['CustomerRef'] ?? null,
             'PrivateNote' => array_key_exists('PrivateNote', $payload)
                 ? $payload['PrivateNote']
-                : ($invoice['PrivateNote'] ?? ''), // keep existing to avoid blanking the UI field
+                : ($invoice['PrivateNote'] ?? ''),
         ];
-
-        // Add CustomerMemo if present
         if ( ! empty( $payload['CustomerMemo'] ) ) {
             $update_payload['CustomerMemo'] = $payload['CustomerMemo'];
         }
-
-        // Add CustomField if present (for Purchase Order)
         if ( ! empty( $payload['CustomField'] ) ) {
             $update_payload['CustomField'] = $payload['CustomField'];
         }
-
-        // Preserve existing tax info to avoid validation errors
         if ( isset( $invoice['TxnTaxDetail'] ) ) {
             $update_payload['TxnTaxDetail'] = $invoice['TxnTaxDetail'];
         }
 
-        // STEP 3: Send the update
+        $headers_post = self::headers();
+        if ( is_wp_error( $headers_post ) ) return $headers_post;
+
         $post_url = self::base_url() . $realm . '/invoice?minorversion=65';
         DQ_Logger::debug( 'QBO UPDATE Payload', $update_payload );
 
         $resp2 = wp_remote_post( $post_url, [
-            'headers' => self::headers(),
+            'headers' => $headers_post,
             'body'    => wp_json_encode( $update_payload ),
             'timeout' => 30,
         ]);
@@ -169,17 +175,23 @@ class DQ_API {
     }
 
     public static function query( $sql ) {
+        $headers = self::headers(false);
+        if ( is_wp_error( $headers ) ) return $headers;
+
         $s = get_option('dq_settings', []);
-        $realm = $s['realm_id'] ?? ( DQ_Auth::get_tokens()['realm_id'] ?? '' );
+        $realm = $s['realm_id'] ?? ( DQ_Auth::realm_id() ?? '' );
+        if ( ! $realm ) {
+            return new WP_Error('dq_no_realm_id', 'Realm ID missing: connect to QuickBooks first.');
+        }
+
         $url = self::base_url() . $realm . '/query?query=' . rawurlencode( $sql ) . '&minorversion=65';
         $resp = wp_remote_get( $url, [
-            'headers' => self::headers(false),
+            'headers' => $headers,
             'timeout' => 30,
         ] );
         return self::handle( $resp, 'Custom Query' );
     }
 
-    // Convenience wrapper
     public static function create( $entity, $payload ) {
         $e = strtolower(trim($entity));
         switch ($e) {
@@ -199,12 +211,14 @@ class DQ_API {
 
         $realm_id = self::realm_id();
         if ( ! $realm_id ) {
-            return new WP_Error('dq_no_realm','Missing QuickBooks realm/company id. Save it in the plugin settings or capture it during OAuth (realmId).');
+            return new WP_Error('dq_no_realm','Missing QuickBooks realm/company id.');
         }
 
-        $url = trailingslashit( self::base_url() . $realm_id ) . 'invoice/' . urlencode( $invoice_id ) . '?minorversion=65';
+        $headers = self::headers(true);
+        if ( is_wp_error( $headers ) ) return $headers;
 
-        $res = wp_remote_get( $url, [ 'headers' => self::headers(true), 'timeout' => 20 ] );
+        $url = trailingslashit( self::base_url() . $realm_id ) . 'invoice/' . urlencode( $invoice_id ) . '?minorversion=65';
+        $res = wp_remote_get( $url, [ 'headers' => $headers, 'timeout' => 20 ] );
         if ( is_wp_error( $res ) ) return $res;
 
         $code = wp_remote_retrieve_response_code( $res );
@@ -225,9 +239,11 @@ class DQ_API {
     public static function query_raw( $sql ) {
         $realm_id = DQ_Auth::realm_id();
         if ( ! $realm_id ) return new WP_Error('dq_no_realm', 'Missing QuickBooks realm/company id.');
+        $headers = self::headers(true);
+        if ( is_wp_error( $headers ) ) return $headers;
 
         $url = trailingslashit( self::base_url() . $realm_id ) . 'query?minorversion=65&query=' . rawurlencode( $sql );
-        $res = wp_remote_get( $url, [ 'headers' => self::headers(true), 'timeout' => 25 ] );
+        $res = wp_remote_get( $url, [ 'headers' => $headers, 'timeout' => 25 ] );
         if ( is_wp_error( $res ) ) return $res;
 
         $code = wp_remote_retrieve_response_code( $res );
@@ -240,9 +256,7 @@ class DQ_API {
     }
 
     private static function realm_id() {
-        if ( defined('DQ_REALM_ID') && DQ_REALM_ID ) {
-            return (string) DQ_REALM_ID;
-        }
+        if ( defined('DQ_REALM_ID') && DQ_REALM_ID ) return (string) DQ_REALM_ID;
         foreach ( ['woqb_realm_id','dq_realm_id','dq_company_id','qb_company_id','qbo_company_id'] as $opt ) {
             $rid = get_option( $opt );
             if ( ! empty( $rid ) ) return (string) $rid;
@@ -257,8 +271,6 @@ class DQ_API {
 
     public static function get_invoice_by_docnumber($docnumber) {
         $query = "SELECT * FROM Invoice WHERE DocNumber = '$docnumber'";
-        $resp = self::query($query);
-        if (is_wp_error($resp) || empty($resp['QueryResponse']['Invoice'])) return new WP_Error('no_invoice', 'Invoice not found by DocNumber');
-        return $resp['QueryResponse']['Invoice'][0];
+        return self::query($query);
     }
 }

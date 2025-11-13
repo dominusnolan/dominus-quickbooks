@@ -127,3 +127,14 @@ function dqqb_option( $key, $default = '' ) {
     $opts = dq_get_settings();
     return $opts[ $key ] ?? $default;
 }
+
+function dqqb_qi_date_format() {
+    $opts = dq_get_settings();
+    $fmt  = isset($opts['qi_date_format']) ? trim($opts['qi_date_format']) : '';
+    // Allow only known formats
+    $allowed = ['m/d/Y','d/m/Y','n/j/Y','Y-m-d'];
+    if (!in_array($fmt, $allowed, true)) {
+        return 'm/d/Y'; // default
+    }
+    return $fmt;
+}

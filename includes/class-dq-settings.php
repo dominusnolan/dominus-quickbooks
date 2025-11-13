@@ -46,14 +46,17 @@ class DQ_Settings {
             'dqqb'
         );
 
-        $fields = [
-            'client_id'         => 'Client ID',
-            'client_secret'     => 'Client Secret',
-            'environment'       => 'Environment (sandbox or production)',
-            'realm_id'          => 'Company ID (Realm ID)',
-            'default_tax_code'  => 'Default Tax Code',
-            'default_terms_ref' => 'Default TermsRef (optional)',
-        ];
+        
+		$fields = [
+			'client_id'         => 'Client ID',
+			'client_secret'     => 'Client Secret',
+			'environment'       => 'Environment (sandbox or production)',
+			'realm_id'          => 'Company ID (Realm ID)',
+			'default_tax_code'  => 'Default Tax Code',
+			'default_terms_ref' => 'Default TermsRef (optional)',
+			'qi_date_format'    => 'QuickBooks Invoice Date Format (m/d/Y or d/m/Y or n/j/Y)',
+		];
+
 
         foreach ( $fields as $key => $label ) {
             add_settings_field(
