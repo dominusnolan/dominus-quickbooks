@@ -39,9 +39,6 @@ require_once DQQB_PATH . 'includes/class-dq-qi-metabox.php';
 // New: CSV → CPT quickbooks_invoice importer
 require_once DQQB_PATH . 'includes/class-dq-qi-csv-import.php';
 
-// bulk send invoices
-require_once DQQB_PATH . 'includes/class-dq-qi-bulk-send.php';
-
 // -----------------------------------------------------------------------------
 // Initialize Plugin
 // -----------------------------------------------------------------------------
@@ -94,7 +91,7 @@ register_deactivation_hook( __FILE__, function() {
 // -----------------------------------------------------------------------------
 // Admin Footer Debug (optional)
 // -----------------------------------------------------------------------------
-if ( defined('WP_DEBUG') && WP_DEBUG ) {
+if ( defined('WP_DEBUG' ) && WP_DEBUG ) {
     add_action( 'admin_footer', function() {
         echo '<!-- Dominus QuickBooks v' . esc_html( DQQB_VERSION ) . ' loaded -->';
     });
