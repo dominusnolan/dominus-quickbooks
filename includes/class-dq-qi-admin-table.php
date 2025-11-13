@@ -3,6 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 
 /**
  * Adds admin columns and custom filters for CPT quickbooks_invoice.
+ * Now supports Invoice/Due Date range filtering.
  */
 class DQ_QI_Admin_Table {
 
@@ -10,8 +11,6 @@ class DQ_QI_Admin_Table {
         add_filter('manage_edit-quickbooks_invoice_columns', [__CLASS__, 'columns']);
         add_action('manage_quickbooks_invoice_posts_custom_column', [__CLASS__, 'column_content'], 10, 2);
         add_filter('manage_edit-quickbooks_invoice_sortable_columns', [__CLASS__, 'sortable']);
-
-        // Remove default filters and add our own
         add_action('restrict_manage_posts', [__CLASS__, 'filters']);
         add_filter('parse_query', [__CLASS__, 'filter_query']);
         add_filter('manage_quickbooks_invoice_sortable_columns', [__CLASS__, 'sortable']);
@@ -109,9 +108,6 @@ class DQ_QI_Admin_Table {
         }
     }
 
-    /**
-     * Make Invoice No. sortable (sorts by title), and Amount sortable.
-     */
     public static function sortable($sortable_columns) {
         $sortable_columns['invoice_no'] = 'title';
         $sortable_columns['amount']     = 'qi_total_billed';
@@ -121,21 +117,18 @@ class DQ_QI_Admin_Table {
     }
 
     /**
-     * Remove default filters and add custom ones.
+     * Add custom filters to the admin table. 
+     * Invoice/Due Date are now FROM/TO range fields with labels.
      */
     public static function filters() {
         global $typenow;
         if ($typenow != 'quickbooks_invoice') return;
-        // Remove default "All Categories" and "All Dates" via CSS hack (WordPress doesn't provide a hook)
         echo '<style>
             select[name="m"], select[name="cat"] {display:none !important;}
-            .dqqb-filter-label {
-                font-weight: 500;
-                font-size: 13px;
-                margin-right: 4px;
-            }
+            .dqqb-filter-label {font-weight: 500;font-size: 13px;margin-right: 4px;}
+            .dqqb-filter-sep {margin:0 4px;}
         </style>';
-        // Month (qi_invoice_date)
+        // Month
         $month_filter_name = 'qi_invoice_month';
         $selected = isset($_GET[$month_filter_name]) ? $_GET[$month_filter_name] : '';
         global $wpdb;
@@ -152,18 +145,24 @@ class DQ_QI_Admin_Table {
         // Payment Status
         $pstat = isset($_GET['qi_payment_status']) ? $_GET['qi_payment_status'] : '';
         echo '<select name="qi_payment_status" style="margin-right:8px;"><option value="">Payment Status...</option><option value="Paid" '.selected($pstat,'Paid',false).'>Paid</option><option value="Unpaid" '.selected($pstat,'Unpaid',false).'>Unpaid</option></select>';
-        // Invoice Date LABEL + Input
-        $inqd = isset($_GET['qi_invoice_date']) ? $_GET['qi_invoice_date'] : '';
-        echo '<label for="dqqb-invoice-date-filter" class="dqqb-filter-label">Invoice Date:</label> ';
-        echo '<input type="date" name="qi_invoice_date" id="dqqb-invoice-date-filter" value="' . esc_attr($inqd) . '" placeholder="mm/dd/yyyy" style="margin-right:8px;" />';
-        // Due Date LABEL + Input
-        $dud = isset($_GET['qi_due_date']) ? $_GET['qi_due_date'] : '';
-        echo '<label for="dqqb-due-date-filter" class="dqqb-filter-label">Due Date:</label> ';
-        echo '<input type="date" name="qi_due_date" id="dqqb-due-date-filter" value="' . esc_attr($dud) . '" placeholder="mm/dd/yyyy" style="margin-right:8px;" />';
+        // Invoice Date Range
+        $inqd_from = isset($_GET['qi_invoice_date_from']) ? $_GET['qi_invoice_date_from'] : '';
+        $inqd_to = isset($_GET['qi_invoice_date_to']) ? $_GET['qi_invoice_date_to'] : '';
+        echo '<label for="dqqb-invoice-date-from" class="dqqb-filter-label">Invoice Date:</label>';
+        echo '<input type="date" name="qi_invoice_date_from" id="dqqb-invoice-date-from" value="' . esc_attr($inqd_from) . '" placeholder="mm/dd/yyyy" />';
+        echo '<span class="dqqb-filter-sep">–</span>';
+        echo '<input type="date" name="qi_invoice_date_to" id="dqqb-invoice-date-to" value="' . esc_attr($inqd_to) . '" placeholder="mm/dd/yyyy" style="margin-right:8px;" />';
+        // Due Date Range
+        $dud_from = isset($_GET['qi_due_date_from']) ? $_GET['qi_due_date_from'] : '';
+        $dud_to = isset($_GET['qi_due_date_to']) ? $_GET['qi_due_date_to'] : '';
+        echo '<label for="dqqb-due-date-from" class="dqqb-filter-label">Due Date:</label>';
+        echo '<input type="date" name="qi_due_date_from" id="dqqb-due-date-from" value="' . esc_attr($dud_from) . '" placeholder="mm/dd/yyyy" />';
+        echo '<span class="dqqb-filter-sep">–</span>';
+        echo '<input type="date" name="qi_due_date_to" id="dqqb-due-date-to" value="' . esc_attr($dud_to) . '" placeholder="mm/dd/yyyy" style="margin-right:8px;" />';
     }
 
     /**
-     * Applies filtering logic to the query vars.
+     * Filtering logic to allow date range for invoice/due date.
      */
     public static function filter_query($query) {
         global $pagenow;
@@ -171,64 +170,80 @@ class DQ_QI_Admin_Table {
         $post_type = isset($_GET['post_type']) ? $_GET['post_type'] : '';
         if ($post_type != 'quickbooks_invoice') return;
 
+        $meta_queries = [];
         // Filter by month
         if (!empty($_GET['qi_invoice_month'])) {
             $prefix = esc_sql($_GET['qi_invoice_month']);
-            $meta_query = [
+            $meta_queries[] = [
                 'key'   => 'qi_invoice_date',
                 'value' => $prefix,
                 'compare'=>'LIKE'
             ];
-            $query->set('meta_query', [$meta_query]);
         }
-
-        // Filter by invoice date
-        if (!empty($_GET['qi_invoice_date'])) {
-            $val = esc_sql($_GET['qi_invoice_date']);
-            $meta_query = [
-                'key'=>'qi_invoice_date',
-                'value'=>$val,
-                'compare'=>'='
-            ];
-            $query->set('meta_query', [$meta_query]);
-        }
-
-        // Filter by due date
-        if (!empty($_GET['qi_due_date'])) {
-            $val = esc_sql($_GET['qi_due_date']);
-            $meta_query = [
-                'key'=>'qi_due_date',
-                'value'=>$val,
-                'compare'=>'='
-            ];
-            $query->set('meta_query', [$meta_query]);
-        }
-
-        // Filter by payment status
+        // Payment status
         if (!empty($_GET['qi_payment_status'])) {
             $val = esc_sql($_GET['qi_payment_status']);
-            $meta_query = [
+            $meta_queries[] = [
                 'key'=>'qi_payment_status',
                 'value'=>$val,
                 'compare'=>'='
             ];
-            $query->set('meta_query', [$meta_query]);
+        }
+        // Invoice Date (range)
+        $from = !empty($_GET['qi_invoice_date_from']) ? $_GET['qi_invoice_date_from'] : '';
+        $to = !empty($_GET['qi_invoice_date_to']) ? $_GET['qi_invoice_date_to'] : '';
+        if ($from && $to) {
+            $meta_queries[] = [
+                'key' => 'qi_invoice_date',
+                'value' => [$from, $to],
+                'type' => 'DATE',
+                'compare' => 'BETWEEN'
+            ];
+        } elseif ($from) {
+            $meta_queries[] = [
+                'key' => 'qi_invoice_date',
+                'value' => $from,
+                'type' => 'DATE',
+                'compare' => '>='
+            ];
+        } elseif ($to) {
+            $meta_queries[] = [
+                'key' => 'qi_invoice_date',
+                'value' => $to,
+                'type' => 'DATE',
+                'compare' => '<='
+            ];
+        }
+        // Due Date (range)
+        $dfrom = !empty($_GET['qi_due_date_from']) ? $_GET['qi_due_date_from'] : '';
+        $dto = !empty($_GET['qi_due_date_to']) ? $_GET['qi_due_date_to'] : '';
+        if ($dfrom && $dto) {
+            $meta_queries[] = [
+                'key' => 'qi_due_date',
+                'value' => [$dfrom, $dto],
+                'type' => 'DATE',
+                'compare' => 'BETWEEN'
+            ];
+        } elseif ($dfrom) {
+            $meta_queries[] = [
+                'key' => 'qi_due_date',
+                'value' => $dfrom,
+                'type' => 'DATE',
+                'compare' => '>='
+            ];
+        } elseif ($dto) {
+            $meta_queries[] = [
+                'key' => 'qi_due_date',
+                'value' => $dto,
+                'type' => 'DATE',
+                'compare' => '<='
+            ];
         }
 
-        // Merge meta queries if more than one is present
-        $meta_queries = [];
-        // All handled via $_GET above, just merge those that are in use
-        foreach (['qi_invoice_month','qi_invoice_date','qi_due_date','qi_payment_status'] as $f) {
-            if (!empty($_GET[$f])) {
-                if ($f=='qi_invoice_month') {
-                    $meta_queries[] = ['key'=>'qi_invoice_date','value'=>esc_sql($_GET[$f]),'compare'=>'LIKE'];
-                } else {
-                    $meta_queries[] = ['key'=>str_replace('qi_', '', $f),'value'=>esc_sql($_GET[$f]),'compare'=>'='];
-                }
-            }
-        }
-        if (count($meta_queries)>1) {
-            $query->set('meta_query', $meta_queries);
+        if (count($meta_queries) == 1) {
+            $query->set('meta_query', $meta_queries); // allow a single meta_query array
+        } elseif (count($meta_queries) > 1) {
+            $query->set('meta_query', ['relation' => 'AND'] + $meta_queries);
         }
     }
 }
