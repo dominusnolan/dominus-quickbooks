@@ -138,3 +138,66 @@ function dqqb_qi_date_format() {
     }
     return $fmt;
 }
+
+
+/**
+ * After importing or updating a QuickBooks Invoice CPT,
+ * sync its Invoice Number to the linked Work Orders in their wo_invoice_no fields.
+ * - $invoice_post_id: CPT post ID of the Invoice.
+ */
+function dqqb_sync_invoice_number_to_workorders($invoice_post_id) {
+    if (!function_exists('update_field')) return;
+    $invoice_no = get_the_title($invoice_post_id);
+    if ($invoice_no === '') return;
+    $work_orders = get_field('qi_wo_number', $invoice_post_id);
+
+    if (!is_array($work_orders)) {
+        if ($work_orders instanceof WP_Post) $work_orders = [ $work_orders ];
+        elseif (is_numeric($work_orders)) $work_orders = [ intval($work_orders) ];
+        elseif (is_string($work_orders) && $work_orders !== '') $work_orders = [ $work_orders ];
+        else return;
+    }
+
+    foreach ($work_orders as $wo) {
+        $wo_id = null;
+        if ($wo instanceof WP_Post) {
+            $wo_id = $wo->ID;
+        } elseif (is_array($wo)) {
+            $wo_id = isset($wo['ID']) ? $wo['ID'] : (isset($wo['value']) ? $wo['value'] : null);
+        } else {
+            $wo_id = intval($wo);
+        }
+        $wo_id = intval($wo_id);
+        if (!$wo_id) continue;
+
+        $existing = get_field('wo_invoice_no', $wo_id);
+        $list = [];
+        if (is_array($existing)) $list = array_map('trim', $existing);
+        elseif (is_string($existing) && $existing !== '') $list = array_map('trim', explode(',', $existing));
+        if (!in_array($invoice_no, $list)) $list[] = $invoice_no;
+        $save_val = implode(', ', array_unique(array_filter($list, fn($v)=>$v!=='')));
+        update_field('wo_invoice_no', $save_val, $wo_id);
+    }
+}
+
+
+add_action('acf/save_post', function($post_id) {
+    // Only run for Invoice CPT
+    $post = get_post($post_id);
+    if (! $post || $post->post_type !== 'quickbooks_invoice') return;
+    if ( function_exists('dqqb_sync_invoice_number_to_workorders') ) {
+        dqqb_sync_invoice_number_to_workorders($post_id);
+    }
+}, 20); // Higher priority to run after ACF saves fields
+
+add_action('save_post_quickbooks_invoice', function($post_id) {
+    // Avoid autorevision, autosave, bulk, etc
+    if ( defined('DOING_AUTOSAVE') && DOING_AUTOSAVE ) return;
+    if ( wp_is_post_revision($post_id) ) return;
+    if ( get_post_status($post_id) !== 'publish' ) return;
+    
+    // Run on Invoice CPT only
+    if ( function_exists('dqqb_sync_invoice_number_to_workorders') ) {
+        dqqb_sync_invoice_number_to_workorders($post_id);
+    }
+});

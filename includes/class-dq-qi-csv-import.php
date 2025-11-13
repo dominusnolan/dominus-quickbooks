@@ -133,6 +133,8 @@ class DQ_QI_CSV_Import {
                 $skipped++; $msgs[]='Exists (no update): '.$doc; continue;
             }
 
+            dqqb_sync_invoice_number_to_workorders($post_id);
+
             $set = function($key,$val) use ($post_id){
                 if ( function_exists('update_field') ) update_field($key,$val,$post_id);
                 else update_post_meta($post_id,$key,$val);

@@ -126,6 +126,9 @@ class DQ_QI_Metabox {
         }
         update_post_meta( $post_id, 'qi_last_synced', current_time('mysql') );
 
+        if (function_exists('dqqb_sync_invoice_number_to_workorders')) {
+            dqqb_sync_invoice_number_to_workorders($post_id);
+        }
         wp_safe_redirect( add_query_arg([
             'post' => $post_id,
             'action' => 'edit',
