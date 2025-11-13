@@ -109,19 +109,32 @@ class DQ_QI_Sync {
         if ( is_wp_error($lines) ) return $lines;
         if ( empty($lines) ) return new WP_Error('dq_qi_no_lines', 'No valid lines found in qi_invoice.');
         $payload['Line'] = $lines;
-		
-		$customer_name = function_exists('get_field') ? get_field('qi_customer', $post_id) : get_post_meta($post_id, 'qi_customer', true);
-		if ($customer_name) {
-			$customer_id = self::get_or_create_customer_id($customer_name);
-			if ($customer_id) {
-				$payload['CustomerRef'] = [ 'value' => (string)$customer_id ];
-			} else {
-				return new WP_Error('dq_qi_no_customer', "No QBO customer found/created for '$customer_name'");
-			}
-		} else {
-			return new WP_Error('dq_qi_no_customer_field', "qi_customer ACF field is empty in CPT post ID $post_id");
-		}
-		$payload['DocNumber'] = get_the_title($post_id);
+        
+        $customer_name = function_exists('get_field') ? get_field('qi_customer', $post_id) : get_post_meta($post_id, 'qi_customer', true);
+        if ($customer_name) {
+            $customer_id = self::get_or_create_customer_id($customer_name);
+            if ($customer_id) {
+                $payload['CustomerRef'] = [ 'value' => (string)$customer_id ];
+            } else {
+                return new WP_Error('dq_qi_no_customer', "No QBO customer found/created for '$customer_name'");
+            }
+        } else {
+            return new WP_Error('dq_qi_no_customer_field', "qi_customer ACF field is empty in CPT post ID $post_id");
+        }
+        $payload['DocNumber'] = get_the_title($post_id);
+        
+        $invoice_date_raw = function_exists('get_field') ? get_field('qi_invoice_date', $post_id) : get_post_meta($post_id, 'qi_invoice_date', true);
+        $invoice_date = self::normalize_qb_date($invoice_date_raw);
+        if (!empty($invoice_date)) {
+            $payload['TxnDate'] = $invoice_date;
+        }
+
+        $due_date_raw = function_exists('get_field') ? get_field('qi_due_date', $post_id) : get_post_meta($post_id, 'qi_due_date', true);
+        $due_date = self::normalize_qb_date($due_date_raw);
+        if (!empty($due_date)) {
+            $payload['DueDate'] = $due_date;
+        }
+        
         $bill_to = function_exists('get_field') ? get_field('qi_bill_to', $post_id) : get_post_meta($post_id, 'qi_bill_to', true);
         $ship_to = function_exists('get_field') ? get_field('qi_ship_to', $post_id) : get_post_meta($post_id, 'qi_ship_to', true);
         if ( is_string($bill_to) && trim($bill_to) !== '' ) $payload['BillAddr'] = dominus_qb_parse_address_string( $bill_to );
@@ -139,18 +152,32 @@ class DQ_QI_Sync {
 
         return $payload;
     }
-	
-	private static function get_or_create_customer_id($customer_name) {
-		$sql  = "SELECT Id FROM Customer WHERE DisplayName = '".addslashes($customer_name)."' STARTPOSITION 1 MAXRESULTS 1";
-		$resp = DQ_API::query($sql);
-		$arr = $resp['QueryResponse']['Customer'] ?? [];
-		if (!empty($arr)) return $arr[0]['Id'];
-		// If not found, create
-		$payload = [ 'DisplayName' => $customer_name ];
-		$resp = DQ_API::create('customer', $payload);
-		if (is_wp_error($resp)) return null;
-		return $resp['Customer']['Id'] ?? null;
-	}
+    
+    private static function normalize_qb_date($val) {
+        $val = trim((string)$val);
+        if ($val === '') return '';
+        // YYYY-MM-DD QuickBooks native format
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $val)) return $val;
+        // n/j/Y format from ACF import (mm/dd/yyyy)
+        if (preg_match('/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/', $val, $m)) {
+            return sprintf('%04d-%02d-%02d', $m[3], $m[1], $m[2]); // year, month, day
+        }
+        // Fallback: attempt strtotime
+        $ts = strtotime($val);
+        return $ts ? date('Y-m-d', $ts) : '';
+    }
+    
+    private static function get_or_create_customer_id($customer_name) {
+        $sql  = "SELECT Id FROM Customer WHERE DisplayName = '".addslashes($customer_name)."' STARTPOSITION 1 MAXRESULTS 1";
+        $resp = DQ_API::query($sql);
+        $arr = $resp['QueryResponse']['Customer'] ?? [];
+        if (!empty($arr)) return $arr[0]['Id'];
+        // If not found, create
+        $payload = [ 'DisplayName' => $customer_name ];
+        $resp = DQ_API::create('customer', $payload);
+        if (is_wp_error($resp)) return null;
+        return $resp['Customer']['Id'] ?? null;
+    }
 
     private static function build_lines_from_acf( $post_id ) {
         if ( ! function_exists('have_rows') ) return new WP_Error('dq_acf_missing', 'ACF is required.');
