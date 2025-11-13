@@ -54,6 +54,46 @@ class DQ_QI_Sync {
             update_field( 'qi_terms', (string)$terms, $post_id );
         }
 
+        // Also map Work Orders from both CustomerMemo and PrivateNote (Memo on statement - hidden)
+        $memo_sources = [];
+        if ( ! empty($invoice['CustomerMemo']['value']) && is_string($invoice['CustomerMemo']['value']) ) {
+            $memo_sources[] = (string) $invoice['CustomerMemo']['value'];
+        } elseif ( ! empty($invoice['CustomerMemo']) && is_string($invoice['CustomerMemo']) ) {
+            $memo_sources[] = (string) $invoice['CustomerMemo'];
+        }
+        if ( ! empty($invoice['PrivateNote']) && is_string($invoice['PrivateNote']) ) {
+            $memo_sources[] = (string) $invoice['PrivateNote'];
+        }
+
+        if ( ! empty($memo_sources) ) {
+            $combined = implode(', ', $memo_sources);
+            $parts = array_values(array_unique(array_filter(array_map('trim', explode(',', $combined)), function($v){
+                return $v !== '';
+            })));
+
+            if ( ! empty($parts) ) {
+                $field_obj = function_exists('get_field_object') ? get_field_object('qi_wo_number', $post_id) : null;
+                $type      = is_array($field_obj) && ! empty($field_obj['type']) ? $field_obj['type'] : '';
+
+                if ( in_array($type, ['relationship','post_object'], true) ) {
+                    $ids = [];
+                    foreach ( $parts as $title ) {
+                        $p = get_page_by_title( $title, OBJECT, 'workorder' );
+                        if ( $p instanceof WP_Post ) {
+                            $ids[] = (int) $p->ID;
+                        }
+                    }
+                    if ( ! empty($ids) ) {
+                        update_field('qi_wo_number', $ids, $post_id);
+                    } else {
+                        update_field('qi_wo_number', $parts, $post_id);
+                    }
+                } else {
+                    update_field('qi_wo_number', $parts, $post_id);
+                }
+            }
+        }
+
         // Lines -> ACF repeater qi_invoice
         $res = self::map_lines_to_acf( $post_id, $invoice );
         if ( is_wp_error($res) ) return $res;
@@ -66,6 +106,7 @@ class DQ_QI_Sync {
      * Includes:
      * - Line items from ACF repeater qi_invoice
      * - Header: BillAddr, ShipAddr (parsed from qi_*), SalesTermRef (from qi_terms)
+     * - CustomerMemo + PrivateNote from qi_wo_number
      */
     public static function build_payload_from_cpt( $post_id ) {
         $payload = [];
@@ -93,6 +134,13 @@ class DQ_QI_Sync {
         $terms_ref = self::resolve_terms_ref( $terms );
         if ( $terms_ref ) {
             $payload['SalesTermRef'] = $terms_ref;
+        }
+
+        // 4) CustomerMemo and PrivateNote from qi_wo_number (WO titles joined by comma)
+        $memo_value = self::build_customer_memo_from_wo( $post_id );
+        if ( $memo_value !== '' ) {
+            $payload['CustomerMemo'] = [ 'value' => $memo_value ];
+            $payload['PrivateNote']  = $memo_value; // QuickBooks "Memo on statement (hidden)"
         }
 
         return $payload;
@@ -263,5 +311,73 @@ class DQ_QI_Sync {
         $clean = preg_replace('/[^0-9.\-]/', '', (string)$v);
         if ($clean === '' || !is_numeric($clean)) return null;
         return (float)$clean;
+    }
+
+    /**
+     * Build CustomerMemo string from ACF "qi_wo_number".
+     * Accepts values as:
+     * - array of WP_Post objects (relationship/post_object)
+     * - array of IDs or titles (strings)
+     * - single WP_Post / ID / title
+     * Returns a comma+space separated list of Work Order titles.
+     */
+    private static function build_customer_memo_from_wo( $post_id ) {
+        $raw = function_exists('get_field') ? get_field('qi_wo_number', $post_id) : get_post_meta($post_id, 'qi_wo_number', true);
+
+        // Normalize to an array
+        if ( $raw instanceof WP_Post ) {
+            $vals = [ $raw ];
+        } elseif ( is_array($raw) ) {
+            $vals = $raw;
+        } elseif ( is_string($raw) || is_numeric($raw) ) {
+            $vals = [ $raw ];
+        } else {
+            $vals = [];
+        }
+
+        $titles = [];
+
+        foreach ( $vals as $v ) {
+            if ( $v instanceof WP_Post ) {
+                $titles[] = $v->post_title ?: get_the_title( $v->ID );
+                continue;
+            }
+            if ( is_array($v) ) {
+                if ( isset($v['post_title']) && is_string($v['post_title']) ) {
+                    $titles[] = $v['post_title'];
+                    continue;
+                }
+                if ( isset($v['ID']) && is_numeric($v['ID']) ) {
+                    $t = get_the_title( (int) $v['ID'] );
+                    if ( $t ) $titles[] = $t;
+                    continue;
+                }
+                if ( isset($v['value']) ) {
+                    $val = $v['value'];
+                    if ( is_numeric($val) ) {
+                        $t = get_the_title( (int) $val );
+                        $titles[] = $t ?: (string) $val;
+                    } else {
+                        $titles[] = (string) $val;
+                    }
+                    continue;
+                }
+                $maybe = trim( (string) ( $v['label'] ?? '' ) );
+                if ( $maybe !== '' ) $titles[] = $maybe;
+                continue;
+            }
+            if ( is_numeric($v) ) {
+                $t = get_the_title( (int) $v );
+                $titles[] = $t ?: (string) $v;
+                continue;
+            }
+            if ( is_string($v) && $v !== '' ) {
+                $titles[] = trim($v);
+            }
+        }
+
+        $titles = array_values(array_unique(array_filter(array_map('trim', $titles), fn($s) => $s !== '')));
+
+        return empty($titles) ? '' : implode(', ', $titles);
     }
 }

@@ -47,11 +47,9 @@ class DQ_API {
         $data = json_decode( $body, true );
 
         if ( $code >= 200 && $code < 300 && is_array($data) ) {
-            //DQ_Logger::debug( "QBO Response OK ($context)", $data );
             return $data;
         }
 
-       // DQ_Logger::error( "QBO API error ($context)", [ 'code' => $code, 'body' => $body ] );
         return new WP_Error( 'dq_qbo_error', "QuickBooks API returned error ($code): $body" );
     }
 
@@ -78,7 +76,6 @@ class DQ_API {
         $url = self::base_url() . $realm . '/' . ltrim( $path, '/' ) . '?minorversion=65';
 
         $json = wp_json_encode( $data );
-        //DQ_Logger::debug( "QBO POST $url", $json );
 
         $resp = wp_remote_post( $url, [
             'headers' => self::headers(),
@@ -87,76 +84,6 @@ class DQ_API {
         ] );
 
         return self::handle( $resp, "POST $path" );
-    }
-
-    // ------------------------- CUSTOMER METHODS ----------------------------- //
-
-    /**
-     * Look up a customer by email using QBO Query.
-     * NOTE: Correct syntax is PrimaryEmailAddr = 'email'
-     */
-    public static function get_customer_by_email( $email ) {
-       // DQ_Logger::debug( 'QBO QUERY Customer', $email );
-
-        $s = get_option('dq_settings', []);
-        $realm = $s['realm_id'] ?? ( DQ_Auth::get_tokens()['realm_id'] ?? '' );
-        $query = sprintf( "select * from Customer where PrimaryEmailAddr = '%s'", esc_sql( $email ) );
-        $url = self::base_url() . $realm . '/query?query=' . rawurlencode( $query ) . '&minorversion=65';
-
-        $resp = wp_remote_get( $url, [
-            'headers' => self::headers(false),
-            'timeout' => 30,
-        ]);
-
-        $data = self::handle( $resp, 'Customer Query' );
-        if ( is_wp_error( $data ) ) return $data;
-
-        if ( ! empty( $data['QueryResponse']['Customer'][0] ) ) {
-            return $data['QueryResponse']['Customer'][0];
-        }
-        return null;
-    }
-
-    /**
-     * Create a customer, gracefully handling duplicate-name (6240).
-     */
-    public static function create_customer( $data ) {
-       // DQ_Logger::info( 'Creating QuickBooks customer', $data );
-
-        $email = $data['PrimaryEmailAddr']['Address'] ?? '';
-        $display_name = $data['DisplayName'] ?? '';
-
-        // First, try to find by email
-        if ( $email ) {
-            $existing = self::get_customer_by_email( $email );
-            if ( $existing ) {
-               // DQ_Logger::info( 'Customer already exists (via email)', $existing );
-                return $existing;
-            }
-        }
-
-        // Attempt create
-        $result = self::post( 'customer', $data, 'Customer Create' );
-        if ( is_wp_error( $result ) ) {
-            $msg = $result->get_error_message();
-            if ( strpos( $msg, 'Duplicate Name Exists Error' ) !== false ) {
-                // Query by DisplayName as a fallback
-                $s = get_option('dq_settings', []);
-                $realm = $s['realm_id'] ?? ( DQ_Auth::get_tokens()['realm_id'] ?? '' );
-                $q = sprintf( "select * from Customer where DisplayName = '%s'", esc_sql( $display_name ) );
-                $url = self::base_url() . $realm . '/query?query=' . rawurlencode( $q ) . '&minorversion=65';
-
-                $resp = wp_remote_get( $url, [
-                    'headers' => self::headers(false),
-                    'timeout' => 30,
-                ]);
-                $retry = self::handle( $resp, 'Customer Duplicate Retry' );
-                if ( ! is_wp_error( $retry ) && ! empty( $retry['QueryResponse']['Customer'][0] ) ) {
-                    return $retry['QueryResponse']['Customer'][0];
-                }
-            }
-        }
-        return $result;
     }
 
     // -------------------------- INVOICE METHODS ----------------------------- //
@@ -169,7 +96,6 @@ class DQ_API {
      * Robust update method with guaranteed SyncToken fetch for Sandbox/Prod.
      */
     public static function update_invoice( $invoice_id, $payload ) {
-        // Log start
         DQ_Logger::info( "Updating QuickBooks invoice #$invoice_id", $payload );
 
         $s = get_option('dq_settings', []);
@@ -190,14 +116,16 @@ class DQ_API {
         }
         $sync_token = (string) $invoice['SyncToken'];
 
-        // STEP 2: Build robust update payload (include CustomerMemo + CustomField)
+        // STEP 2: Build update payload (preserve PrivateNote if not provided)
         $update_payload = [
             'Id'          => (string) $invoice_id,
             'SyncToken'   => $sync_token,
             'sparse'      => false, // full update
             'Line'        => $payload['Line'] ?? [],
             'CustomerRef' => $payload['CustomerRef'] ?? $invoice['CustomerRef'] ?? null,
-            'PrivateNote' => $payload['PrivateNote'] ?? '',
+            'PrivateNote' => array_key_exists('PrivateNote', $payload)
+                ? $payload['PrivateNote']
+                : ($invoice['PrivateNote'] ?? ''), // keep existing to avoid blanking the UI field
         ];
 
         // Add CustomerMemo if present
@@ -210,7 +138,7 @@ class DQ_API {
             $update_payload['CustomField'] = $payload['CustomField'];
         }
 
-        // Optional: preserve existing tax info to avoid "Business Validation Error"
+        // Preserve existing tax info to avoid validation errors
         if ( isset( $invoice['TxnTaxDetail'] ) ) {
             $update_payload['TxnTaxDetail'] = $invoice['TxnTaxDetail'];
         }
@@ -236,7 +164,6 @@ class DQ_API {
         return $result;
     }
 
-
     public static function get_invoice( $id ) {
         return self::get( 'invoice/' . intval($id) . '?minorversion=65', 'Get Invoice' );
     }
@@ -251,46 +178,39 @@ class DQ_API {
         ] );
         return self::handle( $resp, 'Custom Query' );
     }
-    
-    // Convenience wrapper so older/import code can call DQ_API::create('Entity', $payload)
+
+    // Convenience wrapper
     public static function create( $entity, $payload ) {
         $e = strtolower(trim($entity));
         switch ($e) {
             case 'invoice':
-                // Use the dedicated method the plugin already provides
                 return self::create_invoice($payload);
             case 'customer':
                 return self::create_customer($payload);
             default:
-                // Generic POST for entities like item, payment, etc.
                 return self::post($e, $payload, 'Create ' . ucfirst($e));
         }
     }
-    
-    
+
     public static function get_invoice_by_id( $invoice_id ) {
         if ( ! $invoice_id ) {
             return new WP_Error('dq_no_invoice_id', 'Missing invoice id.');
         }
-    
+
         $realm_id = self::realm_id();
         if ( ! $realm_id ) {
-            return new WP_Error(
-                'dq_no_realm',
-                'Missing QuickBooks realm/company id. Save it in the plugin settings or capture it during OAuth (realmId).'
-            );
+            return new WP_Error('dq_no_realm','Missing QuickBooks realm/company id. Save it in the plugin settings or capture it during OAuth (realmId).');
         }
-    
+
         $url = trailingslashit( self::base_url() . $realm_id ) . 'invoice/' . urlencode( $invoice_id ) . '?minorversion=65';
-    
+
         $res = wp_remote_get( $url, [ 'headers' => self::headers(true), 'timeout' => 20 ] );
         if ( is_wp_error( $res ) ) return $res;
-    
+
         $code = wp_remote_retrieve_response_code( $res );
         $body = json_decode( wp_remote_retrieve_body( $res ), true );
-    
+
         if ( $code !== 200 || empty( $body['Invoice'] ) ) {
-            // Fallback to query endpoint
             $q = "select * from Invoice where Id = '{$invoice_id}'";
             $fallback = self::query_raw( $q );
             if ( ! is_wp_error( $fallback ) && ! empty( $fallback['QueryResponse']['Invoice'][0] ) ) {
@@ -298,70 +218,47 @@ class DQ_API {
             }
             return new WP_Error('dq_qbo_fetch_failed', 'Unable to fetch invoice from QuickBooks.', [ 'code' => $code, 'body' => $body ]);
         }
-    
+
         return $body['Invoice'];
     }
 
-    
-    /**
-     * Minimal query helper (used as a fallback above).
-     */
     public static function query_raw( $sql ) {
         $realm_id = DQ_Auth::realm_id();
         if ( ! $realm_id ) return new WP_Error('dq_no_realm', 'Missing QuickBooks realm/company id.');
-    
+
         $url = trailingslashit( self::base_url() . $realm_id ) . 'query?minorversion=65&query=' . rawurlencode( $sql );
         $res = wp_remote_get( $url, [ 'headers' => self::headers(true), 'timeout' => 25 ] );
         if ( is_wp_error( $res ) ) return $res;
-    
+
         $code = wp_remote_retrieve_response_code( $res );
         $body = json_decode( wp_remote_retrieve_body( $res ), true );
-    
+
         if ( $code !== 200 ) {
             return new WP_Error('dq_qbo_query_failed', 'Query endpoint returned an error.', [ 'code' => $code, 'body' => $body ]);
         }
         return $body;
     }
-    
-    
-    // Inside class DQ_API
 
-    /**
-     * Resolve QuickBooks Realm (Company) ID.
-     */
     private static function realm_id() {
-        // Allow a hard override if you ever need one
         if ( defined('DQ_REALM_ID') && DQ_REALM_ID ) {
             return (string) DQ_REALM_ID;
         }
-    
-        // Look in stored WP options (your site uses "woqb_realm_id")
-        foreach ( ['woqb_realm_id', 'dq_realm_id', 'dq_company_id', 'qb_company_id', 'qbo_company_id'] as $opt ) {
+        foreach ( ['woqb_realm_id','dq_realm_id','dq_company_id','qb_company_id','qbo_company_id'] as $opt ) {
             $rid = get_option( $opt );
-            if ( ! empty( $rid ) ) {
-                return (string) $rid;
-            }
+            if ( ! empty( $rid ) ) return (string) $rid;
         }
-    
-        // Ask the auth class if available
         if ( class_exists('DQ_Auth') && method_exists('DQ_Auth', 'realm_id') ) {
             $rid = DQ_Auth::realm_id();
-            if ( ! empty( $rid ) ) {
-                return (string) $rid;
-            }
+            if ( ! empty( $rid ) ) return (string) $rid;
         }
-    
-        // Last chance: let themes/plugins provide it
         $rid = apply_filters( 'dq_realm_id', '' );
         return (string) $rid;
     }
-    
+
     public static function get_invoice_by_docnumber($docnumber) {
         $query = "SELECT * FROM Invoice WHERE DocNumber = '$docnumber'";
         $resp = self::query($query);
         if (is_wp_error($resp) || empty($resp['QueryResponse']['Invoice'])) return new WP_Error('no_invoice', 'Invoice not found by DocNumber');
         return $resp['QueryResponse']['Invoice'][0];
     }
-
-
 }
