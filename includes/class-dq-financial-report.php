@@ -309,6 +309,7 @@ class DQ_Financial_Report {
         return ( $clean === '' || ! is_numeric($clean) ) ? 0.0 : (float)$clean;
     }
 
+    // ...rest of class...
     private static function render_table( array $data, int $engineer_filter, string $start, string $end, string $report, int $year, int $month, int $quarter ) {
         $totals = [
             'count'=>0,
@@ -330,6 +331,10 @@ class DQ_Financial_Report {
         .dq-fr-profit-neg { color:#c40000; font-weight:600; }
         .dq-fr-totals-row td { font-weight:600; background:#e6f8fc; }
         .dq-fr-invoice-list { margin:12px 0 24px 0; padding-left:20px; list-style:disc; }
+        /* Popup table */
+        .dq-fr-modal-invoice-table { width:100%; border-collapse:collapse; margin-bottom:10px; }
+        .dq-fr-modal-invoice-table th { background:#f2fbfe; color:#333; font-weight:600; padding:6px 6px; font-size:14px; }
+        .dq-fr-modal-invoice-table td { border-bottom:1px solid #eee; font-size:13px; padding:4px 7px; vertical-align:middle; }
         </style>';
 
         echo '<table class="dq-fr-table">';
@@ -348,7 +353,7 @@ class DQ_Financial_Report {
             $totals['profit']         += $row['profit'];
 
             $avatar_html = self::get_user_avatar_html( $uid );
-            // Link to same report, filtered by engineer (so user won't get "Sorry" error)
+
             $engineer_link = add_query_arg([
                 'page'     => 'dq-financial-reports',
                 'report'   => $report,
@@ -360,7 +365,7 @@ class DQ_Financial_Report {
 
             echo '<tr>';
             echo '<td><span class="dq-fr-name">' . $avatar_html . esc_html( $row['display_name'] ) . '</span></td>';
-            echo '<td><a href="' . esc_url( $engineer_link ) . '">' . intval($row['count']) . '</a></td>';
+            echo '<td><a href="#" onclick="document.getElementById(\'dq-fr-modal-' . $uid . '\').style.display=\'block\';return false;">' . intval($row['count']) . '</a></td>';
             echo '<td>' . self::money( $row['invoice_amount'] ) . '</td>';
             echo '<td>' . self::money( $row['labor_cost'] ) . '</td>';
             echo '<td>' . self::money( $row['direct_labor'] ) . '</td>';
@@ -385,32 +390,165 @@ class DQ_Financial_Report {
 
         echo '</tbody></table>';
 
-        // Invoice detail list for selected engineer (in this report period)
-        if ( $engineer_filter && isset( $data[ $engineer_filter ] ) ) {
-    // Unique modal ID for this engineer
+       // --- Invoice detail modal with TABLE and hover tooltips ---
+if ( $engineer_filter && isset( $data[ $engineer_filter ] ) ) {
     $modalId = 'dq-fr-modal-' . $engineer_filter;
+    $engineerInvoices = $data[$engineer_filter]['invoices'];
 
     echo <<<HTML
 <div id="$modalId" class="dq-fr-modal-overlay" style="display:block;">
   <div class="dq-fr-modal-window">
     <button class="dq-fr-modal-close" onclick="document.getElementById('$modalId').style.display='none';event.preventDefault();">&times;</button>
     <h2>Invoice List — {$data[$engineer_filter]['display_name']}</h2>
-    <ul class="dq-fr-invoice-list">
+    <table class="dq-fr-modal-invoice-table">
+      <thead>
+        <tr>
+          <th>Invoice Number</th>
+          <th>Work Orders</th>
+          <th>Invoice Date</th>
+          <th>Invoice Amount</th>
+          <th>Labor Cost</th>
+          <th>Direct Labor Cost</th>
+          <th>Travel Cost</th>
+          <th>Other Billed Expense</th>
+        </tr>
+      </thead>
+      <tbody>
 HTML;
 
-    foreach ( $data[ $engineer_filter ]['invoices'] as $inv ) {
-        $link = get_edit_post_link( $inv['post_id'] );
-        $num  = $inv['number'] ?: ('Post #' . $inv['post_id']);
-        echo '<li><a href="' . esc_url($link) . '">' . intval($inv['post_id']) . '</a> #' . esc_html($num) . ' : ' . esc_html($inv['date']) . ' : ' . self::money($inv['amount']) . '</li>';
+    foreach ( $engineerInvoices as $inv ) {
+        $pid = $inv['post_id'];
+        $num  = $inv['number'] ?: ('Post #' . $pid);
+        $inv_link = get_edit_post_link( $pid );
+
+        // Work orders
+        $wo_field = function_exists('get_field') ? get_field(self::FIELD_WO_RELATION, $pid) : get_post_meta($pid, self::FIELD_WO_RELATION, true);
+        $wo_display = '';
+        if (is_array($wo_field)) {
+            foreach ($wo_field as $wo_item) {
+                $wo_id = (is_numeric($wo_item) ? intval($wo_item) : (is_object($wo_item) ? $wo_item->ID : null));
+                if ($wo_id) {
+                    $wo_link = get_edit_post_link($wo_id);
+                    $wo_display .= '<a href="' . esc_url($wo_link) . '" target="_blank">#' . $wo_id . '</a>, ';
+                }
+            }
+            $wo_display = rtrim($wo_display,', ');
+        } elseif (is_numeric($wo_field)) {
+            $wo_id = intval($wo_field);
+            $wo_link = get_edit_post_link($wo_id);
+            $wo_display = '<a href="' . esc_url($wo_link) . '" target="_blank">#' . $wo_id . '</a>';
+        } elseif ($wo_field instanceof WP_Post) {
+            $wo_id = $wo_field->ID;
+            $wo_link = get_edit_post_link($wo_id);
+            $wo_display = '<a href="' . esc_url($wo_link) . '" target="_blank">#' . $wo_id . '</a>';
+        }
+
+        // Invoice date
+        $inv_date = function_exists('get_field') ? get_field(self::FIELD_DATE, $pid) : get_post_meta($pid, self::FIELD_DATE, true);
+        // Invoice Amount
+        $inv_total = function_exists('get_field') ? get_field(self::FIELD_TOTAL_BILLED, $pid) : get_post_meta($pid, self::FIELD_TOTAL_BILLED, true);
+
+        // Labor, Travel, Other Billed Expense breakdown
+        $lines = function_exists('get_field') ? get_field(self::FIELD_LINES_REPEATER, $pid) : get_post_meta($pid, self::FIELD_LINES_REPEATER, true);
+        $labor = $travel = $otherExp = 0;
+        $tz1 = $tz2 = $tz3 = 0; // Travel Zones
+        $toll = $meals = $parking = 0; // Other billed
+
+        if (is_array($lines)) {
+            foreach ($lines as $row) {
+                $activity = isset($row[self::FIELD_LINES_ACTIVITY]) ? trim((string)$row[self::FIELD_LINES_ACTIVITY]) : '';
+                $amount = self::num($row[self::FIELD_LINES_AMOUNT] ?? 0);
+                if ($activity === self::ACTIVITY_LABOR) {
+                    $labor += $amount;
+                } elseif ($activity === 'Travel Zone 1') {
+                    $travel += $amount; $tz1 += $amount;
+                } elseif ($activity === 'Travel Zone 2') {
+                    $travel += $amount; $tz2 += $amount;
+                } elseif ($activity === 'Travel Zone 3') {
+                    $travel += $amount; $tz3 += $amount;
+                } elseif ($activity === 'Toll') {
+                    $otherExp += $amount; $toll += $amount;
+                } elseif ($activity === 'Meals') {
+                    $otherExp += $amount; $meals += $amount;
+                } elseif ($activity === 'Parking') {
+                    $otherExp += $amount; $parking += $amount;
+                }
+            }
+        }
+        // Direct Labor Cost
+        $directLabor = 0;
+        $other = function_exists('get_field') ? get_field(self::FIELD_OTHER_EXPENSES, $pid) : get_post_meta($pid, self::FIELD_OTHER_EXPENSES, true);
+        if (is_array($other)) {
+            foreach ($other as $row) {
+                $directLabor += self::num($row[self::FIELD_OTHER_AMOUNT] ?? 0);
+            }
+        }
+
+        // Tooltip content for Travel and Other Expense
+        $travelTooltip = "Travel Zone 1: " . self::money($tz1) . "\nTravel Zone 2: " . self::money($tz2) . "\nTravel Zone 3: " . self::money($tz3);
+        $otherTooltip = "Toll: " . self::money($toll) . "\nMeals: " . self::money($meals) . "\nParking: " . self::money($parking);
+
+        echo '<tr>';
+        echo '<td><a href="' . esc_url($inv_link) . '" target="_blank">' . esc_html($num) . '</a></td>';
+        echo '<td>' . $wo_display . '</td>';
+        echo '<td>' . esc_html($inv_date) . '</td>';
+        echo '<td>' . self::money($inv_total) . '</td>';
+        echo '<td>' . self::money($labor) . '</td>';
+        echo '<td>' . self::money($directLabor) . '</td>';
+
+        // Travel Cost with tooltip
+        echo '<td><span class="dq-fr-tooltip" tabindex="0" title="' . esc_attr($travelTooltip) . '">' . self::money($travel) . '</span></td>';
+        // Other Expense with tooltip
+        echo '<td><span class="dq-fr-tooltip" tabindex="0" title="' . esc_attr($otherTooltip) . '">' . self::money($otherExp) . '</span></td>';
+
+        echo '</tr>';
     }
 
     echo <<<HTML
-    </ul>
+      </tbody>
+    </table>
   </div>
 </div>
 HTML;
-    // Add a script to allow closing with ESC key or modal click
+
+    // Tooltip and modal styling + allow closing by click/ESC
     echo <<<HTML
+<style>
+.dq-fr-modal-overlay {
+  position:fixed; top:0; left:0; right:0; bottom:0;
+  width:100vw; height:100vh;
+  background:rgba(0,0,0,0.35);
+  z-index:9999;
+  display:none;
+}
+.dq-fr-modal-overlay[style*="display:block"] {
+  display:block;
+}
+.dq-fr-modal-window {
+  background:#fff; max-width:900px; margin:50px auto; padding:24px 20px 20px 20px; border-radius:8px;
+  box-shadow:0 8px 24px rgba(0,0,0,0.09);
+  position:relative;
+}
+.dq-fr-modal-close {
+  position:absolute; right:16px; top:12px; font-size:32px;
+  background:transparent; border:none; color:#333; cursor:pointer;
+  padding:0; line-height:1;
+}
+.dq-fr-modal-invoice-table th, .dq-fr-modal-invoice-table td {
+  border-right: 1px solid #eee;
+}
+.dq-fr-modal-invoice-table th:last-child, .dq-fr-modal-invoice-table td:last-child {
+  border-right: none;
+}
+.dq-fr-modal-invoice-table tr:last-child td {
+  border-bottom:none;
+}
+.dq-fr-tooltip[title] {
+  cursor:help;
+  border-bottom:1px dotted #888;
+  position:relative;
+}
+</style>
 <script>
 (function() {
     var modal = document.getElementById('$modalId');
@@ -426,8 +564,8 @@ HTML;
 HTML;
 }
 
-// Add modal styles (at END of render_table, only once!)
-echo <<<HTML
+        // Add modal styles (at END of render_table, only once!)
+        echo <<<HTML
 <style>
 .dq-fr-modal-overlay {
   position:fixed; top:0; left:0; right:0; bottom:0;
@@ -440,7 +578,7 @@ echo <<<HTML
   display:block;
 }
 .dq-fr-modal-window {
-  background:#fff; max-width:600px; margin:50px auto; padding:24px 20px 20px 20px; border-radius:8px;
+  background:#fff; max-width:900px; margin:50px auto; padding:24px 20px 20px 20px; border-radius:8px;
   box-shadow:0 8px 24px rgba(0,0,0,0.09);
   position:relative;
 }
@@ -448,6 +586,15 @@ echo <<<HTML
   position:absolute; right:16px; top:12px; font-size:32px;
   background:transparent; border:none; color:#333; cursor:pointer;
   padding:0; line-height:1;
+}
+.dq-fr-modal-invoice-table th, .dq-fr-modal-invoice-table td {
+  border-right: 1px solid #eee;
+}
+.dq-fr-modal-invoice-table th:last-child, .dq-fr-modal-invoice-table td:last-child {
+  border-right: none;
+}
+.dq-fr-modal-invoice-table tr:last-child td {
+  border-bottom:none;
 }
 .dq-fr-invoice-list { margin:12px 0 10px 0; padding-left:22px; list-style:disc; }
 </style>
