@@ -27,20 +27,15 @@ require_once DQQB_PATH . 'includes/class-dq-settings.php';
 require_once DQQB_PATH . 'includes/class-dq-auth.php';
 require_once DQQB_PATH . 'includes/class-dq-api.php';
 require_once DQQB_PATH . 'includes/class-dq-invoice.php';
-
 require_once DQQB_PATH . 'includes/acf-invoice-addresses.php';
 require_once DQQB_PATH . 'includes/class-dq-metabox.php';
 require_once DQQB_PATH . 'includes/class-dq-csv-importer.php';
-
-// New: QuickBooks Invoice CPT sync
 require_once DQQB_PATH . 'includes/class-dq-qi-sync.php';
 require_once DQQB_PATH . 'includes/class-dq-qi-metabox.php';
-
-// New: CSV → CPT quickbooks_invoice importer
 require_once DQQB_PATH . 'includes/class-dq-qi-csv-import.php';
-
-// Add columns to Invoice CPT
 require_once DQQB_PATH . 'includes/class-dq-qi-admin-table.php';
+// NEW: Financial Reports
+require_once DQQB_PATH . 'includes/class-dq-financial-report.php';
 
 // -----------------------------------------------------------------------------
 // Initialize Plugin
@@ -73,6 +68,7 @@ add_action( 'plugins_loaded', function() {
     if ( class_exists( 'DQ_API' ) ) DQ_API::init();
     if ( class_exists( 'DQ_Metabox' ) ) DQ_Metabox::init();
     if ( class_exists( 'DQ_QI_Metabox' ) ) DQ_QI_Metabox::init();
+    if ( class_exists( 'DQ_Financial_Report' ) ) DQ_Financial_Report::init(); // NEW
 });
 
 // -----------------------------------------------------------------------------
@@ -85,10 +81,35 @@ register_activation_hook( __FILE__, function() {
     if ( ! file_exists( $logfile ) ) {
         file_put_contents( $logfile, '[' . date('c') . "] Log initialized\n" );
     }
+
+    // Add custom role 'engineer' if not present
+    if ( ! get_role( 'engineer' ) ) {
+        add_role(
+            'engineer',
+            'Engineer',
+            [
+                'read' => true,
+            ]
+        );
+    }
+    // Ensure capability for viewing reports
+    $admin = get_role( 'administrator' );
+    if ( $admin && ! $admin->has_cap( 'view_financial_reports' ) ) {
+        $admin->add_cap( 'view_financial_reports' );
+    }
+    $eng = get_role( 'engineer' );
+    if ( $eng && ! $eng->has_cap( 'view_financial_reports' ) ) {
+        $eng->add_cap( 'view_financial_reports' );
+    }
 });
 
 register_deactivation_hook( __FILE__, function() {
     delete_transient( 'dq_oauth_state' );
+    // (Optional) Remove capability from roles on deactivation:
+    $admin = get_role( 'administrator' );
+    if ( $admin ) $admin->remove_cap( 'view_financial_reports' );
+    $eng = get_role( 'engineer' );
+    if ( $eng ) $eng->remove_cap( 'view_financial_reports' );
 });
 
 // -----------------------------------------------------------------------------
