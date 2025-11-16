@@ -135,33 +135,42 @@ class DQ_Financial_Report {
     $years = range( date('Y') - 5, date('Y') + 2 );
     echo '<form method="get" style="margin:15px 0;display:flex;gap:12px;align-items:flex-end;">';
     echo '<input type="hidden" name="page" value="dq-financial-reports">';
-    // Type selector
-    echo '<div><label style="font-weight:600;">Type<br><select name="report">';
-    foreach ( ['yearly'=>'Yearly','quarterly'=>'Quarterly','monthly'=>'Monthly'] as $val=>$label ) {
-        printf('<option value="%s"%s>%s</option>', esc_attr($val), selected($report,$val,false), esc_html($label));
-    }
-    echo '</select></label></div>';
 
-    // Month: enabled ONLY for Monthly reports
-    echo '<div><label style="font-weight:600;">Month<br><select name="month" ' . ( $report==='monthly' ? '' : 'disabled style="background:#eee;color:#aaa;"' ) . '>';
-    for ( $m=1; $m<=12; $m++ ) {
-        printf('<option value="%d"%s>%s</option>', $m, selected($month,$m,false), date('F', mktime(0,0,0,$m,1)));
+    if ($report === 'monthly') {
+        // Monthly: Only month + year
+        echo '<input type="hidden" name="report" value="monthly">';
+        echo '<div><label style="font-weight:600;">Month<br><select name="month">';
+        for ($m=1; $m<=12; $m++) {
+            printf('<option value="%d"%s>%s</option>', $m, selected($month,$m,false), date('F', mktime(0,0,0,$m,1)));
+        }
+        echo '</select></label></div>';
+        echo '<div><label style="font-weight:600;">Year<br><select name="year">';
+        foreach ($years as $y) {
+            printf('<option value="%d"%s>%d</option>', $y, selected($year,$y,false), $y);
+        }
+        echo '</select></label></div>';
+    } elseif ($report === 'quarterly') {
+        // Quarterly: Only quarter + year
+        echo '<input type="hidden" name="report" value="quarterly">';
+        echo '<div><label style="font-weight:600;">Quarter<br><select name="quarter">';
+        for ($q = 1; $q <= 4; $q++) {
+            printf('<option value="%d"%s>Q%d</option>', $q, selected($quarter,$q,false), $q);
+        }
+        echo '</select></label></div>';
+        echo '<div><label style="font-weight:600;">Year<br><select name="year">';
+        foreach ($years as $y) {
+            printf('<option value="%d"%s>%d</option>', $y, selected($year,$y,false), $y);
+        }
+        echo '</select></label></div>';
+    } else {
+        // Yearly: Only year
+        echo '<input type="hidden" name="report" value="yearly">';
+        echo '<div><label style="font-weight:600;">Year<br><select name="year">';
+        foreach ($years as $y) {
+            printf('<option value="%d"%s>%d</option>', $y, selected($year,$y,false), $y);
+        }
+        echo '</select></label></div>';
     }
-    echo '</select></label></div>';
-
-    // Quarter: enabled ONLY for Quarterly reports
-    echo '<div><label style="font-weight:600;">Quarter<br><select name="quarter" ' . ( $report==='quarterly' ? '' : 'disabled style="background:#eee;color:#aaa;"' ) . '>';
-    for ( $q=1; $q<=4; $q++ ) {
-        printf('<option value="%d"%s>Q%d</option>', $q, selected($quarter,$q,false), $q);
-    }
-    echo '</select></label></div>';
-
-    // Year: always enabled
-    echo '<div><label style="font-weight:600;">Year<br><select name="year">';
-    foreach ( $years as $y ) {
-        printf('<option value="%d"%s>%d</option>', $y, selected($year,$y,false), $y);
-    }
-    echo '</select></label></div>';
 
     echo '<div><br><input type="submit" class="button button-primary" value="Filter"></div>';
     echo '</form>';
