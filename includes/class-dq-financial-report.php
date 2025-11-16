@@ -22,7 +22,7 @@ class DQ_Financial_Report {
     // Activity labels
     const ACTIVITY_LABOR       = 'Labor Rate HR';
     const ACTIVITY_TRAVEL      = ['Travel Zone 1','Travel Zone 2','Travel Zone 3'];
-    const ACTIVITY_TOLLS       = 'Toll, Meals, Parking';
+    const ACTIVITY_TOLLS        = ['Toll', 'Meals', 'Parking'];
 
     public static function init() {
         add_action( 'admin_menu', [ __CLASS__, 'menu' ] );
@@ -132,36 +132,40 @@ class DQ_Financial_Report {
     }
 
     private static function filters_form( $report, $year, $month, $quarter ) {
-        $years = range( date('Y') - 5, date('Y') + 2 );
-        echo '<form method="get" style="margin:15px 0;display:flex;gap:12px;align-items:flex-end;">';
-        echo '<input type="hidden" name="page" value="dq-financial-reports">';
-        // Report type
-        echo '<div><label style="font-weight:600;">Type<br><select name="report">';
-        foreach ( ['yearly'=>'Yearly','quarterly'=>'Quarterly','monthly'=>'Monthly'] as $val=>$label ) {
-            printf('<option value="%s"%s>%s</option>', esc_attr($val), selected($report,$val,false), esc_html($label));
-        }
-        echo '</select></label></div>';
-        // Month (monthly only)
-        echo '<div><label style="font-weight:600;">Month<br><select name="month" ' . ( $report==='monthly' ? '' : 'disabled' ) . '>';
-        for ( $m=1; $m<=12; $m++ ) {
-            printf('<option value="%d"%s>%s</option>', $m, selected($month,$m,false), date('F', mktime(0,0,0,$m,1)));
-        }
-        echo '</select></label></div>';
-        // Quarter (quarterly only)
-        echo '<div><label style="font-weight:600;">Quarter<br><select name="quarter" ' . ( $report==='quarterly' ? '' : 'disabled' ) . '>';
-        for ( $q=1; $q<=4; $q++ ) {
-            printf('<option value="%d"%s>Q%d</option>', $q, selected($quarter,$q,false), $q);
-        }
-        echo '</select></label></div>';
-        // Year
-        echo '<div><label style="font-weight:600;">Year<br><select name="year">';
-        foreach ( $years as $y ) {
-            printf('<option value="%d"%s>%d</option>', $y, selected($year,$y,false), $y);
-        }
-        echo '</select></label></div>';
-        echo '<div><br><input type="submit" class="button button-primary" value="Filter"></div>';
-        echo '</form>';
+    $years = range( date('Y') - 5, date('Y') + 2 );
+    echo '<form method="get" style="margin:15px 0;display:flex;gap:12px;align-items:flex-end;">';
+    echo '<input type="hidden" name="page" value="dq-financial-reports">';
+    // Type selector
+    echo '<div><label style="font-weight:600;">Type<br><select name="report">';
+    foreach ( ['yearly'=>'Yearly','quarterly'=>'Quarterly','monthly'=>'Monthly'] as $val=>$label ) {
+        printf('<option value="%s"%s>%s</option>', esc_attr($val), selected($report,$val,false), esc_html($label));
     }
+    echo '</select></label></div>';
+
+    // Month: enabled ONLY for Monthly reports
+    echo '<div><label style="font-weight:600;">Month<br><select name="month" ' . ( $report==='monthly' ? '' : 'disabled style="background:#eee;color:#aaa;"' ) . '>';
+    for ( $m=1; $m<=12; $m++ ) {
+        printf('<option value="%d"%s>%s</option>', $m, selected($month,$m,false), date('F', mktime(0,0,0,$m,1)));
+    }
+    echo '</select></label></div>';
+
+    // Quarter: enabled ONLY for Quarterly reports
+    echo '<div><label style="font-weight:600;">Quarter<br><select name="quarter" ' . ( $report==='quarterly' ? '' : 'disabled style="background:#eee;color:#aaa;"' ) . '>';
+    for ( $q=1; $q<=4; $q++ ) {
+        printf('<option value="%d"%s>Q%d</option>', $q, selected($quarter,$q,false), $q);
+    }
+    echo '</select></label></div>';
+
+    // Year: always enabled
+    echo '<div><label style="font-weight:600;">Year<br><select name="year">';
+    foreach ( $years as $y ) {
+        printf('<option value="%d"%s>%d</option>', $y, selected($year,$y,false), $y);
+    }
+    echo '</select></label></div>';
+
+    echo '<div><br><input type="submit" class="button button-primary" value="Filter"></div>';
+    echo '</form>';
+}
 
     private static function compute_date_range( string $report, int $year, int $month, int $quarter ) : array {
         switch ( $report ) {
@@ -266,7 +270,7 @@ class DQ_Financial_Report {
                         $out[ $engineer_id ]['labor_cost'] += $amount;
                     } elseif ( in_array( $activity, self::ACTIVITY_TRAVEL, true ) ) {
                         $out[ $engineer_id ]['travel_cost'] += $amount;
-                    } elseif ( $activity === self::ACTIVITY_TOLLS ) {
+                    } elseif ( in_array( $activity, self::ACTIVITY_TOLLS, true ) ) {
                         $out[ $engineer_id ]['tolls_meals'] += $amount;
                     }
                 }
@@ -383,15 +387,71 @@ class DQ_Financial_Report {
 
         // Invoice detail list for selected engineer (in this report period)
         if ( $engineer_filter && isset( $data[ $engineer_filter ] ) ) {
-            echo '<h2 style="margin-top:30px;">Invoice List — ' . esc_html( $data[ $engineer_filter ]['display_name'] ) . '</h2>';
-            echo '<ul class="dq-fr-invoice-list">';
-            foreach ( $data[ $engineer_filter ]['invoices'] as $inv ) {
-                $link = get_edit_post_link( $inv['post_id'] );
-                $num  = $inv['number'] ?: ('Post #' . $inv['post_id']);
-                echo '<li><a href="' . esc_url($link) . '">' . intval($inv['post_id']) . '</a> #' . esc_html($num) . ' : ' . esc_html($inv['date']) . ' : ' . self::money($inv['amount']) . '</li>';
-            }
-            echo '</ul>';
-        }
+    // Unique modal ID for this engineer
+    $modalId = 'dq-fr-modal-' . $engineer_filter;
+
+    echo <<<HTML
+<div id="$modalId" class="dq-fr-modal-overlay" style="display:block;">
+  <div class="dq-fr-modal-window">
+    <button class="dq-fr-modal-close" onclick="document.getElementById('$modalId').style.display='none';event.preventDefault();">&times;</button>
+    <h2>Invoice List — {$data[$engineer_filter]['display_name']}</h2>
+    <ul class="dq-fr-invoice-list">
+HTML;
+
+    foreach ( $data[ $engineer_filter ]['invoices'] as $inv ) {
+        $link = get_edit_post_link( $inv['post_id'] );
+        $num  = $inv['number'] ?: ('Post #' . $inv['post_id']);
+        echo '<li><a href="' . esc_url($link) . '">' . intval($inv['post_id']) . '</a> #' . esc_html($num) . ' : ' . esc_html($inv['date']) . ' : ' . self::money($inv['amount']) . '</li>';
+    }
+
+    echo <<<HTML
+    </ul>
+  </div>
+</div>
+HTML;
+    // Add a script to allow closing with ESC key or modal click
+    echo <<<HTML
+<script>
+(function() {
+    var modal = document.getElementById('$modalId');
+    if (!modal) return;
+    modal.addEventListener('click', function(e) {
+        if (e.target == modal) modal.style.display = 'none';
+    });
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') modal.style.display = 'none';
+    });
+})();
+</script>
+HTML;
+}
+
+// Add modal styles (at END of render_table, only once!)
+echo <<<HTML
+<style>
+.dq-fr-modal-overlay {
+  position:fixed; top:0; left:0; right:0; bottom:0;
+  width:100vw; height:100vh;
+  background:rgba(0,0,0,0.35);
+  z-index:9999;
+  display:none;
+}
+.dq-fr-modal-overlay[style*="display:block"] {
+  display:block;
+}
+.dq-fr-modal-window {
+  background:#fff; max-width:600px; margin:50px auto; padding:24px 20px 20px 20px; border-radius:8px;
+  box-shadow:0 8px 24px rgba(0,0,0,0.09);
+  position:relative;
+}
+.dq-fr-modal-close {
+  position:absolute; right:16px; top:12px; font-size:32px;
+  background:transparent; border:none; color:#333; cursor:pointer;
+  padding:0; line-height:1;
+}
+.dq-fr-invoice-list { margin:12px 0 10px 0; padding-left:22px; list-style:disc; }
+</style>
+HTML;
     }
 
     private static function money( $v ) {
