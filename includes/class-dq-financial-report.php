@@ -2,19 +2,9 @@
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 /**
- * Financial Reports (Monthly / Quarterly / Yearly) aggregated by Field Engineer.
- *
- * Columns:
- * 1. Field Engineer (author of linked Work Order via qi_wo_number) with profile_picture or avatar
- * 2. Total Invoices (count of quickbooks_invoice posts in date range, link to detail list)
- * 3. Invoice Amount (sum qi_total_billed)
- * 4. Labor Cost (sum of qi_invoice repeater rows where activity == "Labor Rate HR")
- * 5. Direct Labor Cost (sum of qi_other_expenses repeater amount)
- * 6. Travel Cost (sum of qi_invoice rows where activity in Travel Zone 1|2|3)
- * 7. Toll, Meals, Parking (sum qi_invoice rows where activity == "Toll, Meals, Parking")
- * 8. Profit (Invoice Amount - Direct Labor Cost)
- *
- * Date filtering based on ACF field qi_invoice_date (assumed Y-m-d or convertible).
+ * Financial Reports (Monthly / Quarterly / Yearly) as a separate admin menu.
+ * Menu icon: dashicons-chart-pie.
+ * Submenus: Yearly Report, Quarterly Report, Monthly Report.
  */
 class DQ_Financial_Report {
 
@@ -39,27 +29,74 @@ class DQ_Financial_Report {
         add_action( 'admin_post_dq_financial_report_csv', [ __CLASS__, 'handle_csv' ] );
     }
 
+    public static function user_can_view() {
+        // Only allow admins (manage_options) for menu visibility and page access
+        return current_user_can('manage_options');
+    }
+
     public static function menu() {
+        // Top-level menu
+        add_menu_page(
+            'Financial Reports',
+            'Financial Reports',
+            'manage_options',
+            'dq-financial-reports',
+            function() { DQ_Financial_Report::render_page_type('yearly'); },
+            'dashicons-chart-pie',
+            21
+        );
+        // Yearly Report submenu - slug matches parent
         add_submenu_page(
-            'edit.php?post_type=quickbooks_invoice',
-            'Financial Report',
-            'Financial Report',
-            'view_financial_reports',
-            'dq-financial-report',
-            [ __CLASS__, 'render_page' ]
+            'dq-financial-reports',
+            'Yearly Report',
+            'Yearly Report',
+            'manage_options',
+            'dq-financial-reports',
+            function() { DQ_Financial_Report::render_page_type('yearly'); }
+        );
+        // Quarterly
+        add_submenu_page(
+            'dq-financial-reports',
+            'Quarterly Report',
+            'Quarterly Report',
+            'manage_options',
+            'dq-financial-reports-quarterly',
+            function() { DQ_Financial_Report::render_page_type('quarterly'); }
+        );
+        // Monthly
+        add_submenu_page(
+            'dq-financial-reports',
+            'Monthly Report',
+            'Monthly Report',
+            'manage_options',
+            'dq-financial-reports-monthly',
+            function() { DQ_Financial_Report::render_page_type('monthly'); }
         );
     }
 
-    private static function user_can_view() : bool {
-        return current_user_can( 'view_financial_reports' ) || current_user_can( 'manage_options' );
+    /**
+     * Render a specific report type, routed by menu/submenu.
+     */
+    public static function render_page_type($type) {
+        // Prevent double table by running only once
+        static $rendered = false;
+        if ($rendered) return;
+        $rendered = true;
+
+        $report = in_array($type, ['yearly','quarterly','monthly']) ? $type : 'yearly';
+        $_GET['report'] = $report;
+        self::render_page();
     }
 
+    /**
+     * The main report page renderer.
+     */
     public static function render_page() {
         if ( ! self::user_can_view() ) {
             wp_die( 'Insufficient permissions.' );
         }
 
-        $report  = isset($_GET['report']) ? sanitize_key($_GET['report']) : 'monthly';
+        $report  = isset($_GET['report']) ? sanitize_key($_GET['report']) : 'yearly';
         $year    = isset($_GET['year']) ? intval($_GET['year']) : intval(date('Y'));
         $month   = isset($_GET['month']) ? intval($_GET['month']) : intval(date('n'));
         $quarter = isset($_GET['quarter']) ? intval($_GET['quarter']) : 1;
@@ -69,12 +106,11 @@ class DQ_Financial_Report {
         if ( $year < 2000 || $year > 2100 ) $year = intval(date('Y'));
         if ( $month < 1 || $month > 12 ) $month = intval(date('n'));
         if ( $quarter < 1 || $quarter > 4 ) $quarter = 1;
-        if ( ! in_array( $report, ['monthly','quarterly','yearly'], true ) ) $report = 'monthly';
+        if ( ! in_array( $report, ['monthly','quarterly','yearly'], true ) ) $report = 'yearly';
 
         $range = self::compute_date_range( $report, $year, $month, $quarter );
         $data  = self::aggregate( $range['start'], $range['end'] );
 
-        // Sort engineers alphabetically by display name
         uasort( $data, function( $a, $b ) {
             return strcasecmp( $a['display_name'], $b['display_name'] );
         });
@@ -96,39 +132,33 @@ class DQ_Financial_Report {
     }
 
     private static function filters_form( $report, $year, $month, $quarter ) {
-        $years = range( date('Y') - 5, date('Y') + 1 );
+        $years = range( date('Y') - 5, date('Y') + 2 );
         echo '<form method="get" style="margin:15px 0;display:flex;gap:12px;align-items:flex-end;">';
-        echo '<input type="hidden" name="post_type" value="quickbooks_invoice">';
-        echo '<input type="hidden" name="page" value="dq-financial-report">';
-
+        echo '<input type="hidden" name="page" value="dq-financial-reports">';
         // Report type
         echo '<div><label style="font-weight:600;">Type<br><select name="report">';
-        foreach ( ['monthly'=>'Monthly','quarterly'=>'Quarterly','yearly'=>'Yearly'] as $val=>$label ) {
+        foreach ( ['yearly'=>'Yearly','quarterly'=>'Quarterly','monthly'=>'Monthly'] as $val=>$label ) {
             printf('<option value="%s"%s>%s</option>', esc_attr($val), selected($report,$val,false), esc_html($label));
         }
         echo '</select></label></div>';
-
         // Month (monthly only)
         echo '<div><label style="font-weight:600;">Month<br><select name="month" ' . ( $report==='monthly' ? '' : 'disabled' ) . '>';
         for ( $m=1; $m<=12; $m++ ) {
             printf('<option value="%d"%s>%s</option>', $m, selected($month,$m,false), date('F', mktime(0,0,0,$m,1)));
         }
         echo '</select></label></div>';
-
         // Quarter (quarterly only)
         echo '<div><label style="font-weight:600;">Quarter<br><select name="quarter" ' . ( $report==='quarterly' ? '' : 'disabled' ) . '>';
         for ( $q=1; $q<=4; $q++ ) {
             printf('<option value="%d"%s>Q%d</option>', $q, selected($quarter,$q,false), $q);
         }
         echo '</select></label></div>';
-
         // Year
         echo '<div><label style="font-weight:600;">Year<br><select name="year">';
         foreach ( $years as $y ) {
             printf('<option value="%d"%s>%d</option>', $y, selected($year,$y,false), $y);
         }
         echo '</select></label></div>';
-
         echo '<div><br><input type="submit" class="button button-primary" value="Filter"></div>';
         echo '</form>';
     }
@@ -172,7 +202,7 @@ class DQ_Financial_Report {
     private static function aggregate( string $start, string $end ) : array {
         $out = [];
 
-        // Get ALL invoice posts with a date (we can refine with a meta_query if needed)
+        // Get ALL invoice posts with a date (meta key filter for performance)
         $invoices = get_posts([
             'post_type'      => 'quickbooks_invoice',
             'post_status'    => ['publish','draft','pending','private'],
@@ -191,26 +221,23 @@ class DQ_Financial_Report {
             $wo_field = function_exists('get_field') ? get_field( self::FIELD_WO_RELATION, $pid ) : get_post_meta( $pid, self::FIELD_WO_RELATION, true );
             $wo_post = null;
             if ( is_array( $wo_field ) ) {
-                // Relationship field may return array of posts
                 $wo_post = reset( $wo_field );
             } elseif ( $wo_field instanceof WP_Post ) {
                 $wo_post = $wo_field;
             } elseif ( is_numeric( $wo_field ) ) {
                 $wo_post = get_post( intval( $wo_field ) );
             }
-            if ( ! $wo_post || $wo_post->post_type !== 'workorder' ) {
-                // skip invoices not linked to a work order for aggregation
-                continue;
-            }
+            if ( ! $wo_post || $wo_post->post_type !== 'workorder' ) continue;
+
             $engineer_id = intval( $wo_post->post_author );
             if ( $engineer_id <= 0 ) continue;
 
             if ( ! isset( $out[ $engineer_id ] ) ) {
                 $user = get_user_by( 'id', $engineer_id );
                 $out[ $engineer_id ] = [
-                    'display_name' => $user ? $user->display_name : 'User #' . $engineer_id,
-                    'invoices'     => [],
-                    'count'        => 0,
+                    'display_name'   => $user ? $user->display_name : 'User #' . $engineer_id,
+                    'invoices'       => [],
+                    'count'          => 0,
                     'invoice_amount' => 0.0,
                     'labor_cost'     => 0.0,
                     'direct_labor'   => 0.0,
@@ -265,14 +292,10 @@ class DQ_Financial_Report {
 
     private static function normalize_date( $raw ) {
         if ( ! $raw ) return '';
-        // Attempt standard formats
         $raw = trim( (string)$raw );
-        // Already Y-m-d
         if ( preg_match('/^\d{4}-\d{2}-\d{2}$/', $raw ) ) return $raw;
-        // Try strtotime
         $ts = strtotime( $raw );
-        if ( $ts ) return date('Y-m-d', $ts );
-        return '';
+        return $ts ? date('Y-m-d', $ts ) : '';
     }
 
     private static function num( $v ) {
@@ -283,7 +306,6 @@ class DQ_Financial_Report {
     }
 
     private static function render_table( array $data, int $engineer_filter, string $start, string $end, string $report, int $year, int $month, int $quarter ) {
-        // Totals
         $totals = [
             'count'=>0,
             'invoice_amount'=>0.0,
@@ -293,7 +315,6 @@ class DQ_Financial_Report {
             'tolls_meals'=>0.0,
             'profit'=>0.0,
         ];
-
         echo '<style>
         .dq-fr-table { width:100%; border-collapse:collapse; background:#fff; }
         .dq-fr-table th { background:#006d7b; color:#fff; padding:8px 10px; text-align:left; font-weight:600; }
@@ -303,7 +324,7 @@ class DQ_Financial_Report {
         .dq-fr-name { display:flex; align-items:center; }
         .dq-fr-profit-pos { color:#098400; font-weight:600; }
         .dq-fr-profit-neg { color:#c40000; font-weight:600; }
-        .dq-fr-totals-row td { font-weight:600; background:#f2fbfe; }
+        .dq-fr-totals-row td { font-weight:600; background:#e6f8fc; }
         .dq-fr-invoice-list { margin:12px 0 24px 0; padding-left:20px; list-style:disc; }
         </style>';
 
@@ -323,15 +344,15 @@ class DQ_Financial_Report {
             $totals['profit']         += $row['profit'];
 
             $avatar_html = self::get_user_avatar_html( $uid );
+            // Link to same report, filtered by engineer (so user won't get "Sorry" error)
             $engineer_link = add_query_arg([
-                'post_type'=>'quickbooks_invoice',
-                'page'=>'dq-financial-report',
-                'report'=>$report,
-                'year'=>$year,
-                'month'=>$month,
-                'quarter'=>$quarter,
-                'engineer'=>$uid
-            ], admin_url('edit.php'));
+                'page'     => 'dq-financial-reports',
+                'report'   => $report,
+                'year'     => $year,
+                'month'    => $month,
+                'quarter'  => $quarter,
+                'engineer' => $uid
+            ], admin_url('admin.php'));
 
             echo '<tr>';
             echo '<td><span class="dq-fr-name">' . $avatar_html . esc_html( $row['display_name'] ) . '</span></td>';
@@ -346,7 +367,6 @@ class DQ_Financial_Report {
             echo '</tr>';
         }
 
-        // Totals row
         $profit_class_total = $totals['profit'] >= 0 ? 'dq-fr-profit-pos' : 'dq-fr-profit-neg';
         echo '<tr class="dq-fr-totals-row">';
         echo '<td>Totals:</td>';
@@ -361,7 +381,7 @@ class DQ_Financial_Report {
 
         echo '</tbody></table>';
 
-        // Invoice detail list for selected engineer
+        // Invoice detail list for selected engineer (in this report period)
         if ( $engineer_filter && isset( $data[ $engineer_filter ] ) ) {
             echo '<h2 style="margin-top:30px;">Invoice List — ' . esc_html( $data[ $engineer_filter ]['display_name'] ) . '</h2>';
             echo '<ul class="dq-fr-invoice-list">';
@@ -391,21 +411,18 @@ class DQ_Financial_Report {
         return '<img class="dq-fr-avatar" src="' . esc_url( $avatar ) . '" alt="" />';
     }
 
-    /**
-     * CSV export handler
-     */
     public static function handle_csv() {
         if ( ! self::user_can_view() ) {
             wp_die('Permission denied');
         }
         check_admin_referer( 'dq_fr_csv' );
 
-        $report  = isset($_GET['report']) ? sanitize_key($_GET['report']) : 'monthly';
+        $report  = isset($_GET['report']) ? sanitize_key($_GET['report']) : 'yearly';
         $year    = isset($_GET['year']) ? intval($_GET['year']) : intval(date('Y'));
         $month   = isset($_GET['month']) ? intval($_GET['month']) : intval(date('n'));
         $quarter = isset($_GET['quarter']) ? intval($_GET['quarter']) : 1;
-        $range = self::compute_date_range( $report, $year, $month, $quarter );
-        $data  = self::aggregate( $range['start'], $range['end'] );
+        $range   = self::compute_date_range( $report, $year, $month, $quarter );
+        $data    = self::aggregate( $range['start'], $range['end'] );
 
         $filename = 'financial-report-' . $report . '-' . $year;
         if ( $report === 'monthly' ) $filename .= '-' . $month;
@@ -445,7 +462,6 @@ class DQ_Financial_Report {
             ] );
         }
 
-        // Totals row
         fputcsv( $out, [
             'Totals',
             $totals['count'],
