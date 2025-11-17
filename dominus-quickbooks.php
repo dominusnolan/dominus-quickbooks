@@ -34,8 +34,11 @@ require_once DQQB_PATH . 'includes/class-dq-qi-sync.php';
 require_once DQQB_PATH . 'includes/class-dq-qi-metabox.php';
 require_once DQQB_PATH . 'includes/class-dq-qi-csv-import.php';
 require_once DQQB_PATH . 'includes/class-dq-qi-admin-table.php';
-// NEW: Financial Reports
+// Financial Reports
 require_once DQQB_PATH . 'includes/class-dq-financial-report.php';
+
+// Work Order Reports
+require_once DQQB_PATH . 'includes/class-dq-workorder-report.php';
 
 // -----------------------------------------------------------------------------
 // Initialize Plugin
