@@ -249,26 +249,6 @@ class DQ_Metabox {
         $post_id = intval( $_GET['post'] );
         check_admin_referer( 'dq_update_' . $post_id );
 
-        $invoice_id = function_exists('get_field') ? get_field( 'wo_invoice_id', $post_id ) : get_post_meta( $post_id, 'wo_invoice_id', true );
-        if ( ! $invoice_id ) wp_die( 'No QuickBooks Invoice ID found for this Work Order.' );
-
-        $payload = DQ_Invoice::build_from_work_order( $post_id );
-        if ( is_wp_error( $payload ) ) wp_die( $payload->get_error_message() );
-
-        $response = DQ_API::update_invoice( $invoice_id, $payload );
-        if ( is_wp_error( $response ) ) wp_die( 'QuickBooks error: ' . $response->get_error_message() );
-
-        $invoice = $response['Invoice'] ?? $response;
-
-        if ( function_exists( 'update_field' ) ) {
-            if ( isset( $invoice['Id'] ) ) update_field( 'wo_invoice_id', $invoice['Id'], $post_id );
-            if ( isset( $invoice['DocNumber'] ) ) update_field( 'wo_invoice_no', $invoice['DocNumber'], $post_id );
-        } else {
-            if ( isset( $invoice['Id'] ) ) update_post_meta( $post_id, 'wo_invoice_id', $invoice['Id'] );
-            if ( isset( $invoice['DocNumber'] ) ) update_post_meta( $post_id, 'wo_invoice_no', $invoice['DocNumber'] );
-        }
-        update_post_meta( $post_id, 'wo_last_synced', current_time( 'mysql' ) );
-
         wp_redirect( admin_url( 'post.php?post=' . $post_id . '&action=edit&dq_msg=updated' ) );
         exit;
     }
