@@ -107,11 +107,11 @@ class DQ_QI_Admin_Table {
                 echo $date ? esc_html($date) : '<span style="color:#999;">—</span>';
                 break;
             case 'days_remaining':
-                $status = function_exists('get_field') ? get_field('qi_payment_status', $post_id) : get_post_meta($post_id, 'qi_payment_status', true);
+                $balance = function_exists('get_field') ? get_field('qi_balance_due', $post_id) : get_post_meta($post_id, 'qi_balance_due', true);
                 $due_date = function_exists('get_field') ? get_field('qi_due_date', $post_id) : get_post_meta($post_id, 'qi_due_date', true);
                 
-                // Only show days remaining for UNPAID invoices with a due date
-                if (strtoupper($status) === 'UNPAID' && !empty($due_date)) {
+                // Only show days remaining for invoices with a balance due and a due date
+                if ((float)$balance != 0 && !empty($due_date)) {
                     $today = new DateTime('now', new DateTimeZone('UTC'));
                     $due = DateTime::createFromFormat('Y-m-d', $due_date, new DateTimeZone('UTC'));
                     
