@@ -588,14 +588,35 @@ foreach ( $data as $uid => $row ) {
             }
         }
 
-        // Direct Labor Cost from other expenses repeater
+        // Direct Labor Cost from other expenses repeater WITH BREAKDOWN
         $directLabor = 0.0;
+        $directLaborParts = []; // collect each row for tooltip
         $other = function_exists('get_field') ? get_field(self::FIELD_OTHER_EXPENSES, $pid) : get_post_meta(self::FIELD_OTHER_EXPENSES, $pid, true);
         if (is_array($other)) {
+            $i = 1;
             foreach ($other as $o) {
-                $directLabor += self::num($o[self::FIELD_OTHER_AMOUNT] ?? 0);
+                $amtRow = self::num($o[self::FIELD_OTHER_AMOUNT] ?? 0);
+                if ($amtRow !== 0.0) {
+                    $label = '';
+                    // Try to find a human label if present in repeater row
+                    foreach (['label','description','desc','name','type'] as $possible) {
+                        if (isset($o[$possible]) && is_string($o[$possible]) && $o[$possible] !== '') {
+                            $label = trim($o[$possible]);
+                            break;
+                        }
+                    }
+                    if ($label === '') {
+                        $label = 'Item ' . $i;
+                    }
+                    $directLaborParts[] = $label . ': ' . self::money($amtRow);
+                }
+                $directLabor += $amtRow;
+                $i++;
             }
         }
+        $directLaborTip = empty($directLaborParts)
+            ? 'No direct labor line items'
+            : "Direct Labor Breakdown:\n" . implode("\n", $directLaborParts);
 
         // Tooltip strings
         $travelTip = "Travel Zone 1: " . self::money($tz1) . "\nTravel Zone 2: " . self::money($tz2) . "\nTravel Zone 3: " . self::money($tz3);
@@ -607,7 +628,8 @@ foreach ( $data as $uid => $row ) {
         echo '<td>' . esc_html($inv_date) . '</td>';
         echo '<td>' . self::money($inv_total) . '</td>';
         echo '<td>' . self::money($labor) . '</td>';
-        echo '<td>' . self::money($directLabor) . '</td>';
+        // Direct Labor cost now has tooltip breakdown
+        echo '<td><span class="dq-fr-tooltip" title="' . esc_attr($directLaborTip) . '">' . self::money($directLabor) . '</span></td>';
         echo '<td><span class="dq-fr-tooltip" title="' . esc_attr($travelTip) . '">' . self::money($travel) . '</span></td>';
         echo '<td><span class="dq-fr-tooltip" title="' . esc_attr($otherTip) . '">' . self::money($otherExp) . '</span></td>';
         echo '</tr>';
