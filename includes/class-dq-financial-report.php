@@ -22,7 +22,7 @@ class DQ_Financial_Report {
     // Activity labels
     const ACTIVITY_LABOR       = 'Labor Rate HR';
     const ACTIVITY_TRAVEL      = ['Travel Zone 1','Travel Zone 2','Travel Zone 3'];
-    const ACTIVITY_TOLLS        = ['Toll', 'Meals', 'Parking'];
+    const ACTIVITY_TOLLS       = ['Toll', 'Meals', 'Parking'];
 
     public static function init() {
         add_action( 'admin_menu', [ __CLASS__, 'menu' ] );
@@ -72,6 +72,18 @@ class DQ_Financial_Report {
             'dq-financial-reports-monthly',
             function() { DQ_Financial_Report::render_page_type('monthly'); }
         );
+    }
+
+    /**
+     * Resolve the correct admin.php?page= slug for a given report type
+     */
+    private static function page_slug_for( string $report ): string {
+        switch ($report) {
+            case 'monthly':   return 'dq-financial-reports-monthly';
+            case 'quarterly': return 'dq-financial-reports-quarterly';
+            case 'yearly':
+            default:          return 'dq-financial-reports';
+        }
     }
 
     /**
@@ -132,49 +144,53 @@ class DQ_Financial_Report {
     }
 
     private static function filters_form( $report, $year, $month, $quarter ) {
-    $years = range( date('Y') - 5, date('Y') + 2 );
-    echo '<form method="get" style="margin:15px 0;display:flex;gap:12px;align-items:flex-end;">';
-    echo '<input type="hidden" name="page" value="dq-financial-reports">';
+        $years = range( date('Y') - 5, date('Y') + 2 );
 
-    if ($report === 'monthly') {
-        // Monthly: Only month + year
-        echo '<input type="hidden" name="report" value="monthly">';
-        echo '<div><label style="font-weight:600;">Month<br><select name="month">';
-        for ($m=1; $m<=12; $m++) {
-            printf('<option value="%d"%s>%s</option>', $m, selected($month,$m,false), date('F', mktime(0,0,0,$m,1)));
+        // Use the page slug that matches the current report so the menu stays on the correct submenu
+        $page_slug = self::page_slug_for($report);
+
+        echo '<form method="get" action="' . esc_url( admin_url('admin.php') ) . '" style="margin:15px 0;display:flex;gap:12px;align-items:flex-end;">';
+        echo '<input type="hidden" name="page" value="' . esc_attr($page_slug) . '">';
+
+        if ($report === 'monthly') {
+            // Monthly: Only month + year; keep report value consistent for downstream logic (CSV link, etc.)
+            echo '<input type="hidden" name="report" value="monthly">';
+            echo '<div><label style="font-weight:600;">Month<br><select name="month">';
+            for ($m=1; $m<=12; $m++) {
+                printf('<option value="%d"%s>%s</option>', $m, selected($month,$m,false), date('F', mktime(0,0,0,$m,1)));
+            }
+            echo '</select></label></div>';
+            echo '<div><label style="font-weight:600;">Year<br><select name="year">';
+            foreach ($years as $y) {
+                printf('<option value="%d"%s>%d</option>', $y, selected($year,$y,false), $y);
+            }
+            echo '</select></label></div>';
+        } elseif ($report === 'quarterly') {
+            // Quarterly: Only quarter + year
+            echo '<input type="hidden" name="report" value="quarterly">';
+            echo '<div><label style="font-weight:600;">Quarter<br><select name="quarter">';
+            for ($q = 1; $q <= 4; $q++) {
+                printf('<option value="%d"%s>Q%d</option>', $q, selected($quarter,$q,false), $q);
+            }
+            echo '</select></label></div>';
+            echo '<div><label style="font-weight:600;">Year<br><select name="year">';
+            foreach ($years as $y) {
+                printf('<option value="%d"%s>%d</option>', $y, selected($year,$y,false), $y);
+            }
+            echo '</select></label></div>';
+        } else {
+            // Yearly: Only year
+            echo '<input type="hidden" name="report" value="yearly">';
+            echo '<div><label style="font-weight:600;">Year<br><select name="year">';
+            foreach ($years as $y) {
+                printf('<option value="%d"%s>%d</option>', $y, selected($year,$y,false), $y);
+            }
+            echo '</select></label></div>';
         }
-        echo '</select></label></div>';
-        echo '<div><label style="font-weight:600;">Year<br><select name="year">';
-        foreach ($years as $y) {
-            printf('<option value="%d"%s>%d</option>', $y, selected($year,$y,false), $y);
-        }
-        echo '</select></label></div>';
-    } elseif ($report === 'quarterly') {
-        // Quarterly: Only quarter + year
-        echo '<input type="hidden" name="report" value="quarterly">';
-        echo '<div><label style="font-weight:600;">Quarter<br><select name="quarter">';
-        for ($q = 1; $q <= 4; $q++) {
-            printf('<option value="%d"%s>Q%d</option>', $q, selected($quarter,$q,false), $q);
-        }
-        echo '</select></label></div>';
-        echo '<div><label style="font-weight:600;">Year<br><select name="year">';
-        foreach ($years as $y) {
-            printf('<option value="%d"%s>%d</option>', $y, selected($year,$y,false), $y);
-        }
-        echo '</select></label></div>';
-    } else {
-        // Yearly: Only year
-        echo '<input type="hidden" name="report" value="yearly">';
-        echo '<div><label style="font-weight:600;">Year<br><select name="year">';
-        foreach ($years as $y) {
-            printf('<option value="%d"%s>%d</option>', $y, selected($year,$y,false), $y);
-        }
-        echo '</select></label></div>';
+
+        echo '<div><br><input type="submit" class="button button-primary" value="Filter"></div>';
+        echo '</form>';
     }
-
-    echo '<div><br><input type="submit" class="button button-primary" value="Filter"></div>';
-    echo '</form>';
-}
 
     private static function compute_date_range( string $report, int $year, int $month, int $quarter ) : array {
         switch ( $report ) {
@@ -317,120 +333,96 @@ class DQ_Financial_Report {
         $clean = preg_replace('/[^0-9.\-]/','',(string)$v);
         return ( $clean === '' || ! is_numeric($clean) ) ? 0.0 : (float)$clean;
     }
+private static function render_table( array $data, int $engineer_filter, string $start, string $end, string $report, int $year, int $month, int $quarter ) {
+$totals = [
+    'count'=>0,
+    'invoice_amount'=>0.0,
+    'labor_cost'=>0.0,
+    'direct_labor'=>0.0,
+    'travel_cost'=>0.0,
+    'tolls_meals'=>0.0,
+    'profit'=>0.0,
+];
 
-    // ...rest of class...
-    private static function render_table( array $data, int $engineer_filter, string $start, string $end, string $report, int $year, int $month, int $quarter ) {
-        $totals = [
-            'count'=>0,
-            'invoice_amount'=>0.0,
-            'labor_cost'=>0.0,
-            'direct_labor'=>0.0,
-            'travel_cost'=>0.0,
-            'tolls_meals'=>0.0,
-            'profit'=>0.0,
-        ];
-        echo '<style>
-        .dq-fr-table { width:100%; border-collapse:collapse; background:#fff; }
-        .dq-fr-table th { background:#006d7b; color:#fff; padding:8px 10px; text-align:left; font-weight:600; }
-        .dq-fr-table td { padding:8px 10px; border-bottom:1px solid #eee; vertical-align:middle; }
-        .dq-fr-table tr:last-child td { border-bottom:none; }
-        .dq-fr-avatar { width:32px; height:32px; border-radius:50%; object-fit:cover; margin-right:8px; }
-        .dq-fr-name { display:flex; align-items:center; }
-        .dq-fr-profit-pos { color:#098400; font-weight:600; }
-        .dq-fr-profit-neg { color:#c40000; font-weight:600; }
-        .dq-fr-totals-row td { font-weight:600; background:#e6f8fc; }
-        .dq-fr-invoice-list { margin:12px 0 24px 0; padding-left:20px; list-style:disc; }
-        /* Popup table */
-        .dq-fr-modal-invoice-table { width:100%; border-collapse:collapse; margin-bottom:10px; }
-        .dq-fr-modal-invoice-table th { background:#f2fbfe; color:#333; font-weight:600; padding:6px 6px; font-size:14px; }
-        .dq-fr-modal-invoice-table td { border-bottom:1px solid #eee; font-size:13px; padding:4px 7px; vertical-align:middle; }
-        </style>';
+// Collect per-engineer modal HTML here and print once after the main table
+$modals_html = '';
 
-        echo '<table class="dq-fr-table">';
-        echo '<thead><tr>';
-        $cols = ['Field Engineer','Total Invoices','Invoice Amount','Labor Cost','Direct Labor Cost','Travel Cost','Toll, Meals, Parking','Profit'];
-        foreach ( $cols as $c ) echo '<th>' . esc_html($c) . '</th>';
-        echo '</tr></thead><tbody>';
+echo '<style>
+.dq-fr-table { width:100%; border-collapse:collapse; background:#fff; }
+.dq-fr-table th { background:#006d7b; color:#fff; padding:8px 10px; text-align:left; font-weight:600; }
+.dq-fr-table td { padding:8px 10px; border-bottom:1px solid #eee; vertical-align:middle; }
+.dq-fr-table tr:last-child td { border-bottom:none; }
+.dq-fr-avatar { width:32px; height:32px; border-radius:50%; object-fit:cover; margin-right:8px; }
+.dq-fr-name { display:flex; align-items:center; }
+.dq-fr-profit-pos { color:#098400; font-weight:600; }
+.dq-fr-profit-neg { color:#c40000; font-weight:600; }
+.dq-fr-totals-row td { font-weight:600; background:#e6f8fc; }
 
-        foreach ( $data as $uid => $row ) {
-            $totals['count']          += $row['count'];
-            $totals['invoice_amount'] += $row['invoice_amount'];
-            $totals['labor_cost']     += $row['labor_cost'];
-            $totals['direct_labor']   += $row['direct_labor'];
-            $totals['travel_cost']    += $row['travel_cost'];
-            $totals['tolls_meals']    += $row['tolls_meals'];
-            $totals['profit']         += $row['profit'];
+/* Modal + inner invoice table */
+.dq-fr-modal-overlay { position:fixed; inset:0; width:100vw; height:100vh; background:rgba(0,0,0,0.35); z-index:9999; display:none; }
+.dq-fr-modal-window { background:#fff; max-width:900px; margin:50px auto; padding:24px 20px 20px; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.09); position:relative; }
+.dq-fr-modal-close { position:absolute; right:16px; top:12px; font-size:32px; background:transparent; border:none; color:#333; cursor:pointer; line-height:1; }
+.dq-fr-modal-invoice-table { width:100%; border-collapse:collapse; margin-bottom:10px; }
+.dq-fr-modal-invoice-table th { background:#f2fbfe; color:#333; font-weight:600; padding:6px; font-size:14px; text-align:left; }
+.dq-fr-modal-invoice-table td { border-bottom:1px solid #eee; font-size:13px; padding:4px 7px; vertical-align:middle; }
+.dq-fr-modal-invoice-table th, .dq-fr-modal-invoice-table td { border-right:1px solid #eee; }
+.dq-fr-modal-invoice-table th:last-child, .dq-fr-modal-invoice-table td:last-child { border-right:none; }
+.dq-fr-modal-invoice-table tr:last-child td { border-bottom:none; }
+.dq-fr-tooltip[title] { cursor:help; border-bottom:1px dotted #888; position:relative; }
+</style>';
 
-            $avatar_html = self::get_user_avatar_html( $uid );
+echo '<table class="dq-fr-table">';
+echo '<thead><tr>';
+$cols = ['Field Engineer','Total Invoices','Invoice Amount','Labor Cost','Direct Labor Cost','Travel Cost','Toll, Meals, Parking','Profit'];
+foreach ( $cols as $c ) echo '<th>' . esc_html($c) . '</th>';
+echo '</tr></thead><tbody>';
 
-            $engineer_link = add_query_arg([
-                'page'     => 'dq-financial-reports',
-                'report'   => $report,
-                'year'     => $year,
-                'month'    => $month,
-                'quarter'  => $quarter,
-                'engineer' => $uid
-            ], admin_url('admin.php'));
+foreach ( $data as $uid => $row ) {
+    $totals['count']          += $row['count'];
+    $totals['invoice_amount'] += $row['invoice_amount'];
+    $totals['labor_cost']     += $row['labor_cost'];
+    $totals['direct_labor']   += $row['direct_labor'];
+    $totals['travel_cost']    += $row['travel_cost'];
+    $totals['tolls_meals']    += $row['tolls_meals'];
+    $totals['profit']         += $row['profit'];
 
-            echo '<tr>';
-            echo '<td><span class="dq-fr-name">' . $avatar_html . esc_html( $row['display_name'] ) . '</span></td>';
-            echo '<td><a href="#" onclick="document.getElementById(\'dq-fr-modal-' . $uid . '\').style.display=\'block\';return false;">' . intval($row['count']) . '</a></td>';
-            echo '<td>' . self::money( $row['invoice_amount'] ) . '</td>';
-            echo '<td>' . self::money( $row['labor_cost'] ) . '</td>';
-            echo '<td>' . self::money( $row['direct_labor'] ) . '</td>';
-            echo '<td>' . self::money( $row['travel_cost'] ) . '</td>';
-            echo '<td>' . self::money( $row['tolls_meals'] ) . '</td>';
-            $profit_class = $row['profit'] >= 0 ? 'dq-fr-profit-pos' : 'dq-fr-profit-neg';
-            echo '<td><span class="' . $profit_class . '">' . self::money( $row['profit'] ) . '</span></td>';
-            echo '</tr>';
-        }
+    $avatar_html = self::get_user_avatar_html( $uid );
+    $modalId = 'dq-fr-modal-' . $uid;
 
-        $profit_class_total = $totals['profit'] >= 0 ? 'dq-fr-profit-pos' : 'dq-fr-profit-neg';
-        echo '<tr class="dq-fr-totals-row">';
-        echo '<td>Totals:</td>';
-        echo '<td>' . intval( $totals['count'] ) . '</td>';
-        echo '<td>' . self::money( $totals['invoice_amount'] ) . '</td>';
-        echo '<td>' . self::money( $totals['labor_cost'] ) . '</td>';
-        echo '<td>' . self::money( $totals['direct_labor'] ) . '</td>';
-        echo '<td>' . self::money( $totals['travel_cost'] ) . '</td>';
-        echo '<td>' . self::money( $totals['tolls_meals'] ) . '</td>';
-        echo '<td><span class="' . $profit_class_total . '">' . self::money( $totals['profit'] ) . '</span></td>';
-        echo '</tr>';
+    echo '<tr>';
+    echo '<td><span class="dq-fr-name">' . $avatar_html . esc_html( $row['display_name'] ) . '</span></td>';
+    // Open modal without reloading; modal is pre-rendered per row (below)
+    echo '<td><a href="#" onclick="(function(m){ if(m){ m.style.display=\'block\'; } })(document.getElementById(\'' . esc_attr($modalId) . '\')); return false;">' . intval($row['count']) . '</a></td>';
+    echo '<td>' . self::money( $row['invoice_amount'] ) . '</td>';
+    echo '<td>' . self::money( $row['labor_cost'] ) . '</td>';
+    echo '<td>' . self::money( $row['direct_labor'] ) . '</td>';
+    echo '<td>' . self::money( $row['travel_cost'] ) . '</td>';
+    echo '<td>' . self::money( $row['tolls_meals'] ) . '</td>';
+    $profit_class = $row['profit'] >= 0 ? 'dq-fr-profit-pos' : 'dq-fr-profit-neg';
+    echo '<td><span class="' . $profit_class . '">' . self::money( $row['profit'] ) . '</span></td>';
+    echo '</tr>';
 
-        echo '</tbody></table>';
+    // Build modal for this engineer now (hidden by default)
+    ob_start();
+    echo '<div id="' . esc_attr($modalId) . '" class="dq-fr-modal-overlay">';
+    echo '  <div class="dq-fr-modal-window">';
+    echo '    <button class="dq-fr-modal-close" onclick="document.getElementById(\'' . esc_attr($modalId) . '\').style.display=\'none\';event.preventDefault();">&times;</button>';
+    echo '    <h2>Invoice List — ' . esc_html($row['display_name']) . '</h2>';
+    echo '    <table class="dq-fr-modal-invoice-table">';
+    echo '      <thead><tr>';
+    $modal_cols = ['Invoice Number','Work Orders','Invoice Date','Invoice Amount','Labor Cost','Direct Labor Cost','Travel Cost','Other Billed Expense'];
+    foreach ($modal_cols as $mc) echo '<th>' . esc_html($mc) . '</th>';
+    echo '      </tr></thead><tbody>';
 
-       // --- Invoice detail modal with TABLE and hover tooltips ---
-if ( $engineer_filter && isset( $data[ $engineer_filter ] ) ) {
-    $modalId = 'dq-fr-modal-' . $engineer_filter;
-    $engineerInvoices = $data[$engineer_filter]['invoices'];
-
-    echo <<<HTML
-<div id="$modalId" class="dq-fr-modal-overlay" style="display:block;">
-  <div class="dq-fr-modal-window">
-    <button class="dq-fr-modal-close" onclick="document.getElementById('$modalId').style.display='none';event.preventDefault();">&times;</button>
-    <h2>Invoice List — {$data[$engineer_filter]['display_name']}</h2>
-    <table class="dq-fr-modal-invoice-table">
-      <thead>
-        <tr>
-          <th>Invoice Number</th>
-          <th>Work Orders</th>
-          <th>Invoice Date</th>
-          <th>Invoice Amount</th>
-          <th>Labor Cost</th>
-          <th>Direct Labor Cost</th>
-          <th>Travel Cost</th>
-          <th>Other Billed Expense</th>
-        </tr>
-      </thead>
-      <tbody>
-HTML;
-
-    foreach ( $engineerInvoices as $inv ) {
-        $pid = $inv['post_id'];
-        $num  = $inv['number'] ?: ('Post #' . $pid);
+    // Render each invoice row with breakdown
+    foreach ( $row['invoices'] as $inv ) {
+        $pid      = $inv['post_id'];
+        $num      = $inv['number'] ?: ('Post #' . $pid);
         $inv_link = get_edit_post_link( $pid );
+        $inv_date = function_exists('get_field') ? get_field(self::FIELD_DATE, $pid) : get_post_meta($pid, self::FIELD_DATE, true);
+        $inv_total= function_exists('get_field') ? get_field(self::FIELD_TOTAL_BILLED, $pid) : get_post_meta($pid, self::FIELD_TOTAL_BILLED, true);
 
-        // Work orders
+        // Work orders list
         $wo_field = function_exists('get_field') ? get_field(self::FIELD_WO_RELATION, $pid) : get_post_meta($pid, self::FIELD_WO_RELATION, true);
         $wo_display = '';
         if (is_array($wo_field)) {
@@ -441,7 +433,7 @@ HTML;
                     $wo_display .= '<a href="' . esc_url($wo_link) . '" target="_blank">#' . $wo_id . '</a>, ';
                 }
             }
-            $wo_display = rtrim($wo_display,', ');
+            $wo_display = rtrim($wo_display, ', ');
         } elseif (is_numeric($wo_field)) {
             $wo_id = intval($wo_field);
             $wo_link = get_edit_post_link($wo_id);
@@ -452,50 +444,45 @@ HTML;
             $wo_display = '<a href="' . esc_url($wo_link) . '" target="_blank">#' . $wo_id . '</a>';
         }
 
-        // Invoice date
-        $inv_date = function_exists('get_field') ? get_field(self::FIELD_DATE, $pid) : get_post_meta($pid, self::FIELD_DATE, true);
-        // Invoice Amount
-        $inv_total = function_exists('get_field') ? get_field(self::FIELD_TOTAL_BILLED, $pid) : get_post_meta($pid, self::FIELD_TOTAL_BILLED, true);
-
-        // Labor, Travel, Other Billed Expense breakdown
+        // Line breakdowns
         $lines = function_exists('get_field') ? get_field(self::FIELD_LINES_REPEATER, $pid) : get_post_meta($pid, self::FIELD_LINES_REPEATER, true);
-        $labor = $travel = $otherExp = 0;
-        $tz1 = $tz2 = $tz3 = 0; // Travel Zones
-        $toll = $meals = $parking = 0; // Other billed
+        $labor = $travel = $otherExp = 0.0;
+        $tz1=$tz2=$tz3=0.0; $toll=$meals=$parking=0.0;
 
         if (is_array($lines)) {
-            foreach ($lines as $row) {
-                $activity = isset($row[self::FIELD_LINES_ACTIVITY]) ? trim((string)$row[self::FIELD_LINES_ACTIVITY]) : '';
-                $amount = self::num($row[self::FIELD_LINES_AMOUNT] ?? 0);
+            foreach ($lines as $one) {
+                $activity = isset($one[self::FIELD_LINES_ACTIVITY]) ? trim((string)$one[self::FIELD_LINES_ACTIVITY]) : '';
+                $amt      = self::num($one[self::FIELD_LINES_AMOUNT] ?? 0);
                 if ($activity === self::ACTIVITY_LABOR) {
-                    $labor += $amount;
+                    $labor += $amt;
                 } elseif ($activity === 'Travel Zone 1') {
-                    $travel += $amount; $tz1 += $amount;
+                    $travel += $amt; $tz1 += $amt;
                 } elseif ($activity === 'Travel Zone 2') {
-                    $travel += $amount; $tz2 += $amount;
+                    $travel += $amt; $tz2 += $amt;
                 } elseif ($activity === 'Travel Zone 3') {
-                    $travel += $amount; $tz3 += $amount;
+                    $travel += $amt; $tz3 += $amt;
                 } elseif ($activity === 'Toll') {
-                    $otherExp += $amount; $toll += $amount;
+                    $otherExp += $amt; $toll += $amt;
                 } elseif ($activity === 'Meals') {
-                    $otherExp += $amount; $meals += $amount;
+                    $otherExp += $amt; $meals += $amt;
                 } elseif ($activity === 'Parking') {
-                    $otherExp += $amount; $parking += $amount;
+                    $otherExp += $amt; $parking += $amt;
                 }
             }
         }
-        // Direct Labor Cost
-        $directLabor = 0;
+
+        // Direct Labor Cost from other expenses repeater
+        $directLabor = 0.0;
         $other = function_exists('get_field') ? get_field(self::FIELD_OTHER_EXPENSES, $pid) : get_post_meta($pid, self::FIELD_OTHER_EXPENSES, true);
         if (is_array($other)) {
-            foreach ($other as $row) {
-                $directLabor += self::num($row[self::FIELD_OTHER_AMOUNT] ?? 0);
+            foreach ($other as $o) {
+                $directLabor += self::num($o[self::FIELD_OTHER_AMOUNT] ?? 0);
             }
         }
 
-        // Tooltip content for Travel and Other Expense
-        $travelTooltip = "Travel Zone 1: " . self::money($tz1) . "\nTravel Zone 2: " . self::money($tz2) . "\nTravel Zone 3: " . self::money($tz3);
-        $otherTooltip = "Toll: " . self::money($toll) . "\nMeals: " . self::money($meals) . "\nParking: " . self::money($parking);
+        // Tooltip strings
+        $travelTip = "Travel Zone 1: " . self::money($tz1) . "\nTravel Zone 2: " . self::money($tz2) . "\nTravel Zone 3: " . self::money($tz3);
+        $otherTip  = "Toll: " . self::money($toll) . "\nMeals: " . self::money($meals) . "\nParking: " . self::money($parking);
 
         echo '<tr>';
         echo '<td><a href="' . esc_url($inv_link) . '" target="_blank">' . esc_html($num) . '</a></td>';
@@ -504,111 +491,48 @@ HTML;
         echo '<td>' . self::money($inv_total) . '</td>';
         echo '<td>' . self::money($labor) . '</td>';
         echo '<td>' . self::money($directLabor) . '</td>';
-
-        // Travel Cost with tooltip
-        echo '<td><span class="dq-fr-tooltip" tabindex="0" title="' . esc_attr($travelTooltip) . '">' . self::money($travel) . '</span></td>';
-        // Other Expense with tooltip
-        echo '<td><span class="dq-fr-tooltip" tabindex="0" title="' . esc_attr($otherTooltip) . '">' . self::money($otherExp) . '</span></td>';
-
+        echo '<td><span class="dq-fr-tooltip" title="' . esc_attr($travelTip) . '">' . self::money($travel) . '</span></td>';
+        echo '<td><span class="dq-fr-tooltip" title="' . esc_attr($otherTip) . '">' . self::money($otherExp) . '</span></td>';
         echo '</tr>';
     }
 
-    echo <<<HTML
-      </tbody>
-    </table>
-  </div>
-</div>
-HTML;
-
-    // Tooltip and modal styling + allow closing by click/ESC
-    echo <<<HTML
-<style>
-.dq-fr-modal-overlay {
-  position:fixed; top:0; left:0; right:0; bottom:0;
-  width:100vw; height:100vh;
-  background:rgba(0,0,0,0.35);
-  z-index:9999;
-  display:none;
-}
-.dq-fr-modal-overlay[style*="display:block"] {
-  display:block;
-}
-.dq-fr-modal-window {
-  background:#fff; max-width:900px; margin:50px auto; padding:24px 20px 20px 20px; border-radius:8px;
-  box-shadow:0 8px 24px rgba(0,0,0,0.09);
-  position:relative;
-}
-.dq-fr-modal-close {
-  position:absolute; right:16px; top:12px; font-size:32px;
-  background:transparent; border:none; color:#333; cursor:pointer;
-  padding:0; line-height:1;
-}
-.dq-fr-modal-invoice-table th, .dq-fr-modal-invoice-table td {
-  border-right: 1px solid #eee;
-}
-.dq-fr-modal-invoice-table th:last-child, .dq-fr-modal-invoice-table td:last-child {
-  border-right: none;
-}
-.dq-fr-modal-invoice-table tr:last-child td {
-  border-bottom:none;
-}
-.dq-fr-tooltip[title] {
-  cursor:help;
-  border-bottom:1px dotted #888;
-  position:relative;
-}
-</style>
-<script>
-(function() {
-    var modal = document.getElementById('$modalId');
-    if (!modal) return;
-    modal.addEventListener('click', function(e) {
-        if (e.target == modal) modal.style.display = 'none';
-    });
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') modal.style.display = 'none';
-    });
-})();
-</script>
-HTML;
+    echo '      </tbody></table>';
+    echo '  </div>';
+    echo '</div>';
+    $modals_html .= ob_get_clean();
 }
 
-        // Add modal styles (at END of render_table, only once!)
-        echo <<<HTML
-<style>
-.dq-fr-modal-overlay {
-  position:fixed; top:0; left:0; right:0; bottom:0;
-  width:100vw; height:100vh;
-  background:rgba(0,0,0,0.35);
-  z-index:9999;
-  display:none;
-}
-.dq-fr-modal-overlay[style*="display:block"] {
-  display:block;
-}
-.dq-fr-modal-window {
-  background:#fff; max-width:900px; margin:50px auto; padding:24px 20px 20px 20px; border-radius:8px;
-  box-shadow:0 8px 24px rgba(0,0,0,0.09);
-  position:relative;
-}
-.dq-fr-modal-close {
-  position:absolute; right:16px; top:12px; font-size:32px;
-  background:transparent; border:none; color:#333; cursor:pointer;
-  padding:0; line-height:1;
-}
-.dq-fr-modal-invoice-table th, .dq-fr-modal-invoice-table td {
-  border-right: 1px solid #eee;
-}
-.dq-fr-modal-invoice-table th:last-child, .dq-fr-modal-invoice-table td:last-child {
-  border-right: none;
-}
-.dq-fr-modal-invoice-table tr:last-child td {
-  border-bottom:none;
-}
-.dq-fr-invoice-list { margin:12px 0 10px 0; padding-left:22px; list-style:disc; }
-</style>
-HTML;
+// Totals row
+$profit_class_total = $totals['profit'] >= 0 ? 'dq-fr-profit-pos' : 'dq-fr-profit-neg';
+echo '<tr class="dq-fr-totals-row">';
+echo '<td>Totals:</td>';
+echo '<td>' . intval( $totals['count'] ) . '</td>';
+echo '<td>' . self::money( $totals['invoice_amount'] ) . '</td>';
+echo '<td>' . self::money( $totals['labor_cost'] ) . '</td>';
+echo '<td>' . self::money( $totals['direct_labor'] ) . '</td>';
+echo '<td>' . self::money( $totals['travel_cost'] ) . '</td>';
+echo '<td>' . self::money( $totals['tolls_meals'] ) . '</td>';
+echo '<td><span class="' . $profit_class_total . '">' . self::money( $totals['profit'] ) . '</span></td>';
+echo '</tr>';
+
+echo '</tbody></table>';
+
+// Print all modals once; add a single ESC/overlay-click closer
+echo $modals_html;
+echo '<script>
+(function(){
+  function closeOnEsc(e){
+    if(e.key === "Escape"){
+      document.querySelectorAll(".dq-fr-modal-overlay").forEach(function(m){ m.style.display="none"; });
     }
+  }
+  document.addEventListener("keydown", closeOnEsc);
+  document.querySelectorAll(".dq-fr-modal-overlay").forEach(function(m){
+    m.addEventListener("click", function(ev){ if(ev.target === m){ m.style.display="none"; } });
+  });
+})();
+</script>';
+}
 
     private static function money( $v ) {
         return '$' . number_format( (float)$v, 2 );
