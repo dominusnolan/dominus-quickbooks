@@ -29,6 +29,7 @@ class DQ_QI_Admin_Table {
         $new['customer']    = __('Customer', 'dqqb');
         $new['invoice_date'] = __('Invoice Date', 'dqqb');
         $new['due_date']    = __('Invoice Due Date', 'dqqb');
+        $new['days_remaining'] = __('Days Remaining', 'dqqb');
         return $new;
     }
 
@@ -105,6 +106,33 @@ class DQ_QI_Admin_Table {
                 $date = function_exists('get_field') ? get_field('qi_due_date', $post_id) : get_post_meta($post_id, 'qi_due_date', true);
                 echo $date ? esc_html($date) : '<span style="color:#999;">—</span>';
                 break;
+            case 'days_remaining':
+                $status = function_exists('get_field') ? get_field('qi_payment_status', $post_id) : get_post_meta($post_id, 'qi_payment_status', true);
+                $due_date = function_exists('get_field') ? get_field('qi_due_date', $post_id) : get_post_meta($post_id, 'qi_due_date', true);
+                
+                // Only show days remaining for UNPAID invoices with a due date
+                if (strtoupper($status) === 'UNPAID' && !empty($due_date)) {
+                    $today = new DateTime('now', new DateTimeZone('UTC'));
+                    $due = DateTime::createFromFormat('Y-m-d', $due_date, new DateTimeZone('UTC'));
+                    
+                    if ($due !== false) {
+                        $diff = $today->diff($due);
+                        $days = (int)$diff->format('%r%a'); // %r adds sign, %a is days
+                        
+                        if ($days < 0) {
+                            $abs_days = abs($days);
+                            $tooltip = sprintf('Overdue by %d day%s', $abs_days, $abs_days !== 1 ? 's' : '');
+                            echo '<span style="color:#d63638;" title="' . esc_attr($tooltip) . '">' . esc_html($days) . '</span>';
+                        } else {
+                            echo esc_html($days);
+                        }
+                    } else {
+                        echo '<span style="color:#999;">—</span>';
+                    }
+                } else {
+                    echo '<span style="color:#999;">—</span>';
+                }
+                break;
         }
     }
 
@@ -113,6 +141,7 @@ class DQ_QI_Admin_Table {
         $sortable_columns['amount']     = 'qi_total_billed';
         $sortable_columns['invoice_date'] = 'qi_invoice_date';
         $sortable_columns['due_date']   = 'qi_due_date';
+        $sortable_columns['days_remaining'] = 'qi_due_date'; // Sort by due date as proxy
         return $sortable_columns;
     }
 
