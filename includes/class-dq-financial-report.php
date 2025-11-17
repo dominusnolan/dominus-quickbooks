@@ -139,8 +139,125 @@ class DQ_Financial_Report {
         self::filters_form( $report, $year, $month, $quarter );
         echo '<p><a class="button" href="' . esc_url( $csv_url ) . '">Download CSV</a></p>';
 
+        // NEW: Profitability Pie Chart
+        self::render_profit_chart( $data, $report, $year, $month, $quarter, $range );
+
         self::render_table( $data, $engineer_filter, $range['start'], $range['end'], $report, $year, $month, $quarter );
         echo '</div>';
+    }
+
+    /**
+     * NEW: Renders a profitability pie chart (Direct Labor vs Remaining Billed amount).
+     * Remaining = Total Billed - Direct Labor (or zero if negative).
+     */
+    private static function render_profit_chart( array $data, string $report, int $year, int $month, int $quarter, array $range ) {
+        // Aggregate totals
+        $total_billed = 0.0;
+        $direct_labor = 0.0;
+        foreach ( $data as $row ) {
+            $total_billed += (float)$row['invoice_amount'];
+            $direct_labor += (float)$row['direct_labor'];
+        }
+        $remaining = $total_billed - $direct_labor;
+        $profitable = $remaining >= 0;
+
+        // Guard: if both are zero, skip chart (nothing to show)
+        if ( $total_billed <= 0 && $direct_labor <= 0 ) {
+            echo '<p><em>No financial data available for this period.</em></p>';
+            return;
+        }
+
+        // Unique DOM IDs to avoid collisions if multiple charts were ever rendered
+        $canvas_id = 'dq-fr-profit-chart';
+        $wrapper_id = 'dq-fr-profit-chart-wrapper';
+
+        // Basic styles + container
+        echo '<style>
+#' . esc_attr($wrapper_id) . ' {max-width:480px;background:#fff;padding:16px 18px;margin:15px 0 25px;border:1px solid #e1e4e8;border-radius:6px;box-shadow:0 2px 4px rgba(0,0,0,0.06);}
+#' . esc_attr($wrapper_id) . ' h2 {margin:0 0 12px;font-size:18px;font-weight:600;}
+#' . esc_attr($wrapper_id) . ' .dq-fr-pie-legend {margin-top:12px;font-size:13px;line-height:1.5;}
+#' . esc_attr($wrapper_id) . ' .dq-fr-pie-legend span {display:inline-block;margin-right:14px;}
+#' . esc_attr($wrapper_id) . ' .dq-fr-pie-metric {margin-top:10px;font-size:13px;}
+.dq-fr-metric-positive {color:#098400;font-weight:600;}
+.dq-fr-metric-negative {color:#c40000;font-weight:600;}
+</style>';
+
+        echo '<div id="' . esc_attr($wrapper_id) . '">';
+        echo '<h2>Profitability Overview</h2>';
+        echo '<canvas id="' . esc_attr($canvas_id) . '" width="460" height="320" aria-label="Profitability pie chart" role="img"></canvas>';
+
+        $status_label = $profitable ? 'Profitable' : 'Loss';
+        $status_class = $profitable ? 'dq-fr-metric-positive' : 'dq-fr-metric-negative';
+        $remaining_label = $profitable ? 'Profit (Remaining)' : 'Loss (Overrun)';
+        echo '<div class="dq-fr-pie-metric"><strong>Status:</strong> <span class="' . esc_attr($status_class) . '">' . esc_html($status_label) . '</span></div>';
+        echo '<div class="dq-fr-pie-legend">
+                <span><strong>Total Billed:</strong> ' . self::money($total_billed) . '</span>
+                <span><strong>Direct Labor:</strong> ' . self::money($direct_labor) . '</span>
+                <span><strong>' . esc_html($remaining_label) . ':</strong> ' . self::money($remaining) . '</span>
+              </div>';
+        echo '<noscript><p><em>Pie chart requires JavaScript. Total Billed ' . self::money($total_billed) . ' vs Direct Labor ' . self::money($direct_labor) . '.</em></p></noscript>';
+        echo '</div>';
+
+        // Load Chart.js once (simple guard)
+        echo '<script>
+(function(){
+  if (!window.Chart) {
+    var s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js";
+    s.onload = renderDQProfitChart;
+    document.head.appendChild(s);
+  } else {
+    renderDQProfitChart();
+  }
+  function renderDQProfitChart(){
+    try {
+      var ctx = document.getElementById("' . esc_js($canvas_id) . '");
+      if(!ctx) return;
+      var directLabor = ' . json_encode(round($direct_labor,2)) . ';
+      var remaining = ' . json_encode(round(max($remaining,0),2)) . ';
+      var loss = ' . json_encode($remaining < 0 ? round(abs($remaining),2) : 0) . ';
+      var dataLabels = remaining > 0 ? ["Direct Labor","Remaining (Profit)"] : ["Direct Labor","Loss (Overrun)"];
+      var dataValues = remaining > 0 ? [directLabor, remaining] : [directLabor, loss];
+      new Chart(ctx, {
+        type: "pie",
+        data: {
+          labels: dataLabels,
+          datasets: [{
+            data: dataValues,
+            backgroundColor: [
+              "#ff6f3c",   // Direct Labor slice
+              remaining > 0 ? "#2e8b57" : "#c40000" // Profit or Loss slice
+            ],
+            borderColor: "#ffffff",
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              position: "bottom"
+            },
+            tooltip: {
+              callbacks: {
+                label: function(ctx){
+                  var v = ctx.parsed;
+                  return ctx.label + ": $" + v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+                }
+              }
+            },
+            title: {
+              display: false
+            }
+          }
+        }
+      });
+    } catch(e){
+      console.warn("DQ Financial Report chart error:", e);
+    }
+  }
+})();
+</script>';
     }
 
     private static function filters_form( $report, $year, $month, $quarter ) {
@@ -445,7 +562,7 @@ foreach ( $data as $uid => $row ) {
         }
 
         // Line breakdowns
-        $lines = function_exists('get_field') ? get_field(self::FIELD_LINES_REPEATER, $pid) : get_post_meta($pid, self::FIELD_LINES_REPEATER, true);
+        $lines = function_exists('get_field') ? get_field(self::FIELD_LINES_REPEATER, $pid) : get_post_meta(self::FIELD_LINES_REPEATER, $pid, true);
         $labor = $travel = $otherExp = 0.0;
         $tz1=$tz2=$tz3=0.0; $toll=$meals=$parking=0.0;
 
@@ -473,7 +590,7 @@ foreach ( $data as $uid => $row ) {
 
         // Direct Labor Cost from other expenses repeater
         $directLabor = 0.0;
-        $other = function_exists('get_field') ? get_field(self::FIELD_OTHER_EXPENSES, $pid) : get_post_meta($pid, self::FIELD_OTHER_EXPENSES, true);
+        $other = function_exists('get_field') ? get_field(self::FIELD_OTHER_EXPENSES, $pid) : get_post_meta(self::FIELD_OTHER_EXPENSES, $pid, true);
         if (is_array($other)) {
             foreach ($other as $o) {
                 $directLabor += self::num($o[self::FIELD_OTHER_AMOUNT] ?? 0);
