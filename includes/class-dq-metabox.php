@@ -196,13 +196,6 @@ class DQ_Metabox {
         echo '</div>';
 
         // --- Buttons ---
-        $send_url    = wp_nonce_url( admin_url( 'admin-post.php?action=dq_send_to_qbo&post=' . $post->ID ), 'dq_send_' . $post->ID );
-        $refresh_url = wp_nonce_url( admin_url( 'admin-post.php?action=dq_refresh_qbo&post=' . $post->ID ), 'dq_refresh_' . $post->ID );
-
-        if ( empty( $invoice_id ) ) {
-            echo '<p><a href="' . esc_url( $send_url ) . '" class="button button-primary" style="width:100%;">Send to QuickBooks</a></p>';
-        }
-
         // NEW: Pull from Invoice button
         $nonce = wp_create_nonce('dq_pull_from_invoice_' . $post->ID);
         $href = add_query_arg([
