@@ -36,12 +36,11 @@ require_once DQQB_PATH . 'includes/class-dq-qi-csv-import.php';
 require_once DQQB_PATH . 'includes/class-dq-qi-admin-table.php';
 // Financial Reports
 require_once DQQB_PATH . 'includes/class-dq-financial-report.php';
-
 // Work Order Reports
 require_once DQQB_PATH . 'includes/class-dq-workorder-report.php';
-
-// Work Order Timeline
+// NEW: Front-end Workorder Timeline
 require_once DQQB_PATH . 'includes/class-dq-workorder-timeline.php';
+// NEW: Workorder single template fallback (adds single-workorder.php front-end)
 require_once DQQB_PATH . 'includes/class-dq-workorder-template.php';
 
 // -----------------------------------------------------------------------------
@@ -76,8 +75,8 @@ add_action( 'plugins_loaded', function() {
     if ( class_exists( 'DQ_Metabox' ) ) DQ_Metabox::init();
     if ( class_exists( 'DQ_QI_Metabox' ) ) DQ_QI_Metabox::init();
     if ( class_exists( 'DQ_Financial_Report' ) ) DQ_Financial_Report::init(); // NEW
-    if ( class_exists( 'DQ_Workorder_Timeline' ) ) DQ_Workorder_Timeline::init();
-    if ( class_exists( 'DQ_Workorder_Template' ) ) DQ_Workorder_Template::init();
+    
+    if ( class_exists( 'DQ_Workorder_Timeline' ) ) DQ_Workorder_Timeline::init(); // NEW
 });
 
 // -----------------------------------------------------------------------------
