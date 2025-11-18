@@ -263,59 +263,64 @@ class DQ_Workorder_Timeline {
      * @return string HTML output
      */
     private static function render_timeline( $timeline_data, $show_descriptions, $is_editable, $post_id ) {
-        $output = '<div class="dq-timeline-wrapper">';
-        $output .= '<div class="dq-timeline">';
+    $output = '<div class="dq-timeline-wrapper">';
+    $output .= '<div class="dq-timeline">';
 
-        $position_toggle = true; // Alternate top/bottom
+    $position_toggle = true; // Alternate top/bottom
 
-        foreach ( $timeline_data as $index => $step ) {
-            $position_class = $position_toggle ? 'top' : 'bottom';
-            $has_date_class = $step['has_date'] ? 'has-date' : 'no-date';
+    foreach ( $timeline_data as $index => $step ) {
+        $position_class = $position_toggle ? 'top' : 'bottom';
+        $has_date_class = $step['has_date'] ? 'has-date' : 'no-date';
 
-            $output .= sprintf(
-                '<div class="dq-timeline-step %s %s" data-key="%s">',
-                esc_attr( $position_class ),
-                esc_attr( $has_date_class ),
-                esc_attr( $step['key'] )
-            );
+        $output .= sprintf(
+            '<div class="dq-timeline-step %s %s" data-key="%s">',
+            esc_attr( $position_class ),
+            esc_attr( $has_date_class ),
+            esc_attr( $step['key'] )
+        );
 
-            // Card
-            $output .= '<div class="dq-timeline-card">';
-            $output .= '<div class="dq-timeline-label">' . esc_html( $step['label'] ) . '</div>';
-            if ( $show_descriptions && ! empty( $step['help'] ) ) {
-                $output .= '<div class="dq-timeline-help">' . esc_html( $step['help'] ) . '</div>';
-            }
-            $output .= '</div>'; // .dq-timeline-card
-
-            // Connector + Dot + Date
-            $output .= '<div class="dq-timeline-connector">';
-            $output .= '<div class="dq-timeline-line"></div>';
-            $output .= sprintf(
-                '<div class="dq-timeline-dot" style="background-color:%s;" data-field="%s" data-post="%d"%s>',
-                esc_attr( $step['color'] ),
-                esc_attr( $step['key'] ),
-                intval($post_id),
-                $is_editable ? ' data-editable="1"' : ''
-            );
-            if ( $step['has_date'] ) {
-                $output .= '<span class="dq-timeline-dot-date">' . esc_html( $step['normalized'] ) . '</span>';
-            }
-            $output .= '</div>'; // .dq-timeline-dot
-            $output .= '</div>'; // .dq-timeline-connector
-
-            $output .= '</div>'; // .dq-timeline-step
-
-            $position_toggle = ! $position_toggle;
+        // Card
+        $output .= '<div class="dq-timeline-card">';
+        $output .= '<div class="dq-timeline-label">' . esc_html( $step['label'] ) . '</div>';
+        if ( $show_descriptions && ! empty( $step['help'] ) ) {
+            $output .= '<div class="dq-timeline-help">' . esc_html( $step['help'] ) . '</div>';
         }
+        $output .= '</div>'; // .dq-timeline-card
 
-        $output .= '</div>'; // .dq-timeline
-        $output .= '</div>'; // .dq-timeline-wrapper
-
-        if ($is_editable) {
-            $output .= "<script>window.dqTimelineNonce = '" . esc_js(wp_create_nonce('dq_timeline_edit')) . "';</script>";
+        // Connector + Dot + Date
+        $output .= '<div class="dq-timeline-connector">';
+        $output .= '<div class="dq-timeline-line"></div>';
+        $output .= sprintf(
+            '<div class="dq-timeline-dot" style="background-color:%s;" data-field="%s" data-post="%d"%s>',
+            esc_attr( $step['color'] ),
+            esc_attr( $step['key'] ),
+            intval($post_id),
+            $is_editable ? ' data-editable="1"' : ''
+        );
+        if ( $step['has_date'] ) {
+            // Use strtotime to ensure normalization, display as m/d/Y
+            $formatted = date('m/d/Y', strtotime($step['normalized']));
+            $output .= '<span class="dq-timeline-dot-date">' . esc_html( $formatted ) . '</span>';
         }
-        return $output;
+        $output .= '</div>'; // .dq-timeline-dot
+        $output .= '</div>'; // .dq-timeline-connector
+
+        $output .= '</div>'; // .dq-timeline-step
+
+        $position_toggle = ! $position_toggle;
     }
+
+    $output .= '</div>'; // .dq-timeline
+    $output .= '</div>'; // .dq-timeline-wrapper
+
+    // Patch: Add ajaxurl and nonce automatically when editable!
+    if ($is_editable) {
+        $output .= "<script>window.ajaxurl = '" . esc_url(admin_url('admin-ajax.php')) . "';</script>";
+        $output .= "<script>window.dqTimelineNonce = '" . esc_js(wp_create_nonce('dq_timeline_edit')) . "';</script>";
+    }
+
+    return $output;
+}
 
     /**
      * AJAX handler: update timeline date fields

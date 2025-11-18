@@ -1,40 +1,198 @@
+/* Workorder Timeline - Infographic Style */
 .dq-timeline-wrapper {
-  margin: 32px 0;
+  margin: 44px 0 36px 0;
+  padding: 0;
   overflow-x: auto;
-  padding-bottom: 14px;
-}
-.dq-timeline {
   position: relative;
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(220px, 260px);
-  gap: 56px;
-  padding: 26px 8px 12px;
-  min-width: 760px;
-  background:
-    linear-gradient(#e5e7eb,#e5e7eb) center 52% / 100% 2px no-repeat;
 }
-@media (max-width: 800px) {
-  .dq-timeline { gap: 40px; grid-auto-columns: minmax(200px, 240px); }
+
+.dq-timeline {
+  display: flex;
+  position: relative;
+  min-height: 450px;
+  padding: 80px 0 95px 0;
+  justify-content: flex-start;
+  gap: 68px;
 }
-.dq-tl-item { position: relative; padding-top: 80px; padding-bottom: 80px; font-family: system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif; }
-.dq-tl-item--top{ padding-bottom: 120px; }
-.dq-tl-item--bottom{ padding-top: 120px; }
-.dq-tl-marker{ position:absolute; left:50%; transform:translateX(-50%); top:calc(50% - 10px); width:24px; height:24px; display:grid; place-items:center; z-index:2; }
-.dq-tl-dot{ width:20px; height:20px; border-radius:999px; box-shadow:0 0 0 4px rgba(0,0,0,0.08); }
-.dq-tl-item.is-pending .dq-tl-dot{ background:#cfcfcf !important; box-shadow:0 0 0 4px rgba(120,120,120,0.15); }
-.dq-tl-connector{ position:absolute; left:50%; width:2px; background:#d1d5db; transform:translateX(-50%); }
-.dq-tl-item--top .dq-tl-connector{ bottom:14px; height:88px; }
-.dq-tl-item--bottom .dq-tl-connector{ top:14px; height:88px; }
-.dq-tl-card{ position:absolute; left:50%; transform:translateX(-50%); width:100%; max-width:260px; background:#fff; border:1px solid #e5e7eb; border-radius:10px; box-shadow:0 8px 18px rgba(0,0,0,0.08); padding:12px 14px; }
-.dq-tl-item--top .dq-tl-card{ bottom:calc(50% + 34px); }
-.dq-tl-item--bottom .dq-tl-card{ top:calc(50% + 34px); }
-.dq-tl-card::after{ content:""; position:absolute; left:50%; transform:translateX(-50%); border:8px solid transparent; }
-.dq-tl-item--top .dq-tl-card::after{ top:100%; border-top-color:#e5e7eb; }
-.dq-tl-item--bottom .dq-tl-card::after{ bottom:100%; border-bottom-color:#e5e7eb; }
-.dq-tl-title{ margin:0 0 6px; font-size:15px; font-weight:700; color:#111827; }
-.dq-tl-date{ display:inline-block; font-size:13px; font-weight:600; color:#0b5560; background:#eef9fa; padding:4px 8px; border-radius:6px; }
-.dq-tl-date--missing{ color:#6b7280; background:#f3f4f6; font-weight:500; font-style:italic; }
-.dq-tl-help{ margin-top:6px; font-size:12px; color:#4b5563; line-height:1.35; }
-.dq-tl-empty{ font-size:14px; font-style:italic; color:#6b7280; padding:6px 0; }
-.dq-timeline-error{ color:#b91c1c; }
+
+.dq-timeline::before {
+  content: '';
+  position: absolute;
+  left: 27px;
+  right: 27px;
+  top: 56%;
+  height: 7px;
+  background: #b0b0b0;
+  border-radius: 3.5px;
+  z-index: 0;
+}
+
+.dq-timeline-step {
+  position: relative;
+  flex: 1;
+  min-width: 230px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.dq-timeline-step.top {
+  justify-content: flex-end;
+  margin-bottom: 35px;
+}
+.dq-timeline-step.bottom {
+  justify-content: flex-start;
+  margin-top: 40px;
+}
+
+/* Card Design - matches image2 */
+.dq-timeline-card {
+  background: #ebebeb;
+  border-radius: 28px;
+  border: none;
+  box-shadow: 0 16px 40px rgba(40,60,100,0.12);
+  min-width: 220px;
+  max-width: 300px;
+  min-height: 100px;
+  padding: 22px 26px 22px 26px;
+  text-align: left;
+  font-family: 'Segoe UI', 'Arial', 'sans-serif';
+  font-size: 18px;
+  font-weight: 400;
+  color: #333;
+  position: relative;
+  z-index: 4;
+  margin: 0 0 0 0;
+  box-sizing: border-box;
+  line-height: 1.45;
+}
+.dq-timeline-step.top .dq-timeline-card {
+  margin-bottom: 20px;
+}
+.dq-timeline-step.bottom .dq-timeline-card {
+  margin-top: 22px;
+}
+
+/* Card "tail" triangle pointer and connector line */
+.dq-timeline-card::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+}
+
+/**
+.dq-timeline-step.top .dq-timeline-card::after {
+  bottom: -18px;
+  border-left: 13px solid transparent;
+  border-right: 13px solid transparent;
+  border-top: 18px solid #ebebeb;
+}
+.dq-timeline-step.bottom .dq-timeline-card::after {
+  top: -18px;
+  border-left: 13px solid transparent;
+  border-right: 13px solid transparent;
+  border-bottom: 18px solid #ebebeb;
+}
+**/
+
+/* Card Text Formatting */
+.dq-timeline-label {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 2px;
+  margin-top: 0;
+  line-height:1.05;
+}
+.dq-timeline-date {
+  display: none; /* Hide date in card; show in dot below! */
+}
+.dq-timeline-help {
+  font-size: 13px;
+  font-weight: 400;
+  color: #373737;
+  margin-top: 0;
+  line-height: 1.2;
+}
+
+/* Connector line from card to dot */
+.dq-timeline-connector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 1;
+  position: relative;
+}
+.dq-timeline-step.top .dq-timeline-connector {
+  margin-bottom: 0;
+}
+.dq-timeline-step.bottom .dq-timeline-connector {
+  margin-top: 0;
+}
+.dq-timeline-line {
+  width: 5px;
+  height: 50px;
+  background: #cacaca;
+  margin-bottom: 0;
+  margin-top: 0;
+  border-radius: 3px;
+  display: block;
+}
+
+/* Dot on timeline */
+.dq-timeline-dot {
+  width: 36px;
+  height: 36px;
+  border-radius: 100px;
+  border: 5px solid #fff;
+  box-shadow: 0 0 0 4px #ccc, 0 16px 40px rgba(40,60,100,0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  position: relative;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.dq-timeline-dot > .dq-timeline-dot-date {
+  position: absolute;
+  top: 120%; left: 50%; transform: translateX(-50%);
+  font-size: 15px;
+  font-weight: 700;
+  color: #212121;
+  background: #fff;
+  padding: 6px 14px;
+  border-radius: 9px;
+  box-shadow: 0 1px 8px rgba(120,120,120,0.08);
+  white-space: nowrap;
+  min-width: 120px;
+  text-align: center;
+}
+
+/* Completed step - green border */
+.dq-timeline-step.has-date .dq-timeline-dot {
+  box-shadow: 0 0 0 4px #71db87, 0 16px 40px rgba(40,60,100,0.12);
+}
+
+/* Responsive */
+@media (max-width: 1100px) {
+  .dq-timeline { min-width:680px; gap:42px; }
+  .dq-timeline-step { min-width:170px; }
+  .dq-timeline-card { font-size: 15px; min-height: 80px; padding: 17px 16px; }
+  .dq-timeline-label { font-size: 16px; }
+}
+@media (max-width: 700px) {
+  .dq-timeline { gap: 18px; padding: 32px 0 38px 0; }
+  .dq-timeline-step { min-width:110px; }
+  .dq-timeline-card { font-size: 13px; min-height: 56px; }
+  .dq-timeline-label{ font-size: 13px;}
+}
+
+/* Hide useless empty-slot states */
+.dq-timeline-date.empty,
+.dq-tl-date--missing
+{ display:none !important;}
