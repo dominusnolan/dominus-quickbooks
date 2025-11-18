@@ -83,6 +83,7 @@ class DQ_Workorder_Timeline {
 
     /**
      * Enqueue edit JS
+     * PATCH: Remove Cancel button and beautify the date editor UI per image1.
      */
     public static function enqueue_edit_scripts() {
         // Only on non-admin, when script is enqueued above
@@ -94,41 +95,85 @@ class DQ_Workorder_Timeline {
             ['jquery'],
             DQQB_VERSION
         );
-        // Inline script for date editing, AJAX, nonce
+
+        // Beautiful floating date editor UI with removed Cancel button
         wp_add_inline_script( 'dq-workorder-timeline-edit', '
         jQuery(function($){
             $(".dq-timeline-dot[data-editable=\'1\']").css("cursor","pointer").on("click", function(e){
                 var $dot = $(this), field = $dot.data("field"), post = $dot.data("post");
-                // Find existing date bubble text (m/d/Y)
                 var oldDateText = $dot.find(".dq-timeline-dot-date").length
                     ? $dot.find(".dq-timeline-dot-date").text().trim()
                     : "";
-                // Convert to YYYY-MM-DD if needed for date input
                 var formattedDate = "";
-                var mdyMatch = oldDateText.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); // m/d/Y
+                var mdyMatch = oldDateText.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
                 if (mdyMatch) {
                     formattedDate = mdyMatch[3] + "-" + ("0"+mdyMatch[1]).slice(-2) + "-" + ("0"+mdyMatch[2]).slice(-2);
                 } else if (oldDateText.match(/^\d{4}-\d{2}-\d{2}$/)) {
                     formattedDate = oldDateText;
                 } else {
-                    formattedDate = ""; // no initial value if empty
+                    formattedDate = "";
                 }
-                // Prevent multiple editors
                 if ($dot.find(".dq-tl-edit-ui").length) return;
 
-                var $input = $("<input type=\'date\' class=\'dq-tl-input\' style=\'font-size:16px;padding:2px 6px;border-radius:6px;border:1px solid #aaa;\'>").val(formattedDate);
-                var $save = $("<button type=\'button\' style=\'margin-left:7px;\'>Save</button>");
-                var $cancel = $("<button type=\'button\' style=\'margin-left:5px;\'>Cancel</button>");
-                var $ui = $("<div class=\'dq-tl-edit-ui\' style=\'margin-top:8px;\'></div>");
-                $ui.append($input, $save, $cancel);
+                // Remove any previous UI
+                $dot.find(".dq-tl-edit-ui").remove();
 
-                $dot.find(".dq-timeline-dot-date").hide(); // Hide bubble if present
+                // floating white card (centered below dot)
+                var $ui = $("<div class=\'dq-tl-edit-ui\' style=\'" + 
+                    "position:absolute;left:50%;transform:translateX(-50%);z-index:11;" +
+                    "background:#fff;border-radius:13px;box-shadow:0 8px 32px rgba(20,40,60,0.12);" +
+                    "border:2px solid #337cff;padding:18px 26px 22px 26px;display:flex;" +
+                    "flex-direction:column;align-items:center;min-width:220px;" +
+                    "margin-top:28px;" +
+                    "\'></div>");
+
+                // Label
+                var $label = $("<div style=\'font-size:15px;font-weight:600;margin-bottom:9px;color:#337cff;letter-spacing:.02em\'>Edit Date</div>");
+
+                // Date input, styled
+                var $input = $("<input type=\'date\' class=\'dq-tl-input\' style=\'" +
+                    "font-size:16px;padding:7px 15px;border-radius:9px;border:2px solid #b1cfff;" +
+                    "background:#fafdff;outline:none;box-shadow:0 2px 9px rgba(30,80,220,.04);" +
+                    "transition:border-color .2s;width:140px;margin-right:7px;" +
+                    "\' placeholder=\'mm/dd/yyyy\' autocomplete=\'off\'>").val(formattedDate);
+
+                var $calendar = $("<span style=\'display:inline-block;width:25px;height:25px;background:#eef6ff;" + 
+                    "border-radius:6px;text-align:center;line-height:25px;font-size:18px;color:#337cff;" +
+                    "vertical-align:middle;margin-left:6px;\' title=\'Pick date\'>&#128197;</span>");
+
+                // Save button
+                var $save = $("<button type=\'button\' class=\'dq-tl-save-btn\' style=\'" +
+                    "background:linear-gradient(90deg,#337cff,#59a5f7);color:#fff;" +
+                    "border:none;padding:7px 23px;border-radius:8px;font-weight:600;font-size:15px;" +
+                    "box-shadow:0 2px 9px rgba(30,80,240,0.08);cursor:pointer;" +
+                    "transition:background .2s;margin-top:10px;margin-bottom:2px;" +
+                    "\' >Save</button>");
+
+                $ui.append($label);
+                var $inputRow = $("<div style=\'width:100%;display:flex;align-items:center;gap:8px;margin-bottom:8px;\'></div>")
+                                .append($input)
+                                .append($calendar);
+                $ui.append($inputRow);
+                $ui.append($save);
+
+                $dot.find(".dq-timeline-dot-date").hide();
                 $dot.append($ui);
 
-                $cancel.on("click", function(){
-                    $ui.remove();
-                    $dot.find(".dq-timeline-dot-date").show(); // Only shows if present
-                });
+                // Focus effect
+                $input.on("focus", function(){ $(this).css("border-color","#337cff"); });
+                $input.on("blur", function(){ $(this).css("border-color","#b1cfff"); });
+
+                // Dismiss editor if clicking outside
+                setTimeout(function() {
+                    $(document).on("mousedown.dqtl", function(ev) {
+                        if ($ui[0] && !$.contains($ui[0], ev.target) && ev.target !== $ui[0]) {
+                            $ui.remove();
+                            $dot.find(".dq-timeline-dot-date").show();
+                            $(document).off("mousedown.dqtl");
+                        }
+                    });
+                }, 10);
+
                 $save.on("click", function(){
                     var newDate = $input.val();
                     $save.prop("disabled", true);
@@ -140,7 +185,6 @@ class DQ_Workorder_Timeline {
                         date: newDate
                     }, function(resp){
                         if (resp.success) {
-                            // On save, show bubble. Format bubble value (m/d/Y)
                             var bubbleVal = "";
                             if (newDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
                                 var d = new Date(newDate);
@@ -150,13 +194,13 @@ class DQ_Workorder_Timeline {
                                 bubbleVal = newDate;
                             }
 
-                            // If .dq-timeline-dot-date exists, update it. Otherwise, create it.
                             if ($dot.find(".dq-timeline-dot-date").length) {
                                 $dot.find(".dq-timeline-dot-date").text(bubbleVal).show();
                             } else {
                                 $("<span class=\'dq-timeline-dot-date\'>"+bubbleVal+"</span>").appendTo($dot);
                             }
                             $ui.remove();
+                            $(document).off("mousedown.dqtl");
                         } else {
                             alert("Error: "+(resp.data||"Failed"));
                             $save.prop("disabled", false);
@@ -167,6 +211,7 @@ class DQ_Workorder_Timeline {
         });
         ' );
     }
+
 
     /**
      * Get field map for timeline (field keys to meta/ACF)
