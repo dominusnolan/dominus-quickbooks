@@ -3,10 +3,9 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 
 /**
  * Class DQ_Workorder_Timeline
- * Vertical timeline with emoji icons, left/right alternating cards.
- * Date popup pre-fills any existing value, reloads page after save.
- *
- * This file renders the timeline HTML and enqueues the edit JS (inline).
+ * Vertical timeline with emoji icons, alternating left/right cards.
+ * Dots and date text clickable to edit date. Editor popup pre-fills any existing value, reloads page after save.
+ * This fully patches the clickability issue for both .dq-vtl-dot and .dq-vtl-date.
  */
 class DQ_Workorder_Timeline {
 
@@ -35,9 +34,7 @@ class DQ_Workorder_Timeline {
         $is_editable = is_user_logged_in() && current_user_can('edit_post', $post_id);
 
         self::enqueue_styles();
-        if ( $is_editable ) {
-            wp_enqueue_script( 'dq-workorder-timeline-edit' );
-        }
+        if ( $is_editable ) wp_enqueue_script( 'dq-workorder-timeline-edit' );
 
         $timeline_data = self::get_timeline_data( $post_id );
 
@@ -59,16 +56,17 @@ class DQ_Workorder_Timeline {
 
     public static function enqueue_edit_scripts() {
         if ( wp_script_is( 'dq-workorder-timeline-edit', 'enqueued' ) ) return;
-
         wp_register_script( 'dq-workorder-timeline-edit', false, [ 'jquery' ], DQQB_VERSION );
-
-        // Inline script: prefill date (if present) and reload on successful save
+        // PATCH: Enable click on .dq-vtl-dot and .dq-vtl-date, popup editor, reload after save
         wp_add_inline_script( 'dq-workorder-timeline-edit', '
         jQuery(function($){
-            $(document).on("click", ".dq-vtl-dot[data-editable=\'1\']", function(e){
-                var $dot = $(this), field = $dot.data("field"), post = $dot.data("post");
-                // Prefer visible date text, fallback to any date text present
-                var oldDateText = $dot.closest(".dq-vtl-step").find(".dq-vtl-date").first().text().trim() || "";
+            $(document).on("click", ".dq-vtl-dot[data-editable=\'1\'], .dq-vtl-date[data-editable=\'1\']", function(e){
+                var $trigger = $(this),
+                    $step = $trigger.closest(".dq-vtl-step"),
+                    $dot = $step.find(".dq-vtl-dot[data-editable=\'1\']");
+                var field = $dot.data("field"),
+                    post = $dot.data("post");
+                var oldDateText = $step.find(".dq-vtl-date").first().text().trim() || "";
                 var formattedDate = "";
                 var mdyMatch = oldDateText.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
                 if (mdyMatch) {
@@ -76,25 +74,18 @@ class DQ_Workorder_Timeline {
                 } else if (oldDateText.match(/^\d{4}-\d{2}-\d{2}$/)) {
                     formattedDate = oldDateText;
                 }
-
-                // Remove any existing ui
                 $(".dq-tl-edit-ui").remove();
-
                 var $ui = $("<div class=\'dq-tl-edit-ui\' style=\'position:absolute;left:50%;transform:translateX(-50%);z-index:9999;background:#fff;border-radius:13px;box-shadow:0 12px 40px rgba(20,30,50,0.12);border:2px solid #dbe9ff;padding:18px 22px;display:flex;flex-direction:column;align-items:center;min-width:240px;margin-top:-120px;\'></div>");
                 $ui.append($("<div style=\'font-size:15px;font-weight:700;margin-bottom:10px;color:#2f74c9;text-align:center\'>Edit Date</div>"));
-
                 var $inputRow = $("<div style=\'display:flex;align-items:center;gap:8px;width:100%;justify-content:center;margin-bottom:10px;\'></div>");
                 var $input = $("<input type=\'date\' style=\'font-size:16px;padding:8px 12px;border-radius:8px;border:2px solid #cfe0ff;background:#fbfeff;width:150px;text-align:center;\' autocomplete=\'off\'>").val(formattedDate);
                 var $calendar = $("<span style=\'display:inline-block;width:28px;height:28px;background:#eef6ff;border-radius:7px;text-align:center;line-height:28px;font-size:16px;color:#337cff;vertical-align:middle;\' title=\'Pick date\'>&#128197;</span>");
                 $inputRow.append($input).append($calendar);
                 $ui.append($inputRow);
-
                 var $save = $("<button type=\'button\' style=\'background:linear-gradient(90deg,#2f79d6,#57a0f4);color:#fff;border:none;padding:9px 22px;border-radius:9px;font-weight:700;cursor:pointer;width:100%\'>Save</button>");
                 $ui.append($save);
 
-                // place ui near the dot (append to step for correct positioning)
-                $dot.closest(".dq-vtl-step").append($ui);
-
+                $step.append($ui);
                 $input.focus();
 
                 setTimeout(function(){
@@ -117,7 +108,6 @@ class DQ_Workorder_Timeline {
                         date: newDate
                     }, function(resp){
                         if (resp && resp.success) {
-                            // reload to reflect changes everywhere (safer for ACF and choices)
                             location.reload();
                         } else {
                             alert("Save failed: " + (resp && resp.data ? resp.data : "unknown error"));
@@ -130,7 +120,7 @@ class DQ_Workorder_Timeline {
                 });
             });
         });
-        ' );
+        ');
     }
 
     private static function get_field_map( $post_id = 0 ) {
@@ -157,7 +147,6 @@ class DQ_Workorder_Timeline {
                 'emoji'    => '📅',
             ]
         ];
-
         // Conditionally add Re-Scheduled Service
         $should_add_reschedule = false;
         if ( $post_id ) {
@@ -249,7 +238,6 @@ class DQ_Workorder_Timeline {
         $output .= '<div class="dq-timeline-vertical">';
 
         foreach ( $timeline_data as $i => $step ) {
-            // alternate sides: even => right card (date left), odd => left card (date right)
             $side = $i % 2 == 0 ? 'right' : 'left';
             $color = esc_attr( $step['color'] );
             $emoji = esc_html( $step['emoji'] );
@@ -257,10 +245,14 @@ class DQ_Workorder_Timeline {
 
             $output .= '<div class="dq-vtl-step ' . $side . '">';
 
-            // date (left or right depending on side)
-            $output .= '<div class="dq-vtl-date">' . esc_html( $date ) . '</div>';
+            // PATCH: make .dq-vtl-date editable if user can edit, include data-field and data-post attrs
+            $output .= '<div class="dq-vtl-date"' .
+                ($is_editable
+                    ? ' data-editable="1" data-field="' . esc_attr($step['key'])
+                      . '" data-post="' . esc_attr($post_id) . '"'
+                    : '') .
+                '>' . esc_html($date) . '</div>';
 
-            // dot (centered by CSS). include data attributes for editing.
             $dot_attrs = sprintf(
                 'class="dq-vtl-dot" style="background:%s;" data-field="%s" data-post="%d"%s',
                 $color,
@@ -272,7 +264,6 @@ class DQ_Workorder_Timeline {
             $output .= '<span class="dq-vtl-emoji">' . $emoji . '</span>';
             $output .= '</div>';
 
-            // card (the content panel)
             $output .= '<div class="dq-vtl-card">';
             $output .= '<div class="dq-vtl-label">' . esc_html( $step['label'] ) . '</div>';
             if ( $show_descriptions && ! empty( $step['help'] ) ) {
