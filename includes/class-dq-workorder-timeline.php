@@ -99,23 +99,40 @@ class DQ_Workorder_Timeline {
         jQuery(function($){
             $(".dq-timeline-dot[data-editable=\'1\']").css("cursor","pointer").on("click", function(e){
                 var $dot = $(this), field = $dot.data("field"), post = $dot.data("post");
-                var oldDate = $dot.find(".dq-timeline-dot-date").text().trim();
+                // Find existing date bubble text (m/d/Y)
+                var oldDateText = $dot.find(".dq-timeline-dot-date").length
+                    ? $dot.find(".dq-timeline-dot-date").text().trim()
+                    : "";
+                // Convert to YYYY-MM-DD if needed for date input
+                var formattedDate = "";
+                var mdyMatch = oldDateText.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); // m/d/Y
+                if (mdyMatch) {
+                    formattedDate = mdyMatch[3] + "-" + ("0"+mdyMatch[1]).slice(-2) + "-" + ("0"+mdyMatch[2]).slice(-2);
+                } else if (oldDateText.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                    formattedDate = oldDateText;
+                } else {
+                    formattedDate = ""; // no initial value if empty
+                }
+                // Prevent multiple editors
                 if ($dot.find(".dq-tl-edit-ui").length) return;
 
-                var $input = $("<input type=\'date\' class=\'dq-tl-input\' style=\'font-size:16px;padding:2px 6px;border-radius:6px;border:1px solid #aaa;\'>").val(oldDate);
+                var $input = $("<input type=\'date\' class=\'dq-tl-input\' style=\'font-size:16px;padding:2px 6px;border-radius:6px;border:1px solid #aaa;\'>").val(formattedDate);
                 var $save = $("<button type=\'button\' style=\'margin-left:7px;\'>Save</button>");
                 var $cancel = $("<button type=\'button\' style=\'margin-left:5px;\'>Cancel</button>");
                 var $ui = $("<div class=\'dq-tl-edit-ui\' style=\'margin-top:8px;\'></div>");
                 $ui.append($input, $save, $cancel);
 
-                $dot.find(".dq-timeline-dot-date").hide();
+                $dot.find(".dq-timeline-dot-date").hide(); // Hide bubble if present
                 $dot.append($ui);
 
-                $cancel.on("click", function(){ $ui.remove(); $dot.find(".dq-timeline-dot-date").show(); });
+                $cancel.on("click", function(){
+                    $ui.remove();
+                    $dot.find(".dq-timeline-dot-date").show(); // Only shows if present
+                });
                 $save.on("click", function(){
                     var newDate = $input.val();
                     $save.prop("disabled", true);
-                    $.post(ajaxurl || "/wp-admin/admin-ajax.php", {
+                    $.post(window.ajaxurl || "/wp-admin/admin-ajax.php", {
                         action:"dq_update_timeline_date",
                         nonce: window.dqTimelineNonce || "",
                         post_id: post,
@@ -123,7 +140,22 @@ class DQ_Workorder_Timeline {
                         date: newDate
                     }, function(resp){
                         if (resp.success) {
-                            $dot.find(".dq-timeline-dot-date").text(newDate).show();
+                            // On save, show bubble. Format bubble value (m/d/Y)
+                            var bubbleVal = "";
+                            if (newDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                                var d = new Date(newDate);
+                                var m = d.getMonth()+1, day = d.getDate(), y = d.getFullYear();
+                                bubbleVal = (m<10?"0":"")+m + "/" + (day<10?"0":"")+day + "/" + y;
+                            } else {
+                                bubbleVal = newDate;
+                            }
+
+                            // If .dq-timeline-dot-date exists, update it. Otherwise, create it.
+                            if ($dot.find(".dq-timeline-dot-date").length) {
+                                $dot.find(".dq-timeline-dot-date").text(bubbleVal).show();
+                            } else {
+                                $("<span class=\'dq-timeline-dot-date\'>"+bubbleVal+"</span>").appendTo($dot);
+                            }
                             $ui.remove();
                         } else {
                             alert("Error: "+(resp.data||"Failed"));
@@ -263,64 +295,65 @@ class DQ_Workorder_Timeline {
      * @return string HTML output
      */
     private static function render_timeline( $timeline_data, $show_descriptions, $is_editable, $post_id ) {
-    $output = '<div class="dq-timeline-wrapper">';
-    $output .= '<div class="dq-timeline">';
+        $output = '<div class="dq-timeline-wrapper">';
+        $output .= '<div class="dq-timeline">';
 
-    $position_toggle = true; // Alternate top/bottom
+        $position_toggle = true; // Alternate top/bottom
 
-    foreach ( $timeline_data as $index => $step ) {
-        $position_class = $position_toggle ? 'top' : 'bottom';
-        $has_date_class = $step['has_date'] ? 'has-date' : 'no-date';
+        foreach ( $timeline_data as $index => $step ) {
+            $position_class = $position_toggle ? 'top' : 'bottom';
+            $has_date_class = $step['has_date'] ? 'has-date' : 'no-date';
 
-        $output .= sprintf(
-            '<div class="dq-timeline-step %s %s" data-key="%s">',
-            esc_attr( $position_class ),
-            esc_attr( $has_date_class ),
-            esc_attr( $step['key'] )
-        );
+            $output .= sprintf(
+                '<div class="dq-timeline-step %s %s" data-key="%s">',
+                esc_attr( $position_class ),
+                esc_attr( $has_date_class ),
+                esc_attr( $step['key'] )
+            );
 
-        // Card
-        $output .= '<div class="dq-timeline-card">';
-        $output .= '<div class="dq-timeline-label">' . esc_html( $step['label'] ) . '</div>';
-        if ( $show_descriptions && ! empty( $step['help'] ) ) {
-            $output .= '<div class="dq-timeline-help">' . esc_html( $step['help'] ) . '</div>';
+            // Card
+            $output .= '<div class="dq-timeline-card">';
+            $output .= '<div class="dq-timeline-label">' . esc_html( $step['label'] ) . '</div>';
+            if ( $show_descriptions && ! empty( $step['help'] ) ) {
+                $output .= '<div class="dq-timeline-help">' . esc_html( $step['help'] ) . '</div>';
+            }
+            $output .= '</div>'; // .dq-timeline-card
+
+            // Connector + Dot + Date
+            $output .= '<div class="dq-timeline-connector">';
+            $output .= '<div class="dq-timeline-line"></div>';
+            $output .= sprintf(
+                '<div class="dq-timeline-dot" style="background-color:%s;" data-field="%s" data-post="%d"%s>',
+                esc_attr( $step['color'] ),
+                esc_attr( $step['key'] ),
+                intval($post_id),
+                $is_editable ? ' data-editable="1"' : ''
+            );
+            // Render date bubble only if a date is present
+            if ( $step['has_date'] ) {
+                $formatted = date('m/d/Y', strtotime($step['normalized']));
+                $output .= '<span class="dq-timeline-dot-date">' . esc_html( $formatted ) . '</span>';
+            }
+            // If no date, leave as is (dot is always editable if allowed)
+            $output .= '</div>'; // .dq-timeline-dot
+            $output .= '</div>'; // .dq-timeline-connector
+
+            $output .= '</div>'; // .dq-timeline-step
+
+            $position_toggle = ! $position_toggle;
         }
-        $output .= '</div>'; // .dq-timeline-card
 
-        // Connector + Dot + Date
-        $output .= '<div class="dq-timeline-connector">';
-        $output .= '<div class="dq-timeline-line"></div>';
-        $output .= sprintf(
-            '<div class="dq-timeline-dot" style="background-color:%s;" data-field="%s" data-post="%d"%s>',
-            esc_attr( $step['color'] ),
-            esc_attr( $step['key'] ),
-            intval($post_id),
-            $is_editable ? ' data-editable="1"' : ''
-        );
-        if ( $step['has_date'] ) {
-            // Use strtotime to ensure normalization, display as m/d/Y
-            $formatted = date('m/d/Y', strtotime($step['normalized']));
-            $output .= '<span class="dq-timeline-dot-date">' . esc_html( $formatted ) . '</span>';
+        $output .= '</div>'; // .dq-timeline
+        $output .= '</div>'; // .dq-timeline-wrapper
+
+        // Patch: Add ajaxurl and nonce automatically when editable!
+        if ($is_editable) {
+            $output .= "<script>window.ajaxurl = '" . esc_url(admin_url('admin-ajax.php')) . "';</script>";
+            $output .= "<script>window.dqTimelineNonce = '" . esc_js(wp_create_nonce('dq_timeline_edit')) . "';</script>";
         }
-        $output .= '</div>'; // .dq-timeline-dot
-        $output .= '</div>'; // .dq-timeline-connector
 
-        $output .= '</div>'; // .dq-timeline-step
-
-        $position_toggle = ! $position_toggle;
+        return $output;
     }
-
-    $output .= '</div>'; // .dq-timeline
-    $output .= '</div>'; // .dq-timeline-wrapper
-
-    // Patch: Add ajaxurl and nonce automatically when editable!
-    if ($is_editable) {
-        $output .= "<script>window.ajaxurl = '" . esc_url(admin_url('admin-ajax.php')) . "';</script>";
-        $output .= "<script>window.dqTimelineNonce = '" . esc_js(wp_create_nonce('dq_timeline_edit')) . "';</script>";
-    }
-
-    return $output;
-}
 
     /**
      * AJAX handler: update timeline date fields
@@ -343,5 +376,4 @@ class DQ_Workorder_Timeline {
         }
         wp_send_json_success(['date'=>$date]);
     }
-
 }
