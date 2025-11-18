@@ -28,7 +28,24 @@ $val = function( $key ) use ( $post_id ) {
     return is_array($v) ? '' : (string) $v;
 };
 
+// Engineer profile image from ACF (user_{ID}.profile_picture), fallback to WP avatar
+$author_id = get_post_field('post_author', $post_id);
+$engineer_name = get_the_author_meta('display_name', $author_id);
+
+$profile_img_url = '';
+if ( function_exists('get_field') ) {
+    $acf_img = get_field('profile_picture', 'user_' . $author_id);
+    if ( is_array($acf_img) && !empty($acf_img['url']) ) {
+        $profile_img_url = esc_url($acf_img['url']);
+    } elseif ( is_string($acf_img) && filter_var($acf_img, FILTER_VALIDATE_URL) ) {
+        $profile_img_url = esc_url($acf_img);
+    }
+}
+if ( !$profile_img_url ) {
+    $profile_img_url = get_avatar_url($author_id, ['size' => 80]);
+}
 ?>
+
 <style>
     .wo-process{
         margin: 20px 0 10px;
@@ -41,6 +58,26 @@ $val = function( $key ) use ( $post_id ) {
         text-align: center;
         font-size: 35px;
     }
+    .wo-meta-engineer {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 10px;
+    }
+    .wo-meta-engineer-img {
+        width: 54px;
+        height: 54px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 2px solid #dbeeff;
+        background: #f6faff;
+        flex-shrink: 0;
+    }
+    .wo-meta-engineer-name {
+        font-size: 16px;
+        font-weight: 600;
+        color: #222;
+    }
 </style>
 <main id="primary" class="site-main dqqb-single-workorder" style="max-width:95%;margin:0 auto">
     <article id="post-<?php the_ID(); ?>" <?php post_class(); ?>>
@@ -51,10 +88,13 @@ $val = function( $key ) use ( $post_id ) {
             <?php endif; ?>
         </header>
 
-        
-
         <section class="wo-meta" style="margin:26px 0;">
             <h3 style="font-size:18px;font-weight:700;margin:0 0 10px;">Summary</h3>
+            Field Engineer:
+            <div class="wo-meta-engineer">
+                <img class="wo-meta-engineer-img" src="<?php echo $profile_img_url; ?>" alt="Engineer photo" />
+                <span class="wo-meta-engineer-name"><?php echo esc_html( $engineer_name ); ?></span>
+            </div>
             <div class="wo-meta-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
                 <?php
                 // A few handy bits users often want under the timeline; adjust/extend as needed.
@@ -62,13 +102,10 @@ $val = function( $key ) use ( $post_id ) {
                     'Product ID'             => $val('installed_product_id'),
                     'State'                  => $val('wo_state'),
                     'Location'               => $val('wo_location'),
-                    'Engineer'               => get_the_author_meta('display_name', get_post_field('post_author', $post_id)),
-                    'State'                  => $val('wo_state'),
                     'City'                   => $val('wo_city'),
                     'Invoice No'             => $val('wo_invoice_no'),
                     'Total Billed'           => $val('wo_total_billed'),
                     'Balance Due'            => $val('wo_balance_due'),
-                    
                 ];
                 foreach ( $pairs as $label => $value ) {
                     if ( $value === '' ) continue;
