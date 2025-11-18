@@ -44,6 +44,19 @@ if ( function_exists('get_field') ) {
 if ( !$profile_img_url ) {
     $profile_img_url = get_avatar_url($author_id, ['size' => 80]);
 }
+
+// Private comments (ACF field: private_comments or meta field: private_comments)
+$private_comments = '';
+if ( function_exists('get_field') ) {
+    $private_comments = get_field('private_comments', $post_id);
+}
+if ($private_comments === '' || $private_comments === null) {
+    $private_comments = get_post_meta($post_id, 'private_comments', true);
+}
+// Normalize _x000D_ newlines to whitespace
+if (is_string($private_comments) && $private_comments !== '') {
+    $private_comments = str_replace('_x000D_', "\n", $private_comments);
+}
 ?>
 
 <style>
@@ -78,6 +91,27 @@ if ( !$profile_img_url ) {
         font-weight: 600;
         color: #222;
     }
+    .wo-private-comments {
+        background: #fff5e6;
+        border: 1px solid #f0e1c7;
+        border-radius: 8px;
+        padding: 14px 18px;
+        margin: 20px 0 10px 0;
+        font-size: 15px;
+        color: #634d2c;
+        line-height: 1.6;
+        font-family: "Segoe UI", Arial, sans-serif;
+    }
+    .wo-private-comments h3 {
+        margin-top: 0;
+        margin-bottom: 8px;
+        font-size: 16px;
+        font-weight: 700;
+        color: #846127;
+        letter-spacing: 0.02em;
+    }
+    
+    #footer-page{display:none !important}
 </style>
 <main id="primary" class="site-main dqqb-single-workorder" style="max-width:95%;margin:0 auto">
     <article id="post-<?php the_ID(); ?>" <?php post_class(); ?>>
@@ -117,7 +151,18 @@ if ( !$profile_img_url ) {
                 ?>
             </div>
         </section>
-        
+
+        <?php if ( $private_comments && trim((string)$private_comments) !== '' ) : ?>
+            <section class="wo-private-comments">
+                <h3>Private Comments</h3>
+                <div>
+                    <?php
+                        // Supports basic line breaks, but escapes HTML
+                        echo nl2br( esc_html( (string)$private_comments ) );
+                    ?>
+                </div>
+            </section>
+        <?php endif; ?>
         
         <section class="wo-process" aria-labelledby="wo-process-heading" style="margin:20px 0 10px;">
            <H3 style="margin-top:30px; font-face:uppercase; text-align: center: font-size: 25px">Work Order Progress</H3>
