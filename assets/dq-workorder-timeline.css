@@ -15,15 +15,15 @@
 .dq-timeline {
     display: flex;
     position: relative;
-    min-height: 280px;
-    padding: 100px 0;
+    min-height: 420px;
+    padding: 140px 0 120px;
 }
 
 /* Baseline (horizontal line connecting all dots) */
 .dq-timeline::before {
     content: '';
     position: absolute;
-    top: 50%;
+    top: 60%;
     left: 0;
     right: 0;
     height: 3px;
@@ -117,7 +117,7 @@
 /* Vertical line from dot to card */
 .dq-timeline-line {
     width: 2px;
-    height: 40px;
+    height: 80px;
     background: #ccc;
 }
 
