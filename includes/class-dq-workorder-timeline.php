@@ -3,7 +3,10 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 
 /**
  * Class DQ_Workorder_Timeline
- * Vertical timeline (see image3), emoji icons for each step, alternating left/right cards.
+ * Vertical timeline with emoji icons, left/right alternating cards.
+ * Date popup pre-fills any existing value, reloads page after save.
+ *
+ * This file renders the timeline HTML and enqueues the edit JS (inline).
  */
 class DQ_Workorder_Timeline {
 
@@ -32,7 +35,10 @@ class DQ_Workorder_Timeline {
         $is_editable = is_user_logged_in() && current_user_can('edit_post', $post_id);
 
         self::enqueue_styles();
-        if ($is_editable) wp_enqueue_script('dq-workorder-timeline-edit');
+        if ( $is_editable ) {
+            wp_enqueue_script( 'dq-workorder-timeline-edit' );
+        }
+
         $timeline_data = self::get_timeline_data( $post_id );
 
         return self::render_timeline( $timeline_data, $show_descriptions, $is_editable, $post_id );
@@ -52,37 +58,49 @@ class DQ_Workorder_Timeline {
     }
 
     public static function enqueue_edit_scripts() {
-        if ( wp_script_is('dq-workorder-timeline-edit', 'enqueued') ) return;
-        wp_register_script('dq-workorder-timeline-edit', false, ['jquery'], DQQB_VERSION);
+        if ( wp_script_is( 'dq-workorder-timeline-edit', 'enqueued' ) ) return;
+
+        wp_register_script( 'dq-workorder-timeline-edit', false, [ 'jquery' ], DQQB_VERSION );
+
+        // Inline script: prefill date (if present) and reload on successful save
         wp_add_inline_script( 'dq-workorder-timeline-edit', '
         jQuery(function($){
-            $(".dq-vtl-dot[data-editable=\'1\']").css("cursor","pointer").on("click", function(e){
+            $(document).on("click", ".dq-vtl-dot[data-editable=\'1\']", function(e){
                 var $dot = $(this), field = $dot.data("field"), post = $dot.data("post");
-                var oldDateText = $dot.find(".dq-vtl-date").length ? $dot.find(".dq-vtl-date").text().trim() : "";
-                var formattedDate="", mdyMatch = oldDateText.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-                if(mdyMatch) formattedDate = mdyMatch[3]+"-"+("0"+mdyMatch[1]).slice(-2)+"-"+("0"+mdyMatch[2]).slice(-2);
-                else if(oldDateText.match(/^\d{4}-\d{2}-\d{2}$/)) formattedDate=oldDateText;
-                if ($dot.find(".dq-tl-edit-ui").length) return;
-                $dot.find(".dq-tl-edit-ui").remove();
+                // Prefer visible date text, fallback to any date text present
+                var oldDateText = $dot.closest(".dq-vtl-step").find(".dq-vtl-date").first().text().trim() || "";
+                var formattedDate = "";
+                var mdyMatch = oldDateText.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+                if (mdyMatch) {
+                    formattedDate = mdyMatch[3] + "-" + ("0"+mdyMatch[1]).slice(-2) + "-" + ("0"+mdyMatch[2]).slice(-2);
+                } else if (oldDateText.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                    formattedDate = oldDateText;
+                }
 
-                var $ui = $("<div class=\'dq-tl-edit-ui\' style=\'position:absolute;left:50%;transform:translateX(-50%);z-index:21;background:#fff;border-radius:13px;box-shadow:0 8px 32px rgba(20,40,60,0.12);border:2px solid #337cff;padding:18px 26px 22px 26px;display:flex;flex-direction:column;align-items:center;min-width:240px;margin-top:22px;\'></div>");
-                $ui.append($("<div style=\'font-size:15px;font-weight:600;margin-bottom:9px;color:#337cff;text-align:center;letter-spacing:.02em\'>Edit Date</div>"));
-                var $inputRow = $("<div style=\'width:100%;display:flex;align-items:center;gap:8px;margin-bottom:12px;justify-content:center;\'></div>");
-                var $input = $("<input type=\'date\' style=\'font-size:17px;padding:7px 15px;border-radius:9px;border:2px solid #2e8af8;background:#fafdff;outline:none;box-shadow:0 2px 9px rgba(30,80,220,.09);transition:border-color .2s;width:145px;margin-right:7px;text-align:center;\' autocomplete=\'off\'>").val(formattedDate);
-                var $calendar = $("<span style=\'display:inline-block;width:28px;height:28px;background:#eef6ff;border-radius:7px;text-align:center;line-height:28px;font-size:18px;color:#337cff;vertical-align:middle;margin-left:4px;\' title=\'Pick date\'>&#128197;</span>");
-                $inputRow.append($input).append($calendar); $ui.append($inputRow);
+                // Remove any existing ui
+                $(".dq-tl-edit-ui").remove();
 
-                var $save = $("<button type=\'button\' style=\'background:linear-gradient(90deg,#337cff,#59a5f7);color:#fff;border:none;padding:8px 28px;border-radius:9px;font-weight:600;font-size:15px;box-shadow:0 2px 9px rgba(30,80,240,0.09);cursor:pointer;transition:background .2s;margin-top:10px;margin-bottom:3px;width:100%;text-align:center\'>Save</button>");
+                var $ui = $("<div class=\'dq-tl-edit-ui\' style=\'position:absolute;left:50%;transform:translateX(-50%);z-index:9999;background:#fff;border-radius:13px;box-shadow:0 12px 40px rgba(20,30,50,0.12);border:2px solid #dbe9ff;padding:18px 22px;display:flex;flex-direction:column;align-items:center;min-width:240px;margin-top:-120px;\'></div>");
+                $ui.append($("<div style=\'font-size:15px;font-weight:700;margin-bottom:10px;color:#2f74c9;text-align:center\'>Edit Date</div>"));
+
+                var $inputRow = $("<div style=\'display:flex;align-items:center;gap:8px;width:100%;justify-content:center;margin-bottom:10px;\'></div>");
+                var $input = $("<input type=\'date\' style=\'font-size:16px;padding:8px 12px;border-radius:8px;border:2px solid #cfe0ff;background:#fbfeff;width:150px;text-align:center;\' autocomplete=\'off\'>").val(formattedDate);
+                var $calendar = $("<span style=\'display:inline-block;width:28px;height:28px;background:#eef6ff;border-radius:7px;text-align:center;line-height:28px;font-size:16px;color:#337cff;vertical-align:middle;\' title=\'Pick date\'>&#128197;</span>");
+                $inputRow.append($input).append($calendar);
+                $ui.append($inputRow);
+
+                var $save = $("<button type=\'button\' style=\'background:linear-gradient(90deg,#2f79d6,#57a0f4);color:#fff;border:none;padding:9px 22px;border-radius:9px;font-weight:700;cursor:pointer;width:100%\'>Save</button>");
                 $ui.append($save);
 
-                $dot.find(".dq-vtl-date").hide(); $dot.append($ui);
+                // place ui near the dot (append to step for correct positioning)
+                $dot.closest(".dq-vtl-step").append($ui);
 
-                $input.on("focus", function(){ $(this).css("border-color","#337cff"); });
-                $input.on("blur", function(){ $(this).css("border-color","#b1cfff"); });
-                setTimeout(function() {
-                    $(document).on("mousedown.dqtl", function(ev) {
+                $input.focus();
+
+                setTimeout(function(){
+                    $(document).on("mousedown.dqtl", function(ev){
                         if ($ui[0] && !$.contains($ui[0], ev.target) && ev.target !== $ui[0]) {
-                            $ui.remove(); $dot.find(".dq-vtl-date").show();
+                            $ui.remove();
                             $(document).off("mousedown.dqtl");
                         }
                     });
@@ -90,27 +108,24 @@ class DQ_Workorder_Timeline {
 
                 $save.on("click", function(){
                     var newDate = $input.val();
-                    $save.prop("disabled", true);
+                    $save.prop("disabled", true).text("Saving...");
                     $.post(window.ajaxurl || "/wp-admin/admin-ajax.php", {
-                        action:"dq_update_timeline_date",
+                        action: "dq_update_timeline_date",
                         nonce: window.dqTimelineNonce || "",
                         post_id: post,
                         field_key: field,
                         date: newDate
                     }, function(resp){
-                        if (resp.success) {
-                            var bubbleVal = ""; if (newDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                                var d = new Date(newDate);
-                                var m = d.getMonth()+1, day = d.getDate(), y = d.getFullYear();
-                                bubbleVal = (m<10?"0":"")+m + "/" + (day<10?"0":"")+day + "/" + y;
-                            } else { bubbleVal = newDate; }
-                            if ($dot.find(".dq-vtl-date").length) {
-                                $dot.find(".dq-vtl-date").text(bubbleVal).show();
-                            } else {
-                                $("<span class=\'dq-vtl-date\'>"+bubbleVal+"</span>").appendTo($dot);
-                            }
-                            $ui.remove(); $(document).off("mousedown.dqtl");
-                        } else { alert("Error: "+(resp.data||"Failed")); $save.prop("disabled", false); }
+                        if (resp && resp.success) {
+                            // reload to reflect changes everywhere (safer for ACF and choices)
+                            location.reload();
+                        } else {
+                            alert("Save failed: " + (resp && resp.data ? resp.data : "unknown error"));
+                            $save.prop("disabled", false).text("Save");
+                        }
+                    }).fail(function(){
+                        alert("AJAX error saving date.");
+                        $save.prop("disabled", false).text("Save");
                     });
                 });
             });
@@ -142,18 +157,19 @@ class DQ_Workorder_Timeline {
                 'emoji'    => '📅',
             ]
         ];
+
         // Conditionally add Re-Scheduled Service
         $should_add_reschedule = false;
-        if ($post_id) {
-            if (function_exists('get_field')) {
+        if ( $post_id ) {
+            if ( function_exists('get_field') ) {
                 $reschedule_val = get_field('re-schedule', $post_id);
-                if (!empty($reschedule_val)) $should_add_reschedule = true;
+                if ( ! empty( $reschedule_val ) ) $should_add_reschedule = true;
             } else {
-                $reschedule_val = get_post_meta($post_id, 're-schedule', true);
-                if (!empty($reschedule_val)) $should_add_reschedule = true;
+                $reschedule_val = get_post_meta( $post_id, 're-schedule', true );
+                if ( ! empty( $reschedule_val ) ) $should_add_reschedule = true;
             }
         }
-        if ($should_add_reschedule) {
+        if ( $should_add_reschedule ) {
             $fields[] = [
                 'label'    => 'Re-Scheduled Service',
                 'key'      => 're-schedule',
@@ -162,7 +178,8 @@ class DQ_Workorder_Timeline {
                 'emoji'    => '📅',
             ];
         }
-        $fields = array_merge($fields, [
+
+        $fields = array_merge( $fields, [
             [
                 'label'    => 'Date Service Completed by Engineer',
                 'key'      => 'date_service_completed_by_fse',
@@ -183,13 +200,14 @@ class DQ_Workorder_Timeline {
                 'help'     => 'FSR and DIA reports sent to customer.',
                 'color'    => '#567da1',
                 'emoji'    => '📧',
-            ]
-        ]);
+            ],
+        ] );
+
         return $fields;
     }
 
     private static function get_timeline_data( $post_id ) {
-        $field_map = self::get_field_map($post_id);
+        $field_map = self::get_field_map( $post_id );
         $timeline_data = [];
         foreach ( $field_map as $field ) {
             $raw_value = function_exists( 'get_field' )
@@ -217,10 +235,10 @@ class DQ_Workorder_Timeline {
         $raw_date = trim( (string) $raw_date );
         $timestamp = strtotime( $raw_date );
         if ( $timestamp !== false ) return date( 'Y-m-d', $timestamp );
-        $formats = ['Y-m-d','Y-m-d H:i:s','Y-m-d H:i','m/d/Y','d-m-Y','d/m/Y','n/j/Y'];
-        foreach ($formats as $format) {
+        $formats = [ 'Y-m-d', 'Y-m-d H:i:s', 'Y-m-d H:i', 'm/d/Y', 'd-m-Y', 'd/m/Y', 'n/j/Y' ];
+        foreach ( $formats as $format ) {
             $date = DateTime::createFromFormat( $format, $raw_date );
-            if ( $date && $date->format($format) === $raw_date ) return $date->format('Y-m-d');
+            if ( $date && $date->format( $format ) === $raw_date ) return $date->format( 'Y-m-d' );
         }
         return null;
     }
@@ -229,46 +247,73 @@ class DQ_Workorder_Timeline {
         $output = '<div class="dq-timeline-vertical-wrapper">';
         $output .= '<h2 class="dq-vtl-title">WORK ORDER PROGRESS</h2>';
         $output .= '<div class="dq-timeline-vertical">';
-        foreach ($timeline_data as $i => $step) {
+
+        foreach ( $timeline_data as $i => $step ) {
+            // alternate sides: even => right card (date left), odd => left card (date right)
             $side = $i % 2 == 0 ? 'right' : 'left';
-            $color = $step['color'];
-            $emoji = $step['emoji'];
-            $date = $step['has_date'] ? date('m/d/Y', strtotime($step['normalized'])) : '';
-            $output .= '<div class="dq-vtl-step '.$side.'">';
-            if ($side == 'right') $output .= '<div class="dq-vtl-date">'.esc_html($date).'</div>';
-            $output .= '<div class="dq-vtl-dot" style="background:'.$color.';" data-field="'.esc_attr($step['key']).'" data-post="'.esc_attr($post_id).'"'.($is_editable?' data-editable="1"':'').'>';
-            $output .= '<span class="dq-vtl-emoji">'.$emoji.'</span>';
+            $color = esc_attr( $step['color'] );
+            $emoji = esc_html( $step['emoji'] );
+            $date  = $step['has_date'] ? date( 'm/d/Y', strtotime( $step['normalized'] ) ) : '';
+
+            $output .= '<div class="dq-vtl-step ' . $side . '">';
+
+            // date (left or right depending on side)
+            $output .= '<div class="dq-vtl-date">' . esc_html( $date ) . '</div>';
+
+            // dot (centered by CSS). include data attributes for editing.
+            $dot_attrs = sprintf(
+                'class="dq-vtl-dot" style="background:%s;" data-field="%s" data-post="%d"%s',
+                $color,
+                esc_attr( $step['key'] ),
+                intval( $post_id ),
+                $is_editable ? ' data-editable="1"' : ''
+            );
+            $output .= '<div ' . $dot_attrs . '>';
+            $output .= '<span class="dq-vtl-emoji">' . $emoji . '</span>';
             $output .= '</div>';
-            if ($side == 'left') $output .= '<div class="dq-vtl-date">'.esc_html($date).'</div>';
+
+            // card (the content panel)
             $output .= '<div class="dq-vtl-card">';
-            $output .= '<div class="dq-vtl-label">'.esc_html($step['label']).'</div>';
-            if ($show_descriptions && !empty($step['help'])) {
-                $output .= '<div class="dq-vtl-help">'.esc_html($step['help']).'</div>';
+            $output .= '<div class="dq-vtl-label">' . esc_html( $step['label'] ) . '</div>';
+            if ( $show_descriptions && ! empty( $step['help'] ) ) {
+                $output .= '<div class="dq-vtl-help">' . esc_html( $step['help'] ) . '</div>';
             }
-            $output .= '</div></div>';
+            $output .= '</div>'; // .dq-vtl-card
+
+            $output .= '</div>'; // .dq-vtl-step
         }
+
         $output .= '</div></div>';
-        if ($is_editable) {
-            $output .= "<script>window.ajaxurl = '".esc_url(admin_url('admin-ajax.php'))."';</script>";
-            $output .= "<script>window.dqTimelineNonce = '".esc_js(wp_create_nonce('dq_timeline_edit'))."';</script>";
+
+        if ( $is_editable ) {
+            $output .= "<script>window.ajaxurl = '" . esc_url( admin_url( 'admin-ajax.php' ) ) . "';</script>";
+            $output .= "<script>window.dqTimelineNonce = '" . esc_js( wp_create_nonce( 'dq_timeline_edit' ) ) . "';</script>";
         }
+
         return $output;
     }
 
     public static function ajax_update_date() {
-        check_ajax_referer('dq_timeline_edit', 'nonce');
-        if (!is_user_logged_in()) wp_send_json_error('Not logged in.');
-        $post_id = intval($_POST['post_id'] ?? 0);
-        $field_key = sanitize_text_field($_POST['field_key'] ?? '');
-        $date = sanitize_text_field($_POST['date'] ?? '');
-        if (!$post_id || !$field_key || !$date) wp_send_json_error('Missing params.');
-        if (!current_user_can('edit_post', $post_id)) wp_send_json_error('No permission.');
-        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) wp_send_json_error('Date format invalid.');
-        if (function_exists('update_field')) {
-            update_field($field_key, $date, $post_id);
-        } else {
-            update_post_meta($post_id, $field_key, $date);
+        check_ajax_referer( 'dq_timeline_edit', 'nonce' );
+        if ( ! is_user_logged_in() ) wp_send_json_error( 'Not logged in.' );
+        $post_id  = intval( $_POST['post_id'] ?? 0 );
+        $field_key = sanitize_text_field( $_POST['field_key'] ?? '' );
+        $date = sanitize_text_field( $_POST['date'] ?? '' );
+        if ( ! $post_id || ! $field_key ) wp_send_json_error( 'Missing params.' );
+
+        // Date can be empty to clear the field; allow empty string but sanitize format if provided
+        if ( $date !== '' && ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) {
+            wp_send_json_error( 'Date format invalid.' );
         }
-        wp_send_json_success(['date' => $date]);
+
+        if ( ! current_user_can( 'edit_post', $post_id ) ) wp_send_json_error( 'No permission.' );
+
+        if ( function_exists( 'update_field' ) ) {
+            update_field( $field_key, $date, $post_id );
+        } else {
+            update_post_meta( $post_id, $field_key, $date );
+        }
+
+        wp_send_json_success( [ 'date' => $date ] );
     }
 }

@@ -1,24 +1,36 @@
-/* Vertical Timeline Design - matches image3 */
+/* Vertical Timeline Design - copy-design match
+ *
+ * Goal: mirror the look in copy-design.png for ecn-trading workorder page:
+ * - centered vertical track
+ * - dots centered on track with white ring & soft shadow
+ * - card panels alternate left/right and include a small notch pointing toward the dot
+ * - date text sits opposite the card
+ * - subtle connector from dot toward date
+ */
 
+/* Wrapper */
 .dq-timeline-vertical-wrapper {
   background: #fafafa;
-  padding: 15px 0 30px 0;
+  padding: 20px 0 36px;
 }
 
+/* Title */
 .dq-vtl-title {
   text-align: center;
-  margin-bottom: 40px;
-  font-size: 2em;
+  margin-bottom: 36px;
+  font-size: 28px;
   letter-spacing: 0.03em;
-  font-family: 'Segoe UI','Arial',sans-serif;
-  color: #2a3150;
+  font-family: "Segoe UI", Arial, sans-serif;
+  color: #222;
+  font-weight: 600;
 }
 
+/* Timeline container & vertical track */
 .dq-timeline-vertical {
   position: relative;
   margin: 0 auto;
   width: 95%;
-  max-width: 950px;
+  max-width: 1100px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -29,102 +41,207 @@
   content: '';
   position: absolute;
   left: 50%;
-  top: 0; bottom: 0;
-  width: 5px;
-  background: #e1e6f2;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: #dfe8f3;
   z-index: 0;
   transform: translateX(-50%);
-  border-radius: 2.5px;
+  border-radius: 2px;
 }
 
+/* Step */
 .dq-vtl-step {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  min-height: 100px;
-  margin: 59px 0;
+  display: block;
   position: relative;
-  z-index: 1;
+  width: 100%;
+  margin: 56px 0;
+  min-height: 90px;
+  box-sizing: border-box;
 }
-.dq-vtl-step.right { flex-direction: row; justify-content: flex-end; }
-.dq-vtl-step.left { flex-direction: row-reverse; justify-content: flex-start; }
 
+/* alternate layout helpers (card on right or left) */
+.dq-vtl-step.right .dq-vtl-card {left: calc(50% + 62px);transform: translateX(0);}
+.dq-vtl-step.left  .dq-vtl-card {right: calc(50% + 65px);transform: translateX(0);}
+
+/* Date (opposite the card) */
 .dq-vtl-date {
-  font-size: 1.4em;
-  font-weight: 600;
-  color: #185284;
-  width:170px;
-  text-align:center;
-  margin: 0 16px;
-  font-family: 'Segoe UI','Arial',sans-serif;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 160px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #11507a;
+  font-family: "Segoe UI", Arial, sans-serif;
 }
 
+/* place date left for right-step (card on right) */
+.dq-vtl-step.right .dq-vtl-date {
+    left: 31%;
+    text-align: left;
+    font-size: 20px;
+}
+
+/* place date right for left-step (card on left) */
+.dq-vtl-step.left .dq-vtl-date {
+  right: 31%;
+  text-align: right;
+  font-size: 20px;
+}
+
+/* Dot - centered on the vertical track */
 .dq-vtl-dot {
-  flex-shrink: 0;
-  width: 80px; height: 80px;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 72px;
+  height: 72px;
   border-radius: 50%;
   background: #4fa1ba;
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 2px 14px rgba(30,50,90,0.17);
-  margin: 0 14px;
-  border: 5px solid #fff;
-  position: relative;
-  font-size: 2.2em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  border: 6px solid #fff; /* white ring */
+  box-shadow: 0 8px 28px rgba(40,60,100,0.10), 0 0 0 6px rgba(0,0,0,0.02) inset;
+  font-size: 1.9em;
 }
+
+/* small horizontal connector from dot toward the date (left or right) */
+.dq-vtl-step.right .dq-vtl-dot::before,
+.dq-vtl-step.left .dq-vtl-dot::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 26px;
+  height: 4px;
+  background: #cfe1ef;
+  border-radius: 2px;
+  transform: translateY(-50%);
+  z-index: 4;
+}
+
+/* connector points toward left (date at left) */
+.dq-vtl-step.right .dq-vtl-dot::before {
+  left: -34px; /* extend connector to left */
+}
+
+/* connector points toward right (date at right) */
+.dq-vtl-step.left .dq-vtl-dot::before {
+  right: -34px; /* extend connector to right */
+}
+
+/* emoji/icon inside dot */
 .dq-vtl-emoji {
-  display: block;
-  width: 100%;
-  height: 100%;
-  text-align:center;
-  line-height: 70px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:100%;
+  height:100%;
+  font-size: 1.25em;
+  line-height: 1;
 }
 
-.dq-vtl-step.right .dq-vtl-card { margin-left: 44px; margin-right: 0; }
-.dq-vtl-step.left .dq-vtl-card { margin-right: 44px; margin-left: 0; }
-
+/* Card panels - float near the center but offset to left or right */
 .dq-vtl-card {
+  position: absolute;
+  top: 15%;
+  transform: translateY(-50%);
   background: #fff;
-  min-width:350px; max-width:440px;
-  min-height:75px;
+  min-width: 380px;
+  max-width: 520px;
   border-radius: 8px;
-  box-shadow: 0 9px 40px rgba(80,90,120,0.16);
-  padding: 22px 32px 15px 32px;
-  font-size: 1.1em;
-  color:#222;
-  display:flex; flex-direction: column;
-  align-items:flex-start;
-  position: relative;
+  padding: 20px 26px;
+  box-shadow: 0 18px 54px rgba(30,50,80,0.10);
+  z-index: 3;
+  box-sizing: border-box;
+  overflow: visible;
 }
+
+/* notch / pointer on card pointing toward dot */
+.dq-vtl-card::after {
+  content: "";
+  position: absolute;
+  width: 0;
+  height: 0;
+  z-index: 3;
+}
+
+/* notch for right-side cards (card is on the right, notch on left) */
+.dq-vtl-step.right .dq-vtl-card::after {
+  left: -14px;
+  top: 24px;
+  border-top: 10px solid transparent;
+  border-bottom: 10px solid transparent;
+  border-right: 14px solid #fff;
+  filter: drop-shadow(-4px 3px 6px rgba(30,50,90,0.04));
+}
+
+/* notch for left-side cards (card on left, notch on right) */
+.dq-vtl-step.left .dq-vtl-card::after {
+  right: -14px;
+  top: 24px;
+  border-top: 10px solid transparent;
+  border-bottom: 10px solid transparent;
+  border-left: 14px solid #fff;
+  filter: drop-shadow(4px 3px 6px rgba(30,50,90,0.04));
+}
+
+/* Card heading & description */
 .dq-vtl-label {
-  font-size: 1.13em;
+  font-size: 15px;
   font-weight: 700;
-  margin-bottom: 5px;
   color: #202a36;
+  margin-bottom: 8px;
 }
 .dq-vtl-help {
-  font-size: 0.98em;
-  font-weight: 400;
-  color: #444;
+  font-size: 13px;
+  color: #666;
+  line-height: 1.35;
 }
 
-/* Editor popups */
+/* Editing popup */
 .dq-tl-edit-ui {
-  z-index:22;
+  display: block; /* JS controls insertion/removal */
+  position: absolute;
 }
 
-/* Responsive */
-@media (max-width:800px){
-  .dq-vtl-card { min-width:150px; max-width:98vw; font-size:0.97em; padding: 10px 8px 10px 7px; }
-  .dq-vtl-dot { width:56px; height:56px; margin:0 7px; font-size:1.2em;}
-  .dq-vtl-step {margin:24px 0;}
-  .dq-vtl-date{width:90px;font-size:1em;}
-}
-
-/* Hide .dq-tl-edit-ui overlay by default */
-.dq-tl-edit-ui { display: none; }
-
-.dq-vtl-dot[data-editable="1"]:hover,
-.dq-vtl-dot[data-editable="1"]:focus {
-  box-shadow: 0 0 0 5px #2197d7, 0 2px 14px rgba(30,50,90,0.22);
+/* Hover state for editable dot */
+.dq-vtl-dot[data-editable="1"]:hover {
+  box-shadow: 0 12px 36px rgba(30,50,90,0.14);
   cursor: pointer;
 }
+
+/* Responsive: stack left-to-right into single column layout under 900px */
+@media (max-width: 900px) {
+  .dq-timeline-vertical::before { left: 40px; transform: none; }
+  .dq-vtl-step { margin: 28px 0; min-height: auto; }
+  .dq-vtl-dot { left: 40px; transform: translateY(-50%); }
+  .dq-vtl-date { display: none; }
+  .dq-vtl-card {
+    position: relative;
+    left: 64px !important;
+    right: auto !important;
+    transform: none;
+    margin-left: 8px;
+    max-width: calc(100% - 120px);
+  }
+  .dq-vtl-step.right .dq-vtl-card,
+  .dq-vtl-step.left .dq-vtl-card { margin: 0; }
+  .dq-vtl-step.right .dq-vtl-card::after,
+  .dq-vtl-step.left .dq-vtl-card::after { display: none; }
+  .dq-vtl-step.right .dq-vtl-dot::before,
+  .dq-vtl-step.left .dq-vtl-dot::before { display: none; }
+}
+
+/* Small screens */
+@media (max-width: 520px) {
+  .dq-vtl-card { padding: 12px; min-width: 140px; max-width: calc(100% - 120px); }
+  .dq-vtl-dot { width: 56px; height: 56px; border-width: 5px; }
+  .dq-vtl-emoji { font-size: 1em; }
+}
+
+/* utility - ensure edit ui not visible by default when not added */
+.dq-tl-edit-ui { display: none; }

@@ -174,8 +174,7 @@ if (is_string($private_comments) && $private_comments !== '') {
         <?php endif; ?>
         
         <section class="wo-process" aria-labelledby="wo-process-heading" style="margin:20px 0 10px;">
-           <H3 style="margin-top:30px; font-face:uppercase; text-align: center: font-size: 25px">Work Order Progress</H3>
-
+         
             <?php
             // Render the infographic timeline (loads its own CSS)
             echo do_shortcode('[workorder_timeline descriptions="1"]');
