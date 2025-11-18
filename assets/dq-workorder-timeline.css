@@ -253,3 +253,33 @@
 
 /* utility - ensure edit ui not visible by default when not added */
 .dq-tl-edit-ui { display: none; }
+
+
+/* Vertical step line segment */
+.dq-vtl-line {
+  position: absolute;
+  left: 50%;
+  width: 6px;
+  background: #d91c22; /* active process color (red, customizable) */
+  z-index: 4;
+  transform: translateX(-50%);
+}
+
+.dq-vtl-line-above {
+  top: 0;
+  height: 50%;
+}
+.dq-vtl-line-below {
+  top: 50%;
+  height: 50%;
+}
+
+.dq-vtl-line-active {
+  position: absolute;
+  left: 50%;
+  width: 6px;
+  height: 168px;
+  background: #d91c22; /* Red progress color */
+  transform: translateX(-50%);
+  z-index: 2;
+}
