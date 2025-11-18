@@ -53,9 +53,9 @@ if ( function_exists('get_field') ) {
 if ($private_comments === '' || $private_comments === null) {
     $private_comments = get_post_meta($post_id, 'private_comments', true);
 }
-// Normalize _x000D_ newlines to whitespace
+// Replace _x000D_ with whitespace only (not newline)
 if (is_string($private_comments) && $private_comments !== '') {
-    $private_comments = str_replace('_x000D_', "\n", $private_comments);
+    $private_comments = str_replace('_x000D_', ' ', $private_comments);
 }
 ?>
 
@@ -111,32 +111,41 @@ if (is_string($private_comments) && $private_comments !== '') {
         letter-spacing: 0.02em;
     }
     
+    .wo-meta-engineer-name > span{
+        display: block;
+        font-size: 14px;
+        font-weight: normal;
+        font-style: italic;
+    }
+    
     #footer-page{display:none !important}
 </style>
 <main id="primary" class="site-main dqqb-single-workorder" style="max-width:95%;margin:0 auto">
     <article id="post-<?php the_ID(); ?>" <?php post_class(); ?>>
         <header class="entry-header" style="margin:24px 0;">
-            <h1 class="entry-title"><?php echo esc_html( get_the_title() ); ?></h1>
             <?php if ( has_excerpt() ): ?>
                 <p class="entry-subtitle" style="color:#555;margin-top:6px;"><?php echo esc_html( get_the_excerpt() ); ?></p>
             <?php endif; ?>
         </header>
 
         <section class="wo-meta" style="margin:26px 0;">
-            <h3 style="font-size:18px;font-weight:700;margin:0 0 10px;">Summary</h3>
-            Field Engineer:
+            <h3 style="font-size:30px;font-weight:700;text-align:center;margin:40px 0">Summary</h3>
+            
             <div class="wo-meta-engineer">
                 <img class="wo-meta-engineer-img" src="<?php echo $profile_img_url; ?>" alt="Engineer photo" />
-                <span class="wo-meta-engineer-name"><?php echo esc_html( $engineer_name ); ?></span>
+                <span class="wo-meta-engineer-name"><?php echo esc_html( $engineer_name ); ?><span>Field Engineer</span></span>
+                
+                
             </div>
             <div class="wo-meta-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
                 <?php
                 // A few handy bits users often want under the timeline; adjust/extend as needed.
                 $pairs = [
                     'Product ID'             => $val('installed_product_id'),
+                    'Work Order ID'                  => $val('work_order_number'),
                     'State'                  => $val('wo_state'),
-                    'Location'               => $val('wo_location'),
                     'City'                   => $val('wo_city'),
+                    'Account'               => $val('wo_location'),
                     'Invoice No'             => $val('wo_invoice_no'),
                     'Total Billed'           => $val('wo_total_billed'),
                     'Balance Due'            => $val('wo_balance_due'),
