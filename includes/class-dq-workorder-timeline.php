@@ -218,9 +218,8 @@ class DQ_Workorder_Timeline {
      *
      * @return array Field configuration
      */
-    private static function get_field_map() {
-        // Uses your field keys and improved help text for clarity/design
-        return [
+    private static function get_field_map( $post_id = 0 ) {
+        $fields = [
             [
                 'label'    => 'Date Received',
                 'key'      => 'wo_date_received',
@@ -238,7 +237,31 @@ class DQ_Workorder_Timeline {
                 'key'      => 'schedule_date_time',
                 'help'     => 'The date the service was scheduled with the customer.',
                 'color'    => '#ffae23',
-            ],
+            ]
+            // Re-Scheduled Service will be conditionally added below
+        ];
+
+        // Only add the "Re-Scheduled Service" node if ACF field 're-schedule' is set for this post
+        $should_add_reschedule = false;
+        if ( $post_id ) {
+            if ( function_exists('get_field') ) {
+                $reschedule_val = get_field('re-schedule', $post_id);
+                if ( !empty($reschedule_val) ) { $should_add_reschedule = true; }
+            } else {
+                $reschedule_val = get_post_meta($post_id, 're-schedule', true);
+                if ( !empty($reschedule_val) ) { $should_add_reschedule = true; }
+            }
+        }
+        if ( $should_add_reschedule ) {
+            $fields[] = [
+                'label'    => 'Re-Scheduled Service',
+                'key'      => 're-schedule',
+                'help'     => 'The date the service was re-scheduled with the customer.',
+                'color'    => '#d77f13', // a distinct color
+            ];
+        }
+
+        $fields = array_merge($fields, [
             [
                 'label'    => 'Service Completed',
                 'key'      => 'date_service_completed_by_fse',
@@ -257,7 +280,8 @@ class DQ_Workorder_Timeline {
                 'help'     => 'FSR and DIA reports sent to customer.',
                 'color'    => '#607d8b',
             ],
-        ];
+        ]);
+        return $fields;
     }
 
     /**
@@ -267,7 +291,8 @@ class DQ_Workorder_Timeline {
      * @return array Timeline steps with dates
      */
     private static function get_timeline_data( $post_id ) {
-        $field_map = self::get_field_map();
+        // Pass post_id to field map so we can conditionally add "Re-Scheduled Service"
+        $field_map = self::get_field_map($post_id);
         $timeline_data = [];
 
         foreach ( $field_map as $field ) {
@@ -291,6 +316,7 @@ class DQ_Workorder_Timeline {
 
         return $timeline_data;
     }
+
 
     /**
      * Normalize various date formats to Y-m-d
