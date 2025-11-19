@@ -323,9 +323,18 @@ class DQ_Invoice_List
                         filters: filters
                     },
                     success: function(response) {
-                        if (response.success && response.data.html) {
+                        if (response.success && response.data.table) {
                             wrapper.find('.dq-invoice-list-content').html(response.data.table);
-                            wrapper.find('.dq-invoice-list-pagination').replaceWith(response.data.pagination);
+                            var existingPagination = wrapper.find('.dq-invoice-list-pagination');
+                            if (response.data.pagination) {
+                                if (existingPagination.length) {
+                                    existingPagination.replaceWith(response.data.pagination);
+                                } else {
+                                    wrapper.append(response.data.pagination);
+                                }
+                            } else {
+                                existingPagination.remove();
+                            }
                             $('html, body').animate({
                                 scrollTop: wrapper.offset().top - 100
                             }, 300);
