@@ -46,6 +46,8 @@ require_once DQQB_PATH . 'includes/class-dq-workorder-template.php';
 // NEW: Workorder single template fallback (adds single-invoice.php front-end)
 require_once DQQB_PATH . 'includes/class-qi-invoice-template.php';
 
+// NEW: Invoice list shortcode with AJAX pagination
+require_once DQQB_PATH . 'includes/class-dq-invoice-list.php';
 
 // -----------------------------------------------------------------------------
 // Initialize Plugin
@@ -81,6 +83,7 @@ add_action( 'plugins_loaded', function() {
     if ( class_exists( 'DQ_Financial_Report' ) ) DQ_Financial_Report::init(); // NEW
     
     if ( class_exists( 'DQ_Workorder_Timeline' ) ) DQ_Workorder_Timeline::init(); // NEW
+    if ( class_exists( 'DQ_Invoice_List' ) ) DQ_Invoice_List::init(); // NEW
 });
 
 // -----------------------------------------------------------------------------
