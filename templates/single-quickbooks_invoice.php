@@ -10,7 +10,6 @@ get_header();
 the_post();
 $post_id = get_the_ID();
 
-// Helper for getting ACF or meta
 $acfval = function($key) use($post_id) {
     if(function_exists('get_field')) $v = get_field($key, $post_id);
     else $v = get_post_meta($post_id, $key, true);
@@ -101,7 +100,6 @@ function render_other_expenses_table($post_id, $acf_field='qi_other_expenses') {
         printf('<tr style="background:%s">',
             $row_idx % 2 ? "#f4f8fd" : "#f8fbff"
         );
-        // Get subfields; fallback to '' if missing
         $activity    = get_sub_field('activity');
         $description = get_sub_field('description');
         $quantity    = get_sub_field('quantity');
@@ -155,8 +153,50 @@ elseif(is_string($email_snippet) && filter_var($email_snippet, FILTER_VALIDATE_U
     flex:0 0 340px;
     min-width:280px;
     max-width:370px;
+    margin-top:2px;
+        padding-top: 25px;
 }
-@media (max-width:1024px){.qi-main-wrapper{flex-direction:column;gap:22px;}}
+.qi-sidebar-content {background:#fff;border-radius:14px;box-shadow:0 2px 18px rgba(112,146,183,0.13);padding:18px 24px;margin-top:15px;}
+.qi-sidebar-list {margin:0 0 0 0;padding:0;list-style:none;}
+.qi-sidebar-list .label{font-weight:700;color:#226;margin-bottom:2px;display:block;}
+.qi-sidebar-list .value{margin-bottom:11px;display:block;color:#333;font-size:16px;word-break:break-all;}
+.qi-sidebar-list .status-paid {background:#e7f6ec;color:#22863a;padding:2px 10px;border-radius:3px;}
+.qi-sidebar-list .status-unpaid {background:#fbeaea;color:#d63638;padding:2px 10px;border-radius:3px;}
+.qi-email-snippet{margin:0 0 18px 0;text-align:center;}
+.qi-email-snippet h3{font-size:20px;margin-bottom:12px;}
+.qi-email-snippet img{max-width:330px;border-radius:10px;box-shadow:0 2px 10px rgba(80,100,120,0.16);cursor:pointer;transition: box-shadow 0.2s;}
+.qi-email-snippet img:active,.qi-email-snippet img:focus {box-shadow:0 0 0 3px #2991de;}
+.qi-email-lightbox {
+    display:none;
+    position:fixed;
+    z-index:99999;
+    left:0;top:0;right:0;bottom:0;
+    width:100vw;height:100vh;
+    background:rgba(0,0,0,0.7);
+}
+.qi-email-lightbox img {
+    position:absolute;
+    top:50%;left:50%;
+    max-width:96vw;
+    max-height:92vh;
+    transform:translate(-50%,-50%);
+    border-radius:13px;
+    box-shadow:0 8px 24px #3338;
+    background:#fff;
+}
+.qi-email-lightbox .qi-email-lb-close {
+    position:absolute;
+    top:32px;right:40px;
+    font-size:44px;
+    color:#fff;
+    background:transparent;
+    border:none;
+    cursor:pointer;
+    font-weight:700;
+    z-index:100003;
+    line-height:1;
+}
+@media (max-width:1024px){.qi-main-wrapper{flex-direction:column;gap:22px;}.qi-sidebar-section{max-width:100%;margin:0 auto;}}
 @media (max-width:900px){.qi-sidebar-section{max-width:100%;margin:0 auto;}}
 .qi-summary-section h2{font-size:30px;margin:18px 0 6px;font-weight:700;text-align:center}
 .qi-summary-table{width:100%;max-width:680px;margin:0 auto 30px;background:#fff;border-radius:12px;box-shadow:0 2px 16px rgba(50,80,120,0.07);padding:26px 24px;display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
@@ -201,24 +241,43 @@ elseif(is_string($email_snippet) && filter_var($email_snippet, FILTER_VALIDATE_U
     color: #0b4963;
 }
 .qi-invoice-table tr:last-child td {border-bottom: none;}
-.qi-email-snippet{margin:0 0 18px 0;text-align:center;}
-.qi-email-snippet h3{font-size:20px;margin-bottom:12px;}
-.qi-email-snippet img{max-width:330px;border-radius:10px;box-shadow:0 2px 10px rgba(80,100,120,0.16)}
 .qi-direct-labor-title{font-weight:700;color:#a6320c;margin:18px 0 9px;font-size:19px;}
 @media (max-width:700px){.qi-invoice-table thead th,.qi-invoice-table td { padding: 8px 5px; font-size: 13px;}}
 @media (max-width:480px){.qi-invoice-table { font-size:11.5px;}}
 .qi-details-section{max-width:95%;margin: 20px auto}
 #footer-page{display:none !important}
 </style>
+<?php if ($snippet_img_url): ?>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const img = document.getElementById("qi-email-snapshot-img");
+    const lightbox = document.getElementById("qi-email-lightbox");
+    const closeBtn = document.getElementById("qi-email-lb-close");
+    if(img && lightbox && closeBtn) {
+        img.addEventListener("click", function(e){
+            e.preventDefault();
+            lightbox.style.display = "block";
+        });
+        closeBtn.addEventListener("click", function(){
+            lightbox.style.display = "none";
+        });
+        lightbox.addEventListener("click", function(ev){
+            if(ev.target === lightbox){
+                lightbox.style.display = "none";
+            }
+        });
+        document.addEventListener("keydown", function(ev){
+            if(ev.key === "Escape"){ lightbox.style.display = "none"; }
+        });
+    }
+});
+</script>
+<?php endif; ?>
 <main class="single-qi-invoice">
     <div class="qi-main-wrapper">
         <section class="qi-summary-section">
             <h2>Invoice Summary</h2>
             <div class="qi-summary-table">
-                <div>
-                    <div class="label">Invoice Number</div>
-                    <div class="value"><?php echo esc_html($acftext('qi_invoice_no')); ?></div>
-                </div>
                 <div>
                     <div class="label">Work Order IDs</div>
                     <div class="value">
@@ -246,66 +305,52 @@ elseif(is_string($email_snippet) && filter_var($email_snippet, FILTER_VALIDATE_U
                         ?>
                     </div>
                 </div>
-                <div>
-                    <div class="label">Total</div>
-                    <div class="value">$<?php echo number_format((float)$acfval('qi_total_billed'),2); ?></div>
-                </div>
-                <div>
-                    <div class="label">Paid</div>
-                    <div class="value">$<?php echo number_format((float)$acfval('qi_total_paid'),2); ?></div>
-                </div>
-                <div>
-                    <div class="label">Balance</div>
-                    <div class="value">$<?php echo number_format((float)$acfval('qi_balance_due'),2); ?></div>
-                </div>
-                <div>
-                    <div class="label">Status</div>
-                    <div class="value" style="font-weight:700;"><?php echo $status=='PAID'
-                        ?'<span style="background:#e7f6ec;color:#22863a;padding:2px 10px;border-radius:3px;">PAID</span>'
-                        :'<span style="background:#fbeaea;color:#d63638;padding:2px 10px;border-radius:3px;">UNPAID</span>'; ?></div>
-                </div>
-                <div>
-                    <div class="label">Invoice Date</div>
-                    <div class="value"><?php echo esc_html($acftext('qi_invoice_date')); ?></div>
-                </div>
-                <div>
-                    <div class="label">Due Date</div>
-                    <div class="value"><?php echo esc_html($acftext('qi_due_date')); ?></div>
-                </div>
-                <div>
-                    <div class="label">Terms</div>
-                    <div class="value"><?php echo esc_html($acftext('qi_terms')); ?></div>
-                </div>
-                <div>
-                    <div class="label">Bill To</div>
-                    <div class="value"><?php echo nl2br(esc_html($acftext('qi_bill_to'))); ?></div>
-                </div>
-                <div>
-                    <div class="label">Ship To</div>
-                    <div class="value"><?php echo nl2br(esc_html($acftext('qi_ship_to'))); ?></div>
-                </div>
-                <div>
-                    <div class="label">Customer</div>
-                    <div class="value"><?php echo esc_html($acftext('qi_customer')); ?></div>
-                </div>
+            </div>
+
+            <div class="qi-details-section">
+                <div class="qi-section-title">Invoice Details</div>
+                <?php render_invoice_table($post_id,'qi_invoice'); ?>
+
+                <div class="qi-direct-labor-title">Direct Labor Cost</div>
+                <?php render_other_expenses_table($post_id,'qi_other_expenses'); ?>
             </div>
         </section>
-        <?php if ($snippet_img_url): ?>
         <aside class="qi-sidebar-section">
+            <?php if ($snippet_img_url): ?>
             <section class="qi-email-snippet">
                 <h3>Email Snippet</h3>
-                <img src="<?php echo esc_url($snippet_img_url); ?>" alt="Email Snippet" />
+                <a href="#" tabindex="0">
+                    <img id="qi-email-snapshot-img" src="<?php echo esc_url($snippet_img_url); ?>" alt="Email Snippet" />
+                </a>
             </section>
+            <div id="qi-email-lightbox" class="qi-email-lightbox">
+                <button id="qi-email-lb-close" class="qi-email-lb-close" type="button" aria-label="Close">&times;</button>
+                <img src="<?php echo esc_url($snippet_img_url); ?>" alt="Email Snippet Large" />
+            </div>
+            <?php endif; ?>
+            <div class="qi-sidebar-content">
+                <ul class="qi-sidebar-list">
+                    <li><span class="label">Invoice Number</span><span class="value"><?php echo esc_html($acftext('qi_invoice_no')); ?></span></li>
+                    <li><span class="label">Total</span><span class="value">$<?php echo number_format((float)$acfval('qi_total_billed'),2); ?></span></li>
+                    <li><span class="label">Paid</span><span class="value">$<?php echo number_format((float)$acfval('qi_total_paid'),2); ?></span></li>
+                    <li><span class="label">Balance</span><span class="value">$<?php echo number_format((float)$acfval('qi_balance_due'),2); ?></span></li>
+                    <li><span class="label">Status</span>
+                        <span class="value">
+                            <?php echo $status=='PAID'
+                                ?'<span class="status-paid">PAID</span>'
+                                :'<span class="status-unpaid">UNPAID</span>'; ?>
+                        </span>
+                    </li>
+                    <li><span class="label">Invoice Date</span><span class="value"><?php echo esc_html($acftext('qi_invoice_date')); ?></span></li>
+                    <li><span class="label">Due Date</span><span class="value"><?php echo esc_html($acftext('qi_due_date')); ?></span></li>
+                    <li><span class="label">Terms</span><span class="value"><?php echo esc_html($acftext('qi_terms')); ?></span></li>
+                    <li><span class="label">Bill To</span><span class="value"><?php echo nl2br(esc_html($acftext('qi_bill_to'))); ?></span></li>
+                    <li><span class="label">Ship To</span><span class="value"><?php echo nl2br(esc_html($acftext('qi_ship_to'))); ?></span></li>
+                    <li><span class="label">Customer</span><span class="value"><?php echo esc_html($acftext('qi_customer')); ?></span></li>
+                </ul>
+            </div>
         </aside>
-        <?php endif; ?>
     </div>
-    <section class="qi-details-section">
-        <div class="qi-section-title">Invoice Details</div>
-        <?php render_invoice_table($post_id,'qi_invoice'); ?>
-
-        <div class="qi-direct-labor-title">Direct Labor Cost</div>
-        <?php render_other_expenses_table($post_id,'qi_other_expenses'); ?>
-    </section>
     <div class="entry-content" style="margin:30px 0;">
         <?php the_content(); ?>
     </div>
