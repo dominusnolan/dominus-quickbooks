@@ -3,8 +3,8 @@ if (!defined('ABSPATH')) exit;
 
 /**
  * Class DQ_Invoice_List
- * Frontend invoice list shortcode with AJAX-powered pagination.
- * Usage: [dqqb_invoice_list status="paid" date_from="2024-01-01" date_to="2024-12-31"]
+ * Frontend invoice list shortcode with AJAX-powered pagination + filter UI.
+ * Usage: [dqqb_invoice_list]
  */
 class DQ_Invoice_List
 {
@@ -33,6 +33,7 @@ class DQ_Invoice_List
     {
         $atts = shortcode_atts([
             'status' => '', // paid, unpaid, or empty for all
+            'date_type' => 'qi_invoice_date', // Default to invoice date
             'date_from' => '',
             'date_to' => '',
         ], $atts, 'dqqb_invoice_list');
@@ -50,8 +51,8 @@ class DQ_Invoice_List
         $data = self::get_invoices($atts, $page);
 
         $output = self::render_html($data, $atts, $wrapper_id);
-        
-        // Add inline script with AJAX handler
+
+        // Add inline script with AJAX handler and filter handler
         self::enqueue_inline_script($wrapper_id, $atts);
 
         return $output;
@@ -96,12 +97,13 @@ class DQ_Invoice_List
             }
         }
 
-        // Date range filter
+        // Date range filter (depending on selected type)
+        $date_key = !empty($atts['date_type']) ? sanitize_text_field($atts['date_type']) : 'qi_invoice_date';
         if (!empty($atts['date_from']) || !empty($atts['date_to'])) {
             $date_query = [];
             if (!empty($atts['date_from'])) {
                 $date_query[] = [
-                    'key' => 'qi_invoice_date',
+                    'key' => $date_key,
                     'value' => sanitize_text_field($atts['date_from']),
                     'compare' => '>=',
                     'type' => 'DATE',
@@ -109,7 +111,7 @@ class DQ_Invoice_List
             }
             if (!empty($atts['date_to'])) {
                 $date_query[] = [
-                    'key' => 'qi_invoice_date',
+                    'key' => $date_key,
                     'value' => sanitize_text_field($atts['date_to']),
                     'compare' => '<=',
                     'type' => 'DATE',
@@ -139,6 +141,8 @@ class DQ_Invoice_List
         $output = '<div id="' . esc_attr($wrapper_id) . '" class="dq-invoice-list-wrapper">';
         $output .= self::get_styles();
 
+        $output .= self::render_filter_form($atts, $wrapper_id);
+
         $output .= '<div class="dq-invoice-list-content">';
         $output .= self::render_table($data['invoices']);
         $output .= '</div>';
@@ -147,6 +151,42 @@ class DQ_Invoice_List
 
         $output .= '</div>';
 
+        return $output;
+    }
+
+    private static function render_filter_form($atts, $wrapper_id)
+    {
+        $status = isset($atts['status']) ? $atts['status'] : '';
+        $date_type = isset($atts['date_type']) ? $atts['date_type'] : 'qi_invoice_date';
+        $date_from = isset($atts['date_from']) ? $atts['date_from'] : '';
+        $date_to = isset($atts['date_to']) ? $atts['date_to'] : '';
+
+        // These select options map to meta keys.
+        $date_type_options = [
+            'qi_invoice_date' => 'Invoice Date',
+            'qi_due_date' => 'Due Date',
+        ];
+
+        $output = '<form class="dq-invoice-list-filter" data-wrapper="' . esc_attr($wrapper_id) . '" style="margin-bottom:20px; display:flex; gap:16px; align-items:flex-end; flex-wrap:wrap;">';
+        $output .= '<div><label>Status<br>
+            <select name="status">
+                <option value="">All</option>
+                <option value="paid"' . ($status == 'paid' ? ' selected' : '') . '>Paid</option>
+                <option value="unpaid"' . ($status == 'unpaid' ? ' selected' : '') . '>Unpaid</option>
+            </select>
+        </label></div>';
+        $output .= '<div><label>Date Type<br>
+            <select name="date_type">';
+        foreach($date_type_options as $key => $label) {
+            $output .= '<option value="' . esc_attr($key) . '"' . ($date_type == $key ? ' selected' : '') . '>' . esc_html($label) . '</option>';
+        }
+        $output .= '</select></label></div>';
+        $output .= '<div><label>From Date<br>
+            <input type="date" name="date_from" value="' . esc_attr($date_from) . '"></label></div>';
+        $output .= '<div><label>To Date<br>
+            <input type="date" name="date_to" value="' . esc_attr($date_to) . '"></label></div>';
+        $output .= '<div><button type="submit" style="padding:8px 24px;">Filter</button></div>';
+        $output .= '</form>';
         return $output;
     }
 
@@ -171,6 +211,8 @@ class DQ_Invoice_List
 .dq-invoice-list-empty { padding: 40px; text-align: center; color: #666; font-style: italic; background: #f8f9fa; border-radius: 4px; }
 .dq-invoice-list-qbo { font-size: 13px; line-height: 1.6; }
 .dq-invoice-list-customer { font-size: 13px; line-height: 1.6; }
+.dq-invoice-list-filter select, .dq-invoice-list-filter input[type="date"] { font-size:13px; padding:6px; }
+.dq-invoice-list-filter select{margin: 0 !important}
 </style>';
     }
 
@@ -245,33 +287,32 @@ class DQ_Invoice_List
             $output .= '<tr>';
             $output .= '<td><a href="' . esc_url($permalink) . '">' . esc_html($invoice_no ?: 'N/A') . '</a></td>';
             // Properly display Workorder ID
-$wo_display = 'N/A';
-if (is_array($wo_number)) {
-    // Array of IDs or objects
-    $id_list = [];
-    foreach ($wo_number as $wo_item) {
-        if (is_numeric($wo_item)) {
-            $id_list[] = $wo_item;
-        } elseif ($wo_item instanceof WP_Post) {
-            $id_list[] = $wo_item->ID;
-        }
-    }
-    if (!empty($id_list)) {
-        $wo_display = implode(', ', $id_list);
-    }
-} elseif ($wo_number instanceof WP_Post) {
-    $wo_display = $wo_number->ID;
-} elseif (!empty($wo_number)) {
-    $wo_display = $wo_number;
-}
-$output .= '<td>' . esc_html($wo_display) . '</td>';
+            $wo_display = 'N/A';
+            if (is_array($wo_number)) {
+                $id_list = [];
+                foreach ($wo_number as $wo_item) {
+                    if (is_numeric($wo_item)) {
+                        $id_list[] = $wo_item;
+                    } elseif ($wo_item instanceof WP_Post) {
+                        $id_list[] = $wo_item->ID;
+                    }
+                }
+                if (!empty($id_list)) {
+                    $wo_display = implode(', ', $id_list);
+                }
+            } elseif ($wo_number instanceof WP_Post) {
+                $wo_display = $wo_number->ID;
+            } elseif (!empty($wo_number)) {
+                $wo_display = $wo_number;
+            }
+            $output .= '<td>' . esc_html($wo_display) . '</td>';
             $output .= '<td>$' . number_format((float)$total_billed, 2) . '</td>';
             $output .= '<td>' . $qbo_invoice_html . '</td>';
             $output .= '<td>' . $customer_html . '</td>';
             $output .= '<td>' . esc_html($invoice_date ? date('m/d/Y', strtotime($invoice_date)) : 'N/A') . '</td>';
             $output .= '<td>' . esc_html($due_date ? date('m/d/Y', strtotime($due_date)) : 'N/A') . '</td>';
             // Only display Days Remaining when unpaid; show dash otherwise
-            $output .= '<td>' . ($payment_status !== 'paid' ? esc_html($days_remaining ?: 'N/A') : '-') . '</td>';
+            $output .= '<td>' . ($payment_status !== 'PAID' ? esc_html($days_remaining ?: 'N/A') : '-') . '</td>';
             $output .= '</tr>';
         }
 
@@ -339,13 +380,33 @@ $output .= '<td>' . esc_html($wo_display) . '</td>';
             var wrapper = $('#" . esc_js($wrapper_id) . "');
             var filters = " . json_encode($atts) . ";
 
+            // Pagination click
             wrapper.on('click', '.dq-invoice-list-pagination a:not(.disabled)', function(e) {
                 e.preventDefault();
                 var page = $(this).data('page');
                 if (!page || page < 1) return;
+                loadInvoices(page, getFilters());
+            });
 
+            // Filter form submit
+            wrapper.on('submit', '.dq-invoice-list-filter', function(e) {
+                e.preventDefault();
+                loadInvoices(1, getFilters());
+            });
+
+            function getFilters() {
+                var form = wrapper.find('.dq-invoice-list-filter');
+                var filters = {};
+                form.find('select, input').each(function() {
+                    var name = $(this).attr('name');
+                    var val = $(this).val();
+                    filters[name] = val;
+                });
+                return filters;
+            }
+
+            function loadInvoices(page, filters) {
                 wrapper.addClass('loading');
-
                 $.ajax({
                     url: '" . esc_js($ajax_url) . "',
                     type: 'POST',
@@ -356,8 +417,13 @@ $output .= '<td>' . esc_html($wo_display) . '</td>';
                         filters: filters
                     },
                     success: function(response) {
-                        if (response.success && response.data.table) {
-                            wrapper.find('.dq-invoice-list-content').html(response.data.table);
+                        if (response.success && response.data) {
+                            if (response.data.filter_form) {
+                                wrapper.find('.dq-invoice-list-filter').replaceWith(response.data.filter_form);
+                            }
+                            if (response.data.table) {
+                                wrapper.find('.dq-invoice-list-content').html(response.data.table);
+                            }
                             var existingPagination = wrapper.find('.dq-invoice-list-pagination');
                             if (response.data.pagination) {
                                 if (existingPagination.length) {
@@ -377,7 +443,7 @@ $output .= '<td>' . esc_html($wo_display) . '</td>';
                         wrapper.removeClass('loading');
                     }
                 });
-            });
+            }
         })(jQuery);
         ";
 
@@ -393,14 +459,16 @@ $output .= '<td>' . esc_html($wo_display) . '</td>';
 
         // Sanitize filters
         $atts = [
-            'status' => isset($filters['status']) ? sanitize_text_field($filters['status']) : '',
+            'status'    => isset($filters['status']) ? sanitize_text_field($filters['status']) : '',
+            'date_type' => isset($filters['date_type']) ? sanitize_text_field($filters['date_type']) : 'qi_invoice_date',
             'date_from' => isset($filters['date_from']) ? sanitize_text_field($filters['date_from']) : '',
-            'date_to' => isset($filters['date_to']) ? sanitize_text_field($filters['date_to']) : '',
+            'date_to'   => isset($filters['date_to']) ? sanitize_text_field($filters['date_to']) : '',
         ];
 
         $data = self::get_invoices($atts, $page);
 
         wp_send_json_success([
+            'filter_form' => self::render_filter_form($atts, $_POST['wrapper_id'] ?? 'dq-invoice-list-1'),
             'table' => self::render_table($data['invoices']),
             'pagination' => self::render_pagination($data['current_page'], $data['max_pages']),
         ]);
