@@ -13,6 +13,7 @@ A minimal, secure connector between WordPress and Intuit QuickBooks Online with 
 - Choose **Sandbox** or **Production**.
 - Securely stores and refreshes tokens.
 - Demo action: Fetch Company Info.
+- Frontend invoice list with AJAX pagination: `[dqqb_invoice_list]`
 
 == Installation ==
 1. Upload `dominus-quickbooks` to `/wp-content/plugins/` and activate.
@@ -26,6 +27,9 @@ From your Intuit Developer app. Ensure the Redirect URI matches your WP settings
 
 = Does this support WooCommerce? =
 This is a framework: add order/customer syncs by calling `DQ_API` methods (see `create_customer`).
+
+= How do I display invoices on the frontend? =
+Use the shortcode `[dqqb_invoice_list]` on any page or post. It supports filters: `status="paid"`, `date_from="2024-01-01"`, `date_to="2024-12-31"`. See SHORTCODE_DOCUMENTATION.md for details.
 
 == Changelog ==
 = 0.1.0 =
