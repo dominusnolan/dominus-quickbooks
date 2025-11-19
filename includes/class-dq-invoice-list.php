@@ -138,13 +138,13 @@ class DQ_Invoice_List
     {
         $output = '<div id="' . esc_attr($wrapper_id) . '" class="dq-invoice-list-wrapper">';
         $output .= self::get_styles();
-        
+
         $output .= '<div class="dq-invoice-list-content">';
         $output .= self::render_table($data['invoices']);
         $output .= '</div>';
-        
+
         $output .= self::render_pagination($data['current_page'], $data['max_pages']);
-        
+
         $output .= '</div>';
 
         return $output;
@@ -164,11 +164,13 @@ class DQ_Invoice_List
 .dq-invoice-list-status.paid { background: #d4edda; color: #155724; }
 .dq-invoice-list-status.unpaid { background: #fff3cd; color: #856404; }
 .dq-invoice-list-pagination { display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
-.dq-invoice-list-pagination a, .dq-invoice-list-pagination span { display: inline-block; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; text-decoration: none; color: #333; background: #fff; min-width: 40px; text-align: center; transition: all 0.2s; }
+.dq-invoice-list-pagination a, .dq-invoice-list-pagination span { display: inline-block; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; text-decoration: none; color: #333; background: #fff; }
 .dq-invoice-list-pagination a:hover { background: #006d7b; color: #fff; border-color: #006d7b; }
 .dq-invoice-list-pagination .current { background: #006d7b; color: #fff; border-color: #006d7b; font-weight: 600; }
 .dq-invoice-list-pagination .disabled { opacity: 0.4; pointer-events: none; }
 .dq-invoice-list-empty { padding: 40px; text-align: center; color: #666; font-style: italic; background: #f8f9fa; border-radius: 4px; }
+.dq-invoice-list-qbo { font-size: 13px; line-height: 1.6; }
+.dq-invoice-list-customer { font-size: 13px; line-height: 1.6; }
 </style>';
     }
 
@@ -181,64 +183,95 @@ class DQ_Invoice_List
         $output = '<table class="dq-invoice-list-table">';
         $output .= '<thead><tr>';
         $output .= '<th>Invoice #</th>';
-        $output .= '<th>Date</th>';
-        $output .= '<th>Customer</th>';
+        $output .= '<th>Workorder ID</th>';
         $output .= '<th>Amount</th>';
-        $output .= '<th>Status</th>';
+        $output .= '<th>QBO Invoice</th>';
+        $output .= '<th>Customer</th>';
+        $output .= '<th>Invoice Date</th>';
+        $output .= '<th>Due Date</th>';
+        $output .= '<th>Days Remaining</th>';
         $output .= '</tr></thead>';
         $output .= '<tbody>';
 
         foreach ($invoices as $invoice) {
-            $invoice_no = function_exists('get_field')
-                ? get_field('qi_invoice_no', $invoice->ID)
-                : get_post_meta($invoice->ID, 'qi_invoice_no', true);
+            $invoice_no     = function_exists('get_field') ? get_field('qi_invoice_no', $invoice->ID) : get_post_meta($invoice->ID, 'qi_invoice_no', true);
+            $wo_number      = function_exists('get_field') ? get_field('qi_wo_number', $invoice->ID) : get_post_meta($invoice->ID, 'qi_wo_number', true);
+            $total_billed   = function_exists('get_field') ? get_field('qi_total_billed', $invoice->ID) : get_post_meta($invoice->ID, 'qi_total_billed', true);
+            $balance_due    = function_exists('get_field') ? get_field('qi_balance_due', $invoice->ID) : get_post_meta($invoice->ID, 'qi_balance_due', true);
+            $total_paid     = function_exists('get_field') ? get_field('qi_total_paid', $invoice->ID) : get_post_meta($invoice->ID, 'qi_total_paid', true);
+            $terms          = function_exists('get_field') ? get_field('qi_terms', $invoice->ID) : get_post_meta($invoice->ID, 'qi_terms', true);
+            if( $balance_due > 0 ){
+                $payment_status = 'UNPAID';
+            }else{
+                $payment_status = 'PAID';
+            }
             
-            $invoice_date = function_exists('get_field')
-                ? get_field('qi_invoice_date', $invoice->ID)
-                : get_post_meta($invoice->ID, 'qi_invoice_date', true);
-            
-            $total_billed = function_exists('get_field')
-                ? get_field('qi_total_billed', $invoice->ID)
-                : get_post_meta($invoice->ID, 'qi_total_billed', true);
-            
-            $payment_status = function_exists('get_field')
-                ? get_field('qi_payment_status', $invoice->ID)
-                : get_post_meta($invoice->ID, 'qi_payment_status', true);
+            $customer       = function_exists('get_field') ? get_field('qi_customer', $invoice->ID) : get_post_meta($invoice->ID, 'qi_customer', true);
+            $bill_to        = function_exists('get_field') ? get_field('qi_bill_to', $invoice->ID) : get_post_meta($invoice->ID, 'qi_bill_to', true);
+            $ship_to        = function_exists('get_field') ? get_field('qi_ship_to', $invoice->ID) : get_post_meta($invoice->ID, 'qi_ship_to', true);
+            $invoice_date   = function_exists('get_field') ? get_field('qi_invoice_date', $invoice->ID) : get_post_meta($invoice->ID, 'qi_invoice_date', true);
+            $due_date       = function_exists('get_field') ? get_field('qi_due_date', $invoice->ID) : get_post_meta($invoice->ID, 'qi_due_date', true);
 
-            // Get customer name from related work order
-            $customer_name = '';
-            $wo_relation = function_exists('get_field')
-                ? get_field('qi_wo_number', $invoice->ID)
-                : get_post_meta($invoice->ID, 'qi_wo_number', true);
-            
-            if ($wo_relation) {
-                $wo_post = null;
-                if (is_array($wo_relation)) {
-                    $wo_post = reset($wo_relation);
-                } elseif ($wo_relation instanceof WP_Post) {
-                    $wo_post = $wo_relation;
-                } elseif (is_numeric($wo_relation)) {
-                    $wo_post = get_post(intval($wo_relation));
-                }
-                
-                if ($wo_post && $wo_post->post_type === 'workorder') {
-                    $customer_name = function_exists('get_field')
-                        ? get_field('customer_name', $wo_post->ID)
-                        : get_post_meta($wo_post->ID, 'customer_name', true);
-                }
+            // Calculate Days Remaining ONLY for UNPAID status
+            $days_remaining = '';
+            if ($payment_status !== 'PAID' && $due_date) {
+                $now = new DateTime(date('Y-m-d'));
+                $due = new DateTime($due_date);
+                $interval = $now->diff($due);
+                $days_remaining = $interval->format('%r%a');
             }
 
-            $status_class = ($payment_status === 'paid') ? 'paid' : 'unpaid';
-            $status_label = ($payment_status === 'paid') ? 'Paid' : 'Unpaid';
+            $status_class = ($payment_status === 'PAID') ? 'paid' : 'unpaid';
+            $status_label = ($payment_status === 'PAID') ? 'PAID' : 'UNPAID';
 
             $permalink = get_permalink($invoice->ID);
 
+            // Combined QBO Invoice column
+            $qbo_invoice_html = '<div class="dq-invoice-list-qbo">';
+            $qbo_invoice_html .= '<strong>Billed:</strong> $' . number_format((float)$total_billed, 2) . '<br>';
+            $qbo_invoice_html .= '<strong>Balance:</strong> $' . number_format((float)$balance_due, 2) . '<br>';
+            $qbo_invoice_html .= '<strong>Paid:</strong> $' . number_format((float)$total_paid, 2) . '<br>';
+            $qbo_invoice_html .= '<strong>Terms:</strong> ' . esc_html($terms ?: 'N/A') . '<br>';
+            $qbo_invoice_html .= '<strong>Status:</strong> <span class="dq-invoice-list-status ' . esc_attr($status_class) . '">' . esc_html($status_label) . '</span>';
+            $qbo_invoice_html .= '</div>';
+
+            // Combined Customer column
+            $customer_html = '<div class="dq-invoice-list-customer">';
+            $customer_html .= '<strong>Customer:</strong> ' . esc_html($customer ?: 'N/A') . '<br>';
+            $customer_html .= '<strong>Bill to:</strong> ' . esc_html($bill_to ?: 'N/A') . '<br>';
+            $customer_html .= '<strong>Ship to:</strong> ' . esc_html($ship_to ?: 'N/A');
+            $customer_html .= '</div>';
+
             $output .= '<tr>';
             $output .= '<td><a href="' . esc_url($permalink) . '">' . esc_html($invoice_no ?: 'N/A') . '</a></td>';
-            $output .= '<td>' . esc_html($invoice_date ? date('m/d/Y', strtotime($invoice_date)) : 'N/A') . '</td>';
-            $output .= '<td>' . esc_html($customer_name ?: 'N/A') . '</td>';
+            // Properly display Workorder ID
+$wo_display = 'N/A';
+if (is_array($wo_number)) {
+    // Array of IDs or objects
+    $id_list = [];
+    foreach ($wo_number as $wo_item) {
+        if (is_numeric($wo_item)) {
+            $id_list[] = $wo_item;
+        } elseif ($wo_item instanceof WP_Post) {
+            $id_list[] = $wo_item->ID;
+        }
+    }
+    if (!empty($id_list)) {
+        $wo_display = implode(', ', $id_list);
+    }
+} elseif ($wo_number instanceof WP_Post) {
+    $wo_display = $wo_number->ID;
+} elseif (!empty($wo_number)) {
+    $wo_display = $wo_number;
+}
+$output .= '<td>' . esc_html($wo_display) . '</td>';
             $output .= '<td>$' . number_format((float)$total_billed, 2) . '</td>';
-            $output .= '<td><span class="dq-invoice-list-status ' . esc_attr($status_class) . '">' . esc_html($status_label) . '</span></td>';
+            $output .= '<td>' . $qbo_invoice_html . '</td>';
+            $output .= '<td>' . $customer_html . '</td>';
+            $output .= '<td>' . esc_html($invoice_date ? date('m/d/Y', strtotime($invoice_date)) : 'N/A') . '</td>';
+            $output .= '<td>' . esc_html($due_date ? date('m/d/Y', strtotime($due_date)) : 'N/A') . '</td>';
+            // Only display Days Remaining when unpaid; show dash otherwise
+            $output .= '<td>' . ($payment_status !== 'paid' ? esc_html($days_remaining ?: 'N/A') : '-') . '</td>';
             $output .= '</tr>';
         }
 
