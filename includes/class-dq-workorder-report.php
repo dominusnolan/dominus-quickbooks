@@ -58,14 +58,50 @@ class DQ_WorkOrder_Report
         $monthly_counts = self::get_monthly_workorder_counts_from_workorders($workorders, $year);
         $state_counts = self::get_state_workorder_counts($workorders);
         $engineer_data = self::get_engineer_data($workorders);
+echo '<style>
+.flex-container {
+  display: flex;
+  flex-direction: row;
+}
 
+.flex-container .flex-item {
+  background-color: #f1f1f1;
+  padding: 10px;
+  text-align: left;
+  width: 100%;
+}
+
+@media (max-width: 600px) {
+  .flex-container {
+    flex-direction: column;
+  }
+}
+
+</style>';
         echo '<div class="wrap"><h1>WorkOrder Monthly Summary</h1>';
         self::filters_form($year);
 
-        self::render_monthly_table($monthly_counts, $year);
+        echo '<div class="table-set-1 flex-container">';
+            echo '<div class="flex-item">';
+                self::render_monthly_table($monthly_counts, $year);
+            echo '</div>';
+            echo '<div class="flex-item">';   
+            self::render_engineer_table($engineer_data);
+            echo '</div>';
+            echo '<div class="flex-item">';  
+            self::render_engineer_ajax_selector($engineer_data, $year);
+            echo '</div>';
+        echo '</div>'; 
+        
         self::render_state_table($state_counts);
+        self::render_leads_converted_table($workorders);
+        self::render_lead_category_table($workorders);
+
+        self::render_reschedule_reasons_table($workorders);
+        self::render_rescheduled_orders_table($workorders);
+
         self::render_engineer_table($engineer_data);
-        self::render_engineer_ajax_selector($engineer_data, $year);
+        
 
         echo '</div>';
     }
@@ -136,6 +172,194 @@ class DQ_WorkOrder_Report
         return $counts;
     }
 
+private static function render_reschedule_reasons_table($workorders)
+{
+    // 1. Gather reason counts
+    $reasons = [];
+    foreach ($workorders as $pid) {
+        $reason = function_exists('get_field') ? get_field('rescheduled_reason', $pid) : get_post_meta($pid, 'rescheduled_reason', true);
+        $reason = $reason ? $reason : '';
+        if (strlen(trim($reason))) {
+            if (!isset($reasons[$reason])) $reasons[$reason] = 0;
+            $reasons[$reason]++;
+        }
+    }
+    // Only non-zero
+    $reasons = array_filter($reasons, function($ct){ return $ct > 0; });
+    $yearly_total = array_sum($reasons);
+
+    // Table output, styled for your screenshot
+    ?>
+    <style>
+    .wo-reschedule-reason-table {
+        width:100%; max-width:500px;
+        border-collapse:collapse; background:#fff; margin-top:22px; border-radius:14px; overflow:hidden;
+    }
+    .wo-reschedule-reason-table th {
+        background:#08b0d2; color:#fff; padding:18px 12px; font-size:18px; font-weight:600;
+        text-align:left;
+    }
+    .wo-reschedule-reason-table td {
+        padding:15px 12px; font-size:16px; border-bottom:1px solid #f2f2f2; background:#fff;
+    }
+    .wo-reschedule-reason-table tbody tr:last-child td {
+        background:#54e6ea; font-weight:600; font-size:18px; border-bottom:none;
+    }
+    </style>
+    <table class="wo-reschedule-reason-table">
+        <thead>
+            <tr>
+                <th>Reasons</th>
+                <th style="text-align:right;">Count of Rescheduling Reasons</th>
+            </tr>
+        </thead>
+        <tbody>
+        <?php
+        foreach ($reasons as $reason => $ct) {
+            echo '<tr>';
+            echo '<td>'.esc_html($reason).'</td>';
+            echo '<td style="text-align:right;">'.intval($ct).'</td>';
+            echo '</tr>';
+        }
+        // Yearly total row
+        echo '<tr>';
+        echo '<td>Yearly Total</td>';
+        echo '<td style="text-align:right;">'.intval($yearly_total).'</td>';
+        echo '</tr>';
+        ?>
+        </tbody>
+    </table>
+    <?php
+}
+
+
+    private static function render_rescheduled_orders_table($workorders)
+{
+    $total = count($workorders);
+    $rescheduled_count = 0;
+    $days_received_to_scheduled = [];
+    $days_completed_to_closed = [];
+    
+    foreach ($workorders as $pid) {
+        $scheduled_date = function_exists('get_field') ? get_field('schedule_date_time', $pid) : get_post_meta($pid, 'schedule_date_time', true);
+        $rescheduled_date = function_exists('get_field') ? get_field('re-schedule', $pid) : get_post_meta($pid, 're-schedule', true);
+        
+        if ($rescheduled_date) $rescheduled_count++;
+
+        // Date math
+        $received_date = function_exists('get_field') ? get_field('date_requested_by_customer', $pid) : get_post_meta($pid, 'date_requested_by_customer', true);
+        $completed_date = function_exists('get_field') ? get_field('schedule_date_time', $pid) : get_post_meta($pid, 'schedule_date_time', true);
+        $closed_date = function_exists('get_field') ? get_field('closed_on', $pid) : get_post_meta($pid, 'closed_on', true);
+
+        // Received to Scheduled
+        $recv_ts = strtotime($received_date);
+        $sched_ts = strtotime($scheduled_date);
+        if ($recv_ts && $sched_ts && $sched_ts > $recv_ts) {
+            $days = ($sched_ts - $recv_ts) / 86400;
+            $days_received_to_scheduled[] = $days;
+        }
+
+        // Completed to Closed
+        $comp_ts = strtotime($completed_date);
+        $closed_ts = strtotime($closed_date);
+        if ($comp_ts && $closed_ts && $closed_ts > $comp_ts) {
+            $days = ($closed_ts - $comp_ts) / 86400;
+            $days_completed_to_closed[] = $days;
+        }
+    }
+
+    $pct_rescheduled = $total ? round($rescheduled_count * 100 / $total, 2) : 0;
+    $avg_recv_sched = count($days_received_to_scheduled) ? round(array_sum($days_received_to_scheduled) / count($days_received_to_scheduled), 2) : 0;
+    $avg_comp_closed = count($days_completed_to_closed) ? round(array_sum($days_completed_to_closed) / count($days_completed_to_closed), 2) : 0;
+    ?>
+    <style>
+    .wo-reschedule-table {
+        width:100%; max-width:500px;
+        border-collapse:collapse; background:#fff; margin-top:22px; border-radius:14px; overflow:hidden;
+    }
+    .wo-reschedule-table th {
+        background:#08b0d2; color:#fff; padding:18px 12px; font-size:18px; font-weight:600; text-align:left;
+        border-radius:14px 14px 0 0;
+    }
+    .wo-reschedule-table td {
+        padding:15px 12px; font-size:16px; background:#fff; border-bottom:1px solid #f2f2f2;
+    }
+    .wo-reschedule-table tr:last-child td { border-bottom:none; }
+    </style>
+    <table class="wo-reschedule-table">
+        <thead>
+            <tr>
+                <th colspan="2">Re-Scheduled Orders</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Rescheduled work orders</td>
+                <td style="text-align:right;"><?php echo intval($rescheduled_count); ?></td>
+            </tr>
+            <tr>
+                <td>% Rescheduled</td>
+                <td style="text-align:right;"><?php echo number_format($pct_rescheduled,2); ?>%</td>
+            </tr>
+            <tr>
+                <td>Average Days (Received to Scheduled)</td>
+                <td style="text-align:right;"><?php echo number_format($avg_recv_sched,2); ?></td>
+            </tr>
+            <tr>
+                <td>Average Days (Completed to Closed)</td>
+                <td style="text-align:right;"><?php echo number_format($avg_comp_closed,2); ?></td>
+            </tr>
+        </tbody>
+    </table>
+    <?php
+}
+
+    private static function render_leads_converted_table($workorders)
+    {
+        $total = count($workorders);
+        $leads_yes = 0;
+        foreach ($workorders as $pid) {
+            $lead_value = function_exists('get_field') ? get_field('wo_leads', $pid) : get_post_meta($pid, 'wo_leads', true);
+            if (strcasecmp(trim($lead_value), 'Yes') === 0) $leads_yes++;
+        }
+        $percent = $total ? round($leads_yes * 100 / $total, 2) : 0;
+        ?>
+        <style>
+        .wo-leads-table {
+            width:100%; max-width:500px;
+            border-collapse:collapse; background:#fff; margin-top:22px; border-radius:14px; overflow:hidden;
+        }
+        .wo-leads-table th {
+            background:#08b0d2; color:#fff; padding:18px 12px; font-size:18px; font-weight:600; text-align:left;
+            border-radius:14px 14px 0 0;
+        }
+        .wo-leads-table td {
+            padding:15px 12px; font-size:16px; background:#fff; border-bottom:1px solid #f2f2f2;
+        }
+        .wo-leads-table tr:last-child td { border-bottom:none; }
+        </style>
+        <table class="wo-leads-table">
+            <thead>
+                <tr>
+                    <th colspan="2">Leads</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Closed Work Orders that have been Converted to LEADS &ndash; QTY</td>
+                    <td style="text-align:right;"><?php echo intval($leads_yes); ?></td>
+                </tr>
+                <tr>
+                    <td>Closed Work Orders that have been Converted to LEADS &ndash; %</td>
+                    <td style="text-align:right;"><?php echo number_format($percent,2); ?>%</td>
+                </tr>
+            </tbody>
+        </table>
+        <?php
+    }
+
+
+
     private static function parse_month_from_text($raw_date, $year)
     {
         if (!$raw_date) return false;
@@ -161,6 +385,73 @@ class DQ_WorkOrder_Report
         }
         return false;
     }
+
+    private static function render_lead_category_table($workorders)
+{
+    // 1. Gather lead category counts
+    $categories = [];
+    $total = count($workorders);
+    foreach ($workorders as $pid) {
+        $cat = function_exists('get_field') ? get_field('wo_lead_category', $pid) : get_post_meta($pid, 'wo_lead_category', true);
+        $cat = $cat ? $cat : '[No Lead Category]';
+        if (!isset($categories[$cat])) $categories[$cat] = 0;
+        $categories[$cat]++;
+    }
+    // 2. Sort by count descending
+    arsort($categories);
+
+    // 3. Table output (styling to match your image)
+    ?>
+    <style>
+    .wo-lead-category-table {
+        width:100%; max-width:640px;
+        border-collapse:collapse; background:#fff; margin-top:22px; border-radius:14px; overflow:hidden;
+    }
+    .wo-lead-category-table th {
+        background:#08b0d2;
+        color:#fff; padding:18px 12px; font-size:18px; font-weight:600; text-align:left;
+    }
+    .wo-lead-category-table td {
+        padding:15px 12px; font-size:16px; border-bottom:1px solid #f2f2f2; vertical-align:middle;
+        background:#fff;
+    }
+    .wo-lead-category-table tr:last-child td {
+        border-bottom: none;
+    }
+    .wo-lead-category-table tbody tr:last-child td {
+        background: #c9e6c3; font-weight:600; font-size:18px;
+    }
+    </style>
+    <table class="wo-lead-category-table">
+        <thead>
+            <tr>
+                <th>Leads Categories</th>
+                <th style="text-align:right;">Total Work Orders</th>
+                <th style="text-align:right;">Percentage</th>
+            </tr>
+        </thead>
+        <tbody>
+        <?php
+        $grand_total = $total;
+        foreach ($categories as $cat => $ct) {
+            $pct = $grand_total ? round($ct*100/$grand_total,2) : 0;
+            echo '<tr>';
+            echo '<td>'.esc_html($cat).'</td>';
+            echo '<td style="text-align:right;">'.intval($ct).'</td>';
+            echo '<td style="text-align:right;">'.number_format($pct,2).'%'."</td>";
+            echo '</tr>';
+        }
+        // Total row
+        echo '<tr>';
+        echo '<td>Total</td>';
+        echo '<td style="text-align:right;">'.intval($grand_total).'</td>';
+        echo '<td style="text-align:right;">100%</td>';
+        echo '</tr>';
+        ?>
+        </tbody>
+    </table>
+    <?php
+}
 
     private static function get_state_workorder_counts($workorders)
     {
@@ -434,7 +725,6 @@ class DQ_WorkOrder_Report
         </style>
 
         <div id="dq-engineer-ajax-wrap">
-            <label><strong>Engineer Monthly Breakdown</strong></label><br>
             <select id="dq-engineer-select" aria-label="Select engineer">
                 <option value="">-- Select Engineer --</option>
                 <?php foreach ($engineer_data as $eng): ?>
