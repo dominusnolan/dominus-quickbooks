@@ -1832,17 +1832,17 @@ public static function ajax_fse_chart()
         $html .= '<table class="dq-wo-modal-table">';
         $html .= '<thead><tr>';
         $html .= '<th>Work Order ID</th>';
-        $html .= '<th>Customer</th>';
+        $html .= '<th>Product ID</th>';
         $html .= '<th>Location</th>';
         $html .= '<th>Engineer</th>';
-        $html .= '<th>Status</th>';
+        $html .= '<th>Invoice #</th>';
         $html .= '<th>Date</th>';
         $html .= '<th>Action</th>';
         $html .= '</tr></thead><tbody>';
 
         foreach ($workorder_ids as $pid) {
             $title = get_the_title($pid);
-            $customer_name = function_exists('get_field') ? get_field('wo_contact_name', $pid) : get_post_meta($pid, 'wo_contact_name', true);
+            $installed_product_id = function_exists('get_field') ? get_field('installed_product_id', $pid) : get_post_meta($pid, 'installed_product_id', true);
             $wo_location = function_exists('get_field') ? get_field('wo_location', $pid) : get_post_meta($pid, 'wo_location', true);
             $wo_state = function_exists('get_field') ? get_field('wo_state', $pid) : get_post_meta($pid, 'wo_state', true);
             
@@ -1850,13 +1850,8 @@ public static function ajax_fse_chart()
             $user = get_user_by('id', $author_id);
             $engineer_name = $user ? $user->display_name : 'Unknown';
 
-            // Get status
-            $terms = get_the_terms($pid, 'status');
-            $status = '';
-            if (!is_wp_error($terms) && !empty($terms) && is_array($terms)) {
-                $term = array_shift($terms);
-                $status = !empty($term->name) ? $term->name : '';
-            }
+            // Get invoice number
+            $wo_invoice_no = function_exists('get_field') ? get_field('wo_invoice_no', $pid) : get_post_meta($pid, 'wo_invoice_no', true);
 
             // Get relevant date
             $date_requested = function_exists('get_field') ? get_field('date_requested_by_customer', $pid) : get_post_meta($pid, 'date_requested_by_customer', true);
@@ -1866,10 +1861,10 @@ public static function ajax_fse_chart()
 
             $html .= '<tr>';
             $html .= '<td><strong>' . esc_html($title) . '</strong></td>';
-            $html .= '<td>' . esc_html($customer_name ?: '-') . '</td>';
+            $html .= '<td>' . esc_html($installed_product_id ?: '-') . '</td>';
             $html .= '<td>' . esc_html(($wo_location ?: '') . ($wo_state ? ', ' . $wo_state : '')) . '</td>';
             $html .= '<td>' . esc_html($engineer_name) . '</td>';
-            $html .= '<td>' . esc_html(ucfirst($status ?: '-')) . '</td>';
+            $html .= '<td>' . esc_html($wo_invoice_no ?: '-') . '</td>';
             $html .= '<td>' . esc_html($date_display) . '</td>';
             $html .= '<td><a href="' . esc_url($edit_link) . '" class="wo-view-btn" target="_blank">View</a></td>';
             $html .= '</tr>';
