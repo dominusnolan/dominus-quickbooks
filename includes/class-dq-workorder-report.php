@@ -242,7 +242,7 @@ private static function render_reschedule_reasons_table($workorders)
             echo '<tr>';
             echo '<td>'.esc_html($reason).'</td>';
             if ($ct > 0) {
-                echo '<td style="text-align:right;"><a href="#" class="dq-wo-count-link" data-filter-type="reschedule_reason" data-reschedule-reason="'.esc_attr($reason).'" data-year="'.intval($year).[...]
+                echo '<td style="text-align:right;"><a href="#" class="dq-wo-count-link" data-filter-type="reschedule_reason" data-reschedule-reason="'.esc_attr($reason).'" data-year="'.intval($year).'">'.intval($ct).'</a></td>';
             } else {
                 echo '<td style="text-align:right;">0</td>';
             }
@@ -552,7 +552,7 @@ private static function render_kpi_table($workorders)
             echo '<tr>';
             echo '<td>'.esc_html($cat).'</td>';
             if ($ct > 0) {
-                echo '<td style="text-align:right;"><a href="#" class="dq-wo-count-link" data-filter-type="lead_category" data-lead-category="'.esc_attr($cat).'" data-year="'.intval($year).'">'.intval[...]
+                echo '<td style="text-align:right;"><a href="#" class="dq-wo-count-link" data-filter-type="lead_category" data-lead-category="'.esc_attr($cat).'" data-year="'.intval($year).'">'.intval($ct).'</a></td>';
             } else {
                 echo '<td style="text-align:right;">0</td>';
             }
@@ -677,7 +677,7 @@ private static function render_kpi_table($workorders)
                 <tr>
                     <td class="month-cell"><?php echo esc_html($label); ?></td>
                     <td><?php if ($monthly_counts[$num] > 0): ?>
-                        <a href="#" class="dq-wo-count-link" data-filter-type="month" data-month="<?php echo intval($num); ?>" data-year="<?php echo intval($year); ?>"><?php echo intval($monthly_count[...]
+                        <a href="#" class="dq-wo-count-link" data-filter-type="month" data-month="<?php echo intval($num); ?>" data-year="<?php echo intval($year); ?>"><?php echo intval($monthly_counts[$num]); ?></a>
                     <?php else: echo '0'; endif; ?></td>
                 </tr>
             <?php endforeach; ?>
@@ -737,7 +737,7 @@ private static function render_kpi_table($workorders)
                 <tr>
                     <td class="state-cell"><?php echo esc_html($state); ?></td>
                     <td><?php if ($count > 0): ?>
-                        <a href="#" class="dq-wo-count-link" data-filter-type="state" data-state="<?php echo esc_attr($state); ?>" data-year="<?php echo intval($year); ?>"><?php echo intval($count); ?[...]
+                        <a href="#" class="dq-wo-count-link" data-filter-type="state" data-state="<?php echo esc_attr($state); ?>" data-year="<?php echo intval($year); ?>"><?php echo intval($count); ?></a>
                     <?php else: echo '0'; endif; ?></td>
                 </tr>
             <?php endforeach; ?>
@@ -819,7 +819,7 @@ private static function render_kpi_table($workorders)
                         <span class="eng-name"><?php echo esc_html($eng['display_name']); ?></span>
                     </td>
                     <td><?php if ($eng['wo_count'] > 0): ?>
-                        <a href="#" class="dq-wo-count-link" data-filter-type="engineer" data-engineer="<?php echo intval($eng['user_id']); ?>" data-year="<?php echo intval($year); ?>"><?php echo intv[...]
+                        <a href="#" class="dq-wo-count-link" data-filter-type="engineer" data-engineer="<?php echo intval($eng['user_id']); ?>" data-year="<?php echo intval($year); ?>"><?php echo intval($eng['wo_count']); ?></a>
                     <?php else: echo '0'; endif; ?></td>
                     <td class="percent-cell"><?php echo number_format($eng['percentage'], 2); ?>%</td>
                 </tr>
