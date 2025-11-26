@@ -23,6 +23,12 @@ class DQ_WorkOrder_Report
         add_action('wp_ajax_dq_workorder_modal', [__CLASS__, 'ajax_workorder_modal']);
         // New AJAX for average workspeed chart
         add_action('wp_ajax_dq_fse_avg_workspeed', [__CLASS__, 'ajax_fse_avg_workspeed']);
+
+        // Front-end navigation: override Account menu href for logged-in users
+        add_filter('nav_menu_link_attributes', [__CLASS__, 'account_menu_link_attributes'], 10, 4);
+
+        // Redirect users to account page after login
+        add_filter('login_redirect', [__CLASS__, 'redirect_after_login'], 10, 3);
     }
 
     public static function menu()
@@ -2117,6 +2123,39 @@ public static function ajax_fse_avg_workspeed()
         $html .= '<a href="#" class="' . $next_class . '" data-page="' . ($current_page + 1) . '">Next »</a>';
 
         return $html;
+    }
+
+    /**
+     * Override href attribute for Account menu item (ID 2379) when user is logged in.
+     *
+     * @param array    $atts  The HTML attributes applied to the menu item's anchor element.
+     * @param WP_Post  $item  The current menu item object.
+     * @param stdClass $args  An object of wp_nav_menu() arguments.
+     * @param int      $depth Depth of menu item.
+     * @return array Modified attributes.
+     */
+    public static function account_menu_link_attributes($atts, $item, $args, $depth)
+    {
+        if ($item->ID == 2379 && is_user_logged_in()) {
+            $atts['href'] = esc_url(home_url('/account-page/'));
+        }
+        return $atts;
+    }
+
+    /**
+     * Redirect users to /account-page/ after successful login.
+     *
+     * @param string           $redirect_to           The redirect destination URL.
+     * @param string           $requested_redirect_to The requested redirect destination URL.
+     * @param WP_User|WP_Error $user                  WP_User object on success, WP_Error on failure.
+     * @return string The redirect URL.
+     */
+    public static function redirect_after_login($redirect_to, $requested_redirect_to, $user)
+    {
+        if ($user instanceof WP_User) {
+            return esc_url_raw(home_url('/account-page/'));
+        }
+        return $redirect_to;
     }
 }
 
