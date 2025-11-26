@@ -13,11 +13,14 @@ if (!defined('ABSPATH')) exit;
  */
 class DQ_WorkOrder_Report
 {
+    const MODAL_PER_PAGE = 10;
+
     public static function init()
     {
         add_action('admin_menu', [__CLASS__, 'menu']);
         add_action('wp_ajax_dq_fse_chart', [__CLASS__, 'ajax_fse_chart']);
         add_action('wp_ajax_dq_engineer_monthly', [__CLASS__, 'ajax_engineer_monthly']);
+        add_action('wp_ajax_dq_workorder_modal', [__CLASS__, 'ajax_workorder_modal']);
     }
 
     public static function menu()
@@ -58,6 +61,12 @@ class DQ_WorkOrder_Report
         $monthly_counts = self::get_monthly_workorder_counts_from_workorders($workorders, $year);
         $state_counts = self::get_state_workorder_counts($workorders);
         $engineer_data = self::get_engineer_data($workorders);
+        
+        // Render modal styles and container first
+        self::render_modal_styles();
+        self::render_modal_html();
+        self::render_modal_script($year);
+        
 echo '<style>
 .flex-container {
   display: flex;
@@ -187,6 +196,7 @@ private static function render_reschedule_reasons_table($workorders)
 {
     // 1. Gather reason counts
     $reasons = [];
+    $year = self::get_selected_year();
     foreach ($workorders as $pid) {
         $reason = function_exists('get_field') ? get_field('rescheduled_reason', $pid) : get_post_meta($pid, 'rescheduled_reason', true);
         $reason = $reason ? $reason : '';
@@ -229,13 +239,21 @@ private static function render_reschedule_reasons_table($workorders)
         foreach ($reasons as $reason => $ct) {
             echo '<tr>';
             echo '<td>'.esc_html($reason).'</td>';
-            echo '<td style="text-align:right;">'.intval($ct).'</td>';
+            if ($ct > 0) {
+                echo '<td style="text-align:right;"><a href="#" class="dq-wo-count-link" data-filter-type="reschedule_reason" data-reschedule-reason="'.esc_attr($reason).'" data-year="'.intval($year).'">'.intval($ct).'</a></td>';
+            } else {
+                echo '<td style="text-align:right;">0</td>';
+            }
             echo '</tr>';
         }
         // Yearly total row
         echo '<tr>';
         echo '<td>Yearly Total</td>';
-        echo '<td style="text-align:right;">'.intval($yearly_total).'</td>';
+        if ($yearly_total > 0) {
+            echo '<td style="text-align:right;"><a href="#" class="dq-wo-count-link" data-filter-type="rescheduled" data-year="'.intval($year).'">'.intval($yearly_total).'</a></td>';
+        } else {
+            echo '<td style="text-align:right;">0</td>';
+        }
         echo '</tr>';
         ?>
         </tbody>
@@ -250,6 +268,7 @@ private static function render_kpi_table($workorders)
     $received_count = 0;
     $queue_days = [];
     $completed_count = 0;
+    $year = self::get_selected_year();
     foreach ($workorders as $pid) {
         // Work order received
         $date_received = function_exists('get_field') ? get_field('wo_date_received', $pid) : get_post_meta($pid, 'wo_date_received', true);
@@ -299,7 +318,9 @@ private static function render_kpi_table($workorders)
         <tbody>
             <tr>
                 <td>Total Work Orders Received</td>
-                <td style="text-align:right;"><?php echo intval($received_count); ?></td>
+                <td style="text-align:right;"><?php if ($received_count > 0): ?>
+                    <a href="#" class="dq-wo-count-link" data-filter-type="received" data-year="<?php echo intval($year); ?>"><?php echo intval($received_count); ?></a>
+                <?php else: echo '0'; endif; ?></td>
             </tr>
             <tr>
                 <td>Average Days in Queue for Work Orders</td>
@@ -307,7 +328,9 @@ private static function render_kpi_table($workorders)
             </tr>
             <tr>
                 <td>Number of Work Orders Completed</td>
-                <td style="text-align:right;"><?php echo intval($completed_count); ?></td>
+                <td style="text-align:right;"><?php if ($completed_count > 0): ?>
+                    <a href="#" class="dq-wo-count-link" data-filter-type="completed" data-year="<?php echo intval($year); ?>"><?php echo intval($completed_count); ?></a>
+                <?php else: echo '0'; endif; ?></td>
             </tr>
         </tbody>
     </table>
@@ -321,6 +344,7 @@ private static function render_kpi_table($workorders)
     $rescheduled_count = 0;
     $days_received_to_scheduled = [];
     $days_completed_to_closed = [];
+    $year = self::get_selected_year();
     
     foreach ($workorders as $pid) {
         $scheduled_date = function_exists('get_field') ? get_field('schedule_date_time', $pid) : get_post_meta($pid, 'schedule_date_time', true);
@@ -377,7 +401,9 @@ private static function render_kpi_table($workorders)
         <tbody>
             <tr>
                 <td>Rescheduled work orders</td>
-                <td style="text-align:right;"><?php echo intval($rescheduled_count); ?></td>
+                <td style="text-align:right;"><?php if ($rescheduled_count > 0): ?>
+                    <a href="#" class="dq-wo-count-link" data-filter-type="rescheduled" data-year="<?php echo intval($year); ?>"><?php echo intval($rescheduled_count); ?></a>
+                <?php else: echo '0'; endif; ?></td>
             </tr>
             <tr>
                 <td>% Rescheduled</td>
@@ -400,6 +426,7 @@ private static function render_kpi_table($workorders)
     {
         $total = count($workorders);
         $leads_yes = 0;
+        $year = self::get_selected_year();
         foreach ($workorders as $pid) {
             $lead_value = function_exists('get_field') ? get_field('wo_leads', $pid) : get_post_meta($pid, 'wo_leads', true);
             if (strcasecmp(trim($lead_value), 'Yes') === 0) $leads_yes++;
@@ -429,7 +456,9 @@ private static function render_kpi_table($workorders)
             <tbody>
                 <tr>
                     <td>Closed Work Orders that have been Converted to LEADS &ndash; QTY</td>
-                    <td style="text-align:right;"><?php echo intval($leads_yes); ?></td>
+                    <td style="text-align:right;"><?php if ($leads_yes > 0): ?>
+                        <a href="#" class="dq-wo-count-link" data-filter-type="leads_converted" data-year="<?php echo intval($year); ?>"><?php echo intval($leads_yes); ?></a>
+                    <?php else: echo '0'; endif; ?></td>
                 </tr>
                 <tr>
                     <td>Closed Work Orders that have been Converted to LEADS &ndash; %</td>
@@ -473,6 +502,7 @@ private static function render_kpi_table($workorders)
     // 1. Gather lead category counts
     $categories = [];
     $total = count($workorders);
+    $year = self::get_selected_year();
     foreach ($workorders as $pid) {
         $cat = function_exists('get_field') ? get_field('wo_lead_category', $pid) : get_post_meta($pid, 'wo_lead_category', true);
         $cat = $cat ? $cat : '[No Lead Category]';
@@ -519,14 +549,22 @@ private static function render_kpi_table($workorders)
             $pct = $grand_total ? round($ct*100/$grand_total,2) : 0;
             echo '<tr>';
             echo '<td>'.esc_html($cat).'</td>';
-            echo '<td style="text-align:right;">'.intval($ct).'</td>';
+            if ($ct > 0) {
+                echo '<td style="text-align:right;"><a href="#" class="dq-wo-count-link" data-filter-type="lead_category" data-lead-category="'.esc_attr($cat).'" data-year="'.intval($year).'">'.intval($ct).'</a></td>';
+            } else {
+                echo '<td style="text-align:right;">0</td>';
+            }
             echo '<td style="text-align:right;">'.number_format($pct,2).'%'."</td>";
             echo '</tr>';
         }
         // Total row
         echo '<tr>';
         echo '<td>Total</td>';
-        echo '<td style="text-align:right;">'.intval($grand_total).'</td>';
+        if ($grand_total > 0) {
+            echo '<td style="text-align:right;"><a href="#" class="dq-wo-count-link" data-filter-type="year" data-year="'.intval($year).'">'.intval($grand_total).'</a></td>';
+        } else {
+            echo '<td style="text-align:right;">0</td>';
+        }
         echo '<td style="text-align:right;">100%</td>';
         echo '</tr>';
         ?>
@@ -636,12 +674,16 @@ private static function render_kpi_table($workorders)
             <?php foreach ($month_names as $num => $label): ?>
                 <tr>
                     <td class="month-cell"><?php echo esc_html($label); ?></td>
-                    <td><?php echo intval($monthly_counts[$num]); ?></td>
+                    <td><?php if ($monthly_counts[$num] > 0): ?>
+                        <a href="#" class="dq-wo-count-link" data-filter-type="month" data-month="<?php echo intval($num); ?>" data-year="<?php echo intval($year); ?>"><?php echo intval($monthly_counts[$num]); ?></a>
+                    <?php else: echo '0'; endif; ?></td>
                 </tr>
             <?php endforeach; ?>
                 <tr class="totals-row">
                     <td>Total</td>
-                    <td><?php echo intval($total); ?></td>
+                    <td><?php if ($total > 0): ?>
+                        <a href="#" class="dq-wo-count-link" data-filter-type="year" data-year="<?php echo intval($year); ?>"><?php echo intval($total); ?></a>
+                    <?php else: echo '0'; endif; ?></td>
                 </tr>
             </tbody>
         </table>
@@ -651,6 +693,7 @@ private static function render_kpi_table($workorders)
     private static function render_state_table($state_counts)
     {
         $total = array_sum($state_counts);
+        $year = self::get_selected_year();
         ?>
         <style>
         .wo-state-table {width:auto; border-collapse:collapse; background:#fff; margin-top:22px; display:inline-block; vertical-align:top;}
@@ -691,12 +734,16 @@ private static function render_kpi_table($workorders)
             <?php foreach ($state_counts as $state => $count): ?>
                 <tr>
                     <td class="state-cell"><?php echo esc_html($state); ?></td>
-                    <td><?php echo intval($count); ?></td>
+                    <td><?php if ($count > 0): ?>
+                        <a href="#" class="dq-wo-count-link" data-filter-type="state" data-state="<?php echo esc_attr($state); ?>" data-year="<?php echo intval($year); ?>"><?php echo intval($count); ?></a>
+                    <?php else: echo '0'; endif; ?></td>
                 </tr>
             <?php endforeach; ?>
                 <tr class="totals-row">
                     <td>Total</td>
-                    <td><?php echo intval($total); ?></td>
+                    <td><?php if ($total > 0): ?>
+                        <a href="#" class="dq-wo-count-link" data-filter-type="year" data-year="<?php echo intval($year); ?>"><?php echo intval($total); ?></a>
+                    <?php else: echo '0'; endif; ?></td>
                 </tr>
             </tbody>
         </table>
@@ -707,6 +754,7 @@ private static function render_kpi_table($workorders)
     {
         $total_wo = 0;
         foreach($engineers as $eng) $total_wo += $eng['wo_count'];
+        $year = self::get_selected_year();
         ?>
         <style>
         .wo-engineer-table {width:480px; border-collapse:collapse; background:#fff; margin-top:22px;}
@@ -768,13 +816,17 @@ private static function render_kpi_table($workorders)
                         <img class="eng-photo" src="<?php echo esc_url($eng['profile_picture']); ?>" alt="" />
                         <span class="eng-name"><?php echo esc_html($eng['display_name']); ?></span>
                     </td>
-                    <td><?php echo intval($eng['wo_count']); ?></td>
+                    <td><?php if ($eng['wo_count'] > 0): ?>
+                        <a href="#" class="dq-wo-count-link" data-filter-type="engineer" data-engineer="<?php echo intval($eng['user_id']); ?>" data-year="<?php echo intval($year); ?>"><?php echo intval($eng['wo_count']); ?></a>
+                    <?php else: echo '0'; endif; ?></td>
                     <td class="percent-cell"><?php echo number_format($eng['percentage'], 2); ?>%</td>
                 </tr>
             <?php endforeach; ?>
                 <tr class="totals-row">
                     <td>Total</td>
-                    <td><?php echo intval($total_wo); ?></td>
+                    <td><?php if ($total_wo > 0): ?>
+                        <a href="#" class="dq-wo-count-link" data-filter-type="year" data-year="<?php echo intval($year); ?>"><?php echo intval($total_wo); ?></a>
+                    <?php else: echo '0'; endif; ?></td>
                     <td class="percent-cell">100.00%</td>
                 </tr>
             </tbody>
@@ -1179,6 +1231,704 @@ public static function ajax_fse_chart()
         // Fallback
         $ts = strtotime($raw_date);
         return $ts ? $ts : false;
+    }
+
+    /**
+     * Render modal CSS styles
+     */
+    private static function render_modal_styles()
+    {
+        ?>
+        <style>
+        /* Clickable count link styles */
+        .dq-wo-count-link {
+            color: #0996a0;
+            text-decoration: none;
+            font-weight: 600;
+            cursor: pointer;
+            border-bottom: 1px dashed #0996a0;
+            transition: all 0.2s ease;
+        }
+        .dq-wo-count-link:hover {
+            color: #067a82;
+            border-bottom-color: #067a82;
+        }
+        
+        /* Modal overlay */
+        .dq-wo-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 99999;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .dq-wo-modal-overlay.active {
+            display: block;
+            opacity: 1;
+        }
+        
+        /* Modal container */
+        .dq-wo-modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            z-index: 100000;
+            max-width: 95vw;
+            width: 1200px;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        /* Modal header */
+        .dq-wo-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 24px;
+            background: #0996a0;
+            color: #fff;
+            flex-shrink: 0;
+        }
+        .dq-wo-modal-header h2 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+            color: #fff;
+        }
+        .dq-wo-modal-close {
+            background: transparent;
+            border: none;
+            color: #fff;
+            font-size: 28px;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        }
+        .dq-wo-modal-close:hover {
+            opacity: 1;
+        }
+        
+        /* Modal body */
+        .dq-wo-modal-body {
+            padding: 20px 24px;
+            overflow-y: auto;
+            flex-grow: 1;
+        }
+        
+        /* Modal loading state */
+        .dq-wo-modal-loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        .dq-wo-modal-loading:after {
+            content: '';
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            border: 3px solid #ddd;
+            border-top-color: #0996a0;
+            border-radius: 50%;
+            animation: dq-spin 0.8s linear infinite;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+        @keyframes dq-spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* Modal table */
+        .dq-wo-modal-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        .dq-wo-modal-table th {
+            background: #f5f5f5;
+            padding: 12px 10px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid #ddd;
+            white-space: nowrap;
+        }
+        .dq-wo-modal-table td {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            vertical-align: middle;
+        }
+        .dq-wo-modal-table tbody tr:hover td {
+            background: #f9f9f9;
+        }
+        .dq-wo-modal-table .wo-view-btn {
+            display: inline-block;
+            padding: 4px 12px;
+            background: #0996a0;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 12px;
+            transition: background 0.2s;
+        }
+        .dq-wo-modal-table .wo-view-btn:hover {
+            background: #067a82;
+        }
+        
+        /* Modal pagination */
+        .dq-wo-modal-pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            padding: 16px 24px;
+            background: #f9f9f9;
+            border-top: 1px solid #eee;
+            flex-shrink: 0;
+        }
+        .dq-wo-modal-pagination a,
+        .dq-wo-modal-pagination span {
+            display: inline-block;
+            padding: 6px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            text-decoration: none;
+            color: #333;
+            background: #fff;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        .dq-wo-modal-pagination a:hover {
+            background: #0996a0;
+            color: #fff;
+            border-color: #0996a0;
+        }
+        .dq-wo-modal-pagination .current {
+            background: #0996a0;
+            color: #fff;
+            border-color: #0996a0;
+            font-weight: 600;
+        }
+        .dq-wo-modal-pagination .disabled {
+            opacity: 0.4;
+            pointer-events: none;
+        }
+        .dq-wo-modal-pagination .ellipsis {
+            border: none;
+            background: transparent;
+        }
+        
+        /* Empty state */
+        .dq-wo-modal-empty {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-style: italic;
+        }
+
+        /* Modal info bar */
+        .dq-wo-modal-info {
+            background: #e5f4fa;
+            padding: 10px 16px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            font-size: 14px;
+            color: #333;
+        }
+        .dq-wo-modal-info strong {
+            color: #0996a0;
+        }
+        </style>
+        <?php
+    }
+
+    /**
+     * Render modal HTML container
+     */
+    private static function render_modal_html()
+    {
+        ?>
+        <div class="dq-wo-modal-overlay" id="dq-wo-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="dq-wo-modal-title">
+            <div class="dq-wo-modal">
+                <div class="dq-wo-modal-header">
+                    <h2 id="dq-wo-modal-title">Work Orders</h2>
+                    <button type="button" class="dq-wo-modal-close" aria-label="Close modal">&times;</button>
+                </div>
+                <div class="dq-wo-modal-body" id="dq-wo-modal-body">
+                    <div class="dq-wo-modal-loading">Loading work orders...</div>
+                </div>
+                <div class="dq-wo-modal-pagination" id="dq-wo-modal-pagination" style="display:none;"></div>
+            </div>
+        </div>
+        <?php
+    }
+
+    /**
+     * Render modal JavaScript
+     */
+    private static function render_modal_script($year)
+    {
+        $nonce = wp_create_nonce('dq_workorder_modal');
+        $ajax_url = admin_url('admin-ajax.php');
+        ?>
+        <script>
+        (function() {
+            const overlay = document.getElementById('dq-wo-modal-overlay');
+            const modalBody = document.getElementById('dq-wo-modal-body');
+            const modalPagination = document.getElementById('dq-wo-modal-pagination');
+            const modalTitle = document.getElementById('dq-wo-modal-title');
+            const closeBtn = overlay ? overlay.querySelector('.dq-wo-modal-close') : null;
+            const ajaxUrl = '<?php echo esc_js($ajax_url); ?>';
+            const nonce = '<?php echo esc_js($nonce); ?>';
+            const defaultYear = '<?php echo intval($year); ?>';
+            
+            let currentFilters = {};
+            let currentPage = 1;
+
+            // Open modal
+            function openModal(filters, title) {
+                currentFilters = filters;
+                currentPage = 1;
+                if (modalTitle) modalTitle.textContent = title || 'Work Orders';
+                if (overlay) {
+                    overlay.classList.add('active');
+                    document.body.style.overflow = 'hidden';
+                }
+                loadWorkorders();
+            }
+
+            // Close modal
+            function closeModal() {
+                if (overlay) {
+                    overlay.classList.remove('active');
+                    document.body.style.overflow = '';
+                }
+                currentFilters = {};
+                currentPage = 1;
+            }
+
+            // Load workorders via AJAX
+            function loadWorkorders(page) {
+                if (page) currentPage = page;
+                
+                if (modalBody) {
+                    modalBody.innerHTML = '<div class="dq-wo-modal-loading">Loading work orders...</div>';
+                }
+                if (modalPagination) {
+                    modalPagination.style.display = 'none';
+                    modalPagination.innerHTML = '';
+                }
+
+                const formData = new FormData();
+                formData.append('action', 'dq_workorder_modal');
+                formData.append('nonce', nonce);
+                formData.append('page', currentPage);
+                
+                // Add all filters
+                for (const key in currentFilters) {
+                    formData.append(key, currentFilters[key]);
+                }
+
+                fetch(ajaxUrl, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.data) {
+                        if (modalBody) {
+                            modalBody.innerHTML = data.data.html || '<div class="dq-wo-modal-empty">No work orders found.</div>';
+                        }
+                        if (modalPagination && data.data.pagination) {
+                            modalPagination.innerHTML = data.data.pagination;
+                            modalPagination.style.display = data.data.max_pages > 1 ? 'flex' : 'none';
+                        }
+                    } else {
+                        if (modalBody) {
+                            modalBody.innerHTML = '<div class="dq-wo-modal-empty">Error loading work orders.</div>';
+                        }
+                    }
+                })
+                .catch(err => {
+                    console.error('Modal AJAX error:', err);
+                    if (modalBody) {
+                        modalBody.innerHTML = '<div class="dq-wo-modal-empty">Error loading work orders.</div>';
+                    }
+                });
+            }
+
+            // Build title based on filter type
+            function buildTitle(filterType, data) {
+                const year = data.year || defaultYear;
+                switch (filterType) {
+                    case 'month':
+                        const months = ['', 'January', 'February', 'March', 'April', 'May', 'June', 
+                                       'July', 'August', 'September', 'October', 'November', 'December'];
+                        return 'Work Orders - ' + months[parseInt(data.month)] + ' ' + year;
+                    case 'state':
+                        return 'Work Orders - ' + data.state + ' (' + year + ')';
+                    case 'engineer':
+                        return 'Work Orders by Engineer (' + year + ')';
+                    case 'lead_category':
+                        return 'Work Orders - Lead Category: ' + data.leadCategory + ' (' + year + ')';
+                    case 'reschedule_reason':
+                        return 'Rescheduled Work Orders - ' + data.rescheduleReason + ' (' + year + ')';
+                    case 'rescheduled':
+                        return 'Rescheduled Work Orders (' + year + ')';
+                    case 'leads_converted':
+                        return 'Work Orders Converted to Leads (' + year + ')';
+                    case 'received':
+                        return 'Work Orders Received (' + year + ')';
+                    case 'completed':
+                        return 'Completed Work Orders (' + year + ')';
+                    case 'year':
+                        return 'All Work Orders (' + year + ')';
+                    default:
+                        return 'Work Orders (' + year + ')';
+                }
+            }
+
+            // Event: Click on count link
+            document.addEventListener('click', function(e) {
+                const link = e.target.closest('.dq-wo-count-link');
+                if (link) {
+                    e.preventDefault();
+                    
+                    const filterType = link.dataset.filterType;
+                    const filters = {
+                        filter_type: filterType,
+                        year: link.dataset.year || defaultYear
+                    };
+
+                    // Add specific filter data
+                    if (link.dataset.month) filters.month = link.dataset.month;
+                    if (link.dataset.state) filters.state = link.dataset.state;
+                    if (link.dataset.engineer) filters.engineer = link.dataset.engineer;
+                    if (link.dataset.leadCategory) filters.lead_category = link.dataset.leadCategory;
+                    if (link.dataset.rescheduleReason) filters.reschedule_reason = link.dataset.rescheduleReason;
+
+                    const title = buildTitle(filterType, {
+                        year: filters.year,
+                        month: filters.month,
+                        state: filters.state,
+                        leadCategory: link.dataset.leadCategory,
+                        rescheduleReason: link.dataset.rescheduleReason
+                    });
+
+                    openModal(filters, title);
+                }
+            });
+
+            // Event: Close button click
+            if (closeBtn) {
+                closeBtn.addEventListener('click', closeModal);
+            }
+
+            // Event: Overlay click (close when clicking outside modal)
+            if (overlay) {
+                overlay.addEventListener('click', function(e) {
+                    if (e.target === overlay) {
+                        closeModal();
+                    }
+                });
+            }
+
+            // Event: Escape key to close
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && overlay && overlay.classList.contains('active')) {
+                    closeModal();
+                }
+            });
+
+            // Event: Pagination clicks (delegated)
+            if (modalPagination) {
+                modalPagination.addEventListener('click', function(e) {
+                    const pageLink = e.target.closest('a[data-page]');
+                    if (pageLink && !pageLink.classList.contains('disabled')) {
+                        e.preventDefault();
+                        const page = parseInt(pageLink.dataset.page);
+                        if (page && page > 0) {
+                            loadWorkorders(page);
+                        }
+                    }
+                });
+            }
+        })();
+        </script>
+        <?php
+    }
+
+    /**
+     * AJAX handler for modal workorder list
+     */
+    public static function ajax_workorder_modal()
+    {
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Permission denied', 403);
+        }
+        check_ajax_referer('dq_workorder_modal', 'nonce');
+
+        $filter_type = isset($_POST['filter_type']) ? sanitize_text_field($_POST['filter_type']) : '';
+        $year = isset($_POST['year']) ? intval($_POST['year']) : intval(date('Y'));
+        $month = isset($_POST['month']) ? intval($_POST['month']) : 0;
+        $state = isset($_POST['state']) ? sanitize_text_field($_POST['state']) : '';
+        $engineer = isset($_POST['engineer']) ? intval($_POST['engineer']) : 0;
+        $lead_category = isset($_POST['lead_category']) ? sanitize_text_field($_POST['lead_category']) : '';
+        $reschedule_reason = isset($_POST['reschedule_reason']) ? sanitize_text_field($_POST['reschedule_reason']) : '';
+        $page = isset($_POST['page']) ? max(1, intval($_POST['page'])) : 1;
+        $per_page = self::MODAL_PER_PAGE;
+
+        // Get base workorders for the year
+        $workorders = self::get_workorders_in_year($year);
+
+        // Apply filters based on filter_type
+        $filtered_ids = self::filter_workorders($workorders, $filter_type, [
+            'year' => $year,
+            'month' => $month,
+            'state' => $state,
+            'engineer' => $engineer,
+            'lead_category' => $lead_category,
+            'reschedule_reason' => $reschedule_reason,
+        ]);
+
+        $total = count($filtered_ids);
+        $max_pages = ceil($total / $per_page);
+        $offset = ($page - 1) * $per_page;
+        $paged_ids = array_slice($filtered_ids, $offset, $per_page);
+
+        // Render HTML
+        $html = self::render_modal_workorders_html($paged_ids, $total, $page, $per_page);
+        $pagination = self::render_modal_pagination($page, $max_pages);
+
+        wp_send_json_success([
+            'html' => $html,
+            'pagination' => $pagination,
+            'total' => $total,
+            'max_pages' => $max_pages,
+            'current_page' => $page,
+        ]);
+    }
+
+    /**
+     * Filter workorders based on filter type
+     */
+    private static function filter_workorders($workorder_ids, $filter_type, $filters)
+    {
+        $year = $filters['year'];
+        $filtered = [];
+
+        foreach ($workorder_ids as $pid) {
+            $include = false;
+
+            switch ($filter_type) {
+                case 'month':
+                    // Filter by month
+                    $terms = get_the_terms($pid, 'status');
+                    $status_slug = '';
+                    if (!is_wp_error($terms) && !empty($terms) && is_array($terms)) {
+                        $term = array_shift($terms);
+                        $status_slug = !empty($term->slug) ? $term->slug : '';
+                    }
+                    $raw_date = '';
+                    if ($status_slug === 'open') {
+                        $raw_date = function_exists('get_field') ? get_field('date_requested_by_customer', $pid) : get_post_meta($pid, 'date_requested_by_customer', true);
+                    } elseif ($status_slug === 'close') {
+                        $raw_date = function_exists('get_field') ? get_field('closed_on', $pid) : get_post_meta($pid, 'closed_on', true);
+                    } elseif ($status_slug === 'scheduled') {
+                        $raw_date = function_exists('get_field') ? get_field('schedule_date_time', $pid) : get_post_meta($pid, 'schedule_date_time', true);
+                    }
+                    if (!$raw_date) $raw_date = get_post_field('post_date', $pid);
+                    $month_num = self::parse_month_from_text($raw_date, $year);
+                    $include = ($month_num !== false && $month_num == $filters['month']);
+                    break;
+
+                case 'state':
+                    $wo_state = function_exists('get_field') ? get_field('wo_state', $pid) : get_post_meta($pid, 'wo_state', true);
+                    if (!$wo_state) $wo_state = '[No State]';
+                    $include = ($wo_state === $filters['state']);
+                    break;
+
+                case 'engineer':
+                    $author_id = get_post_field('post_author', $pid);
+                    $include = ($author_id == $filters['engineer']);
+                    break;
+
+                case 'lead_category':
+                    $cat = function_exists('get_field') ? get_field('wo_lead_category', $pid) : get_post_meta($pid, 'wo_lead_category', true);
+                    if (!$cat) $cat = '[No Lead Category]';
+                    $include = ($cat === $filters['lead_category']);
+                    break;
+
+                case 'reschedule_reason':
+                    $reason = function_exists('get_field') ? get_field('rescheduled_reason', $pid) : get_post_meta($pid, 'rescheduled_reason', true);
+                    $include = ($reason === $filters['reschedule_reason']);
+                    break;
+
+                case 'rescheduled':
+                    $rescheduled_date = function_exists('get_field') ? get_field('re-schedule', $pid) : get_post_meta($pid, 're-schedule', true);
+                    $include = !empty($rescheduled_date);
+                    break;
+
+                case 'leads_converted':
+                    $lead_value = function_exists('get_field') ? get_field('wo_leads', $pid) : get_post_meta($pid, 'wo_leads', true);
+                    $include = (strcasecmp(trim($lead_value), 'Yes') === 0);
+                    break;
+
+                case 'received':
+                    $date_received = function_exists('get_field') ? get_field('wo_date_received', $pid) : get_post_meta($pid, 'wo_date_received', true);
+                    $include = !empty($date_received);
+                    break;
+
+                case 'completed':
+                    $closed_on = function_exists('get_field') ? get_field('closed_on', $pid) : get_post_meta($pid, 'closed_on', true);
+                    $terms = get_the_terms($pid, 'status');
+                    $status_slug = '';
+                    if (!is_wp_error($terms) && !empty($terms) && is_array($terms)) {
+                        $term = array_shift($terms);
+                        $status_slug = !empty($term->slug) ? $term->slug : '';
+                    }
+                    $include = ($closed_on || $status_slug === 'close');
+                    break;
+
+                case 'year':
+                default:
+                    $include = true;
+                    break;
+            }
+
+            if ($include) {
+                $filtered[] = $pid;
+            }
+        }
+
+        return $filtered;
+    }
+
+    /**
+     * Render workorders HTML for modal
+     */
+    private static function render_modal_workorders_html($workorder_ids, $total, $page, $per_page)
+    {
+        if (empty($workorder_ids)) {
+            return '<div class="dq-wo-modal-empty">No work orders found matching your criteria.</div>';
+        }
+
+        $start = (($page - 1) * $per_page) + 1;
+        $end = min($page * $per_page, $total);
+
+        $html = '<div class="dq-wo-modal-info">Showing <strong>' . $start . '-' . $end . '</strong> of <strong>' . $total . '</strong> work orders</div>';
+        $html .= '<table class="dq-wo-modal-table">';
+        $html .= '<thead><tr>';
+        $html .= '<th>Work Order ID</th>';
+        $html .= '<th>Customer</th>';
+        $html .= '<th>Location</th>';
+        $html .= '<th>Engineer</th>';
+        $html .= '<th>Status</th>';
+        $html .= '<th>Date</th>';
+        $html .= '<th>Action</th>';
+        $html .= '</tr></thead><tbody>';
+
+        foreach ($workorder_ids as $pid) {
+            $title = get_the_title($pid);
+            $customer_name = function_exists('get_field') ? get_field('wo_contact_name', $pid) : get_post_meta($pid, 'wo_contact_name', true);
+            $wo_location = function_exists('get_field') ? get_field('wo_location', $pid) : get_post_meta($pid, 'wo_location', true);
+            $wo_state = function_exists('get_field') ? get_field('wo_state', $pid) : get_post_meta($pid, 'wo_state', true);
+            
+            $author_id = get_post_field('post_author', $pid);
+            $user = get_user_by('id', $author_id);
+            $engineer_name = $user ? $user->display_name : 'Unknown';
+
+            // Get status
+            $terms = get_the_terms($pid, 'status');
+            $status = '';
+            if (!is_wp_error($terms) && !empty($terms) && is_array($terms)) {
+                $term = array_shift($terms);
+                $status = !empty($term->name) ? $term->name : '';
+            }
+
+            // Get relevant date
+            $date_requested = function_exists('get_field') ? get_field('date_requested_by_customer', $pid) : get_post_meta($pid, 'date_requested_by_customer', true);
+            $date_display = $date_requested ? date('m/d/Y', strtotime($date_requested)) : date('m/d/Y', strtotime(get_post_field('post_date', $pid)));
+
+            $edit_link = admin_url('post.php?post=' . $pid . '&action=edit');
+
+            $html .= '<tr>';
+            $html .= '<td><strong>' . esc_html($title) . '</strong></td>';
+            $html .= '<td>' . esc_html($customer_name ?: '-') . '</td>';
+            $html .= '<td>' . esc_html(($wo_location ?: '') . ($wo_state ? ', ' . $wo_state : '')) . '</td>';
+            $html .= '<td>' . esc_html($engineer_name) . '</td>';
+            $html .= '<td>' . esc_html(ucfirst($status ?: '-')) . '</td>';
+            $html .= '<td>' . esc_html($date_display) . '</td>';
+            $html .= '<td><a href="' . esc_url($edit_link) . '" class="wo-view-btn" target="_blank">View</a></td>';
+            $html .= '</tr>';
+        }
+
+        $html .= '</tbody></table>';
+        return $html;
+    }
+
+    /**
+     * Render pagination for modal
+     */
+    private static function render_modal_pagination($current_page, $max_pages)
+    {
+        if ($max_pages <= 1) {
+            return '';
+        }
+
+        $html = '';
+
+        // Previous button
+        $prev_class = ($current_page <= 1) ? 'disabled' : '';
+        $html .= '<a href="#" class="' . $prev_class . '" data-page="' . ($current_page - 1) . '">« Previous</a>';
+
+        // Page numbers
+        $range = 2;
+        $start = max(1, $current_page - $range);
+        $end = min($max_pages, $current_page + $range);
+
+        // First page + ellipsis
+        if ($start > 1) {
+            $html .= '<a href="#" data-page="1">1</a>';
+            if ($start > 2) {
+                $html .= '<span class="ellipsis">...</span>';
+            }
+        }
+
+        // Page numbers
+        for ($i = $start; $i <= $end; $i++) {
+            if ($i == $current_page) {
+                $html .= '<span class="current">' . $i . '</span>';
+            } else {
+                $html .= '<a href="#" data-page="' . $i . '">' . $i . '</a>';
+            }
+        }
+
+        // Last page + ellipsis
+        if ($end < $max_pages) {
+            if ($end < $max_pages - 1) {
+                $html .= '<span class="ellipsis">...</span>';
+            }
+            $html .= '<a href="#" data-page="' . $max_pages . '">' . $max_pages . '</a>';
+        }
+
+        // Next button
+        $next_class = ($current_page >= $max_pages) ? 'disabled' : '';
+        $html .= '<a href="#" class="' . $next_class . '" data-page="' . ($current_page + 1) . '">Next »</a>';
+
+        return $html;
     }
 }
 
