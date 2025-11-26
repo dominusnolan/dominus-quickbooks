@@ -235,24 +235,30 @@ add_action('save_post_workorder', function( $post_id ) {
 
     $found_user_id = 0;
 
-    // 1) If numeric -> treat as user ID
-    if ( ctype_digit( (string) $member_name ) ) {
-        $try_id = intval( $member_name );
-        if ( $try_id > 0 ) {
-            $u = get_user_by( 'id', $try_id );
-            if ( $u ) $found_user_id = $u->ID;
-        }
+    // 0) Hardcoded mapping for Joseph Serafino Lee
+    if ( strcasecmp( $member_name, 'Joseph Serafino Lee' ) === 0 ) {
+        $found_user_id = 9;
     }
 
-    // 2) Try login then email
+    // If not hardcoded, do standard resolution
     if ( ! $found_user_id ) {
+        // 1) If numeric -> treat as user ID
+        if ( ctype_digit( (string) $member_name ) ) {
+            $try_id = intval( $member_name );
+            if ( $try_id > 0 ) {
+                $u = get_user_by( 'id', $try_id );
+                if ( $u ) $found_user_id = $u->ID;
+            }
+        }
+    }
+    if ( ! $found_user_id ) {
+        // 2) Try login then email
         $u = get_user_by( 'login', $member_name );
         if ( ! $u ) $u = get_user_by( 'email', $member_name );
         if ( $u ) $found_user_id = $u->ID;
     }
-
-    // 3) Search display_name (WP_User_Query) as a last resort
     if ( ! $found_user_id ) {
+        // 3) Search display_name (WP_User_Query)
         $uq = new WP_User_Query([
             'search'         => $member_name,
             'search_columns' => [ 'display_name' ],
