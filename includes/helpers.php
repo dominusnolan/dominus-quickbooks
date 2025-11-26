@@ -201,3 +201,98 @@ add_action('save_post_quickbooks_invoice', function($post_id) {
         dqqb_sync_invoice_number_to_workorders($post_id);
     }
 });
+
+/**
+ * When a Work Order is saved/updated, set the post_author based on the ACF field 'member_name'.
+ */
+add_action('save_post_workorder', function($post_id) {
+    // Static guard flag to prevent infinite recursion
+    static $is_updating = false;
+    if ( $is_updating ) {
+        return;
+    }
+
+    // Skip autosaves
+    if ( defined('DOING_AUTOSAVE') && DOING_AUTOSAVE ) {
+        return;
+    }
+
+    // Skip revisions
+    if ( wp_is_post_revision($post_id) ) {
+        return;
+    }
+
+    // Validate post exists and is of the correct type
+    $post = get_post($post_id);
+    if ( ! $post || $post->post_type !== 'workorder' ) {
+        return;
+    }
+
+    // Read the ACF field 'member_name', fallback to get_post_meta
+    if ( function_exists('get_field') ) {
+        $member_name = get_field('member_name', $post_id);
+    } else {
+        $member_name = get_post_meta($post_id, 'member_name', true);
+    }
+
+    // If member_name is empty, do nothing
+    if ( empty($member_name) ) {
+        return;
+    }
+
+    $user = null;
+
+    // 1. If the value looks like an integer and a user with that ID exists, use it
+    if ( is_numeric($member_name) && intval($member_name) > 0 ) {
+        $user_by_id = get_user_by('id', intval($member_name));
+        if ( $user_by_id ) {
+            $user = $user_by_id;
+        }
+    }
+
+    // 2. Try get_user_by('login', $member_name) and get_user_by('email', $member_name)
+    if ( ! $user ) {
+        $user = get_user_by('login', $member_name);
+    }
+    if ( ! $user ) {
+        $user = get_user_by('email', $member_name);
+    }
+
+    // 3. Use WP_User_Query to search display_name (exact-ish match)
+    if ( ! $user ) {
+        $user_query = new WP_User_Query([
+            'search'         => $member_name,
+            'search_columns' => ['display_name'],
+            'number'         => 1,
+        ]);
+        $results = $user_query->get_results();
+        if ( ! empty($results) ) {
+            $user = $results[0];
+        }
+    }
+
+    // If a matching user is found and their ID differs from the current post_author, update the post_author
+    if ( $user && $user->ID !== (int) $post->post_author ) {
+        $is_updating = true;
+
+        wp_update_post([
+            'ID'          => $post_id,
+            'post_author' => $user->ID,
+        ]);
+
+        // Log the change via DQ_Logger::info() when available
+        if ( class_exists('DQ_Logger') ) {
+            DQ_Logger::info(
+                sprintf(
+                    'Work Order #%d post_author changed from %d to %d (member_name: %s)',
+                    $post_id,
+                    $post->post_author,
+                    $user->ID,
+                    $member_name
+                )
+            );
+        }
+
+        $is_updating = false;
+    }
+});
