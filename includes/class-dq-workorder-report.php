@@ -1023,6 +1023,11 @@ private static function render_kpi_table($workorders)
         $year = isset($_GET['fse_year']) ? intval($_GET['fse_year']) : intval(date('Y'));
         $quarter = isset($_GET['fse_quarter']) ? intval($_GET['fse_quarter']) : 0;
 
+        // Render modal styles and container for this page
+        self::render_modal_styles();
+        self::render_modal_html();
+        self::render_modal_script($year);
+
         echo '<div class="wrap"><h1>Field Services Engineer &#8211; total work orders</h1>';
         self::fse_filters_form($year, $quarter);
 
@@ -1035,6 +1040,8 @@ private static function render_kpi_table($workorders)
         echo '<div id="dq-fse-avg-workspeed-container" style="margin-top:22px; min-height:220px; background:#fafafb; border-radius:8px; padding:18px 10px;">';
         echo '<h3 style="margin:0 0 10px 0; font-weight:600;">FSE Average WorkSpeed Quarterly Views</h3>';
         echo '<canvas id="dq-fse-workspeed-chart" width="1400" height="260"></canvas>';
+        // Info container for skipped WOs
+        echo '<div id="dq-fse-workspeed-info" style="margin-top:12px; font-size:13px; color:#555;"></div>';
         echo '</div>';
 
         // JS for AJAX chart rendering
@@ -1045,6 +1052,7 @@ private static function render_kpi_table($workorders)
             let form = document.getElementById('dq-fse-filter-form');
             let chartContainer = document.getElementById('dq-fse-chart');
             let chartAvgContainer = document.getElementById('dq-fse-workspeed-chart');
+            let workspeedInfoContainer = document.getElementById('dq-fse-workspeed-info');
             let chart;
             let chartAvg;
 
@@ -1191,6 +1199,63 @@ private static function render_kpi_table($workorders)
                 }
             }
 
+            function renderWorkspeedInfo(data) {
+                if (!workspeedInfoContainer) return;
+                workspeedInfoContainer.innerHTML = '';
+                
+                if (!data.uids || !data.labels) return;
+                
+                const selYear = form ? form.querySelector('[name="fse_year"]').value : '<?php echo intval($year); ?>';
+                let infoHtml = '';
+                
+                // Helper function to escape HTML special characters for XSS prevention
+                function escapeHtml(str) {
+                    if (typeof str !== 'string') return str;
+                    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+                }
+                
+                for (let i = 0; i < data.uids.length; i++) {
+                    const uid = data.uids[i];
+                    const label = data.labels[i];
+                    const count = (data.counts && data.counts[i]) ? data.counts[i] : 0;
+                    const skippedCount = (data.skipped_counts && data.skipped_counts[uid]) ? data.skipped_counts[uid] : 0;
+                    const skippedIds = (data.skipped_ids && data.skipped_ids[uid]) ? data.skipped_ids[uid] : [];
+                    
+                    if (skippedCount > 0) {
+                        // Sanitize WO IDs to only allow numeric values separated by commas
+                        const woIdsList = skippedIds.filter(id => Number.isInteger(id) && id > 0).join(',');
+                        const safeLabel = escapeHtml(label);
+                        const safeYear = escapeHtml(String(selYear));
+                        infoHtml += '<div style="margin-bottom:4px;">';
+                        infoHtml += '<span style="color:#666;">Skipped <strong>' + parseInt(skippedCount, 10) + '</strong> WO' + (skippedCount > 1 ? 's' : '') + ' for <strong>' + safeLabel + '</strong></span>';
+                        infoHtml += ' &mdash; <a href="#" class="dq-inspect-skipped-link" data-wo-ids="' + woIdsList + '" data-year="' + safeYear + '" data-engineer="' + safeLabel + '" style="color:#0996a0; text-decoration:underline; cursor:pointer;">Inspect</a>';
+                        infoHtml += '</div>';
+                    }
+                }
+                
+                if (infoHtml) {
+                    workspeedInfoContainer.innerHTML = '<div style="background:#fff8e1; border:1px solid #ffe082; border-radius:6px; padding:10px 14px; margin-top:8px;">' +
+                        '<strong style="color:#f57c00;">⚠ Skipped Work Orders</strong> (missing/invalid dates or negative duration):' +
+                        '<div style="margin-top:6px;">' + infoHtml + '</div></div>';
+                }
+            }
+
+            // Event delegation for Inspect links
+            document.addEventListener('click', function(e) {
+                const link = e.target.closest('.dq-inspect-skipped-link');
+                if (link) {
+                    e.preventDefault();
+                    const woIds = link.dataset.woIds;
+                    const year = link.dataset.year;
+                    const engineer = link.dataset.engineer;
+                    if (typeof window.dqOpenModalWithFilters === 'function') {
+                        window.dqOpenModalWithFilters({ filter_type: 'ids', wo_ids: woIds, year: year }, 'Skipped Work Orders for ' + engineer);
+                    } else {
+                        console.warn('dqOpenModalWithFilters not available');
+                    }
+                }
+            });
+
             function ajaxLoad() {
                 if (!form) return;
                 const year = form.querySelector('[name="fse_year"]').value;
@@ -1198,6 +1263,7 @@ private static function render_kpi_table($workorders)
                 // dim the containers while loading
                 if (chartContainer) chartContainer.style.opacity = "0.5";
                 if (chartAvgContainer) chartAvgContainer.style.opacity = "0.5";
+                if (workspeedInfoContainer) workspeedInfoContainer.innerHTML = '';
 
                 const body1 = 'action=dq_fse_chart&fse_year='+encodeURIComponent(year)+'&fse_quarter='+encodeURIComponent(quarter);
                 const body2 = 'action=dq_fse_avg_workspeed&fse_year='+encodeURIComponent(year)+'&fse_quarter='+encodeURIComponent(quarter);
@@ -1226,6 +1292,7 @@ private static function render_kpi_table($workorders)
                         }
                         if (data2 && data2.success && data2.data) {
                             renderAvgChart(data2.data);
+                            renderWorkspeedInfo(data2.data);
                         } else if (data2 && !data2.success) {
                             // clear avg chart if error
                             if (chartAvg) { chartAvg.destroy(); chartAvg = null; }
@@ -1359,6 +1426,7 @@ public static function ajax_fse_chart()
  *
  * Computes average (date_service_completed_by_fse - schedule_date_time) in days per engineer
  * Only includes workorders that have date_service_completed_by_fse value and valid schedule date.
+ * Returns per-engineer counts, skipped IDs grouped by engineer, and includes engineers with zero values.
  */
 public static function ajax_fse_avg_workspeed()
 {
@@ -1379,6 +1447,13 @@ public static function ajax_fse_avg_workspeed()
         $end_ts = strtotime("$year-12-31");
     }
 
+    // Get full list of engineers
+    $all_engineers = get_users(['role' => 'engineer']);
+    $engineer_names = [];
+    foreach ($all_engineers as $eng) {
+        $engineer_names[$eng->ID] = $eng->display_name;
+    }
+
     // Query all workorders
     $query = [
         'post_type'      => 'workorder',
@@ -1390,8 +1465,7 @@ public static function ajax_fse_avg_workspeed()
 
     // Prepare per-author accumulators and skipped lists
     $accumulators = []; // author_id => ['total_days' => x, 'count' => y]
-    $skipped_by_author = []; // author_id => ['missing' => [], 'negative' => [], 'parse' => []]
-
+    $skipped_ids_by_engineer = [];  // author_id => array of ids skipped (invalid / negative / missing dates)
     foreach ($wos as $pid) {
         // Use same status->date logic as other charts to determine if WO falls into the selected range
         $terms = get_the_terms($pid, 'status');
@@ -1414,7 +1488,9 @@ public static function ajax_fse_avg_workspeed()
         if (!$ts) continue;
         if ($ts < $start_ts || $ts > $end_ts) continue;
 
-        // require completed date
+        $author_id = get_post_field('post_author', $pid);
+
+        // Only calculate if date_service_completed_by_fse has value (user requirement)
         $completed_raw = function_exists('get_field') ? get_field('date_service_completed_by_fse', $pid) : get_post_meta($pid, 'date_service_completed_by_fse', true);
         if (!$completed_raw) {
             $author_id = intval(get_post_field('post_author', $pid));
@@ -1446,9 +1522,13 @@ public static function ajax_fse_avg_workspeed()
             continue;
         }
         $schedule_ts = self::parse_date_for_chart($schedule_raw);
-        if (!$schedule_ts) {
-            $author_id = intval(get_post_field('post_author', $pid));
-            $skipped_by_author[$author_id]['parse'][] = $pid;
+
+        // require both timestamps - skip if missing/invalid
+        if (!$completed_ts || !$schedule_ts) {
+            if (!isset($skipped_ids_by_engineer[$author_id])) {
+                $skipped_ids_by_engineer[$author_id] = [];
+            }
+            $skipped_ids_by_engineer[$author_id][] = $pid;
             continue;
         }
 
@@ -1456,12 +1536,13 @@ public static function ajax_fse_avg_workspeed()
 
         // Skip negative durations (treat as data error) to avoid huge negative averages
         if ($days < 0) {
-            $author_id = intval(get_post_field('post_author', $pid));
-            $skipped_by_author[$author_id]['negative'][] = $pid;
+            if (!isset($skipped_ids_by_engineer[$author_id])) {
+                $skipped_ids_by_engineer[$author_id] = [];
+            }
+            $skipped_ids_by_engineer[$author_id][] = $pid;
             continue;
         }
 
-        $author_id = intval(get_post_field('post_author', $pid));
         if (!isset($accumulators[$author_id])) {
             $accumulators[$author_id] = ['total_days' => 0.0, 'count' => 0];
         }
@@ -1469,46 +1550,44 @@ public static function ajax_fse_avg_workspeed()
         $accumulators[$author_id]['count'] += 1;
     }
 
-    // Ensure we include all engineers (even if they have zero counts)
-    $engineers = get_users(['role' => 'engineer', 'fields' => ['ID','display_name']]);
-    $labels = [];
-    $uids = [];
+    // Compute averages for all engineers (including those with zero counts)
     $averages = [];
     $counts = [];
-    $skipped_counts = []; // uid => int
-    $skipped_ids = []; // uid => array
-
-    // compute averages for authors that have accumulators
-    foreach ($engineers as $eng) {
-        $uid = intval($eng->ID);
-        $labels[] = $eng->display_name;
-        $uids[] = $uid;
-
-        $count = isset($accumulators[$uid]) ? intval($accumulators[$uid]['count']) : 0;
-        $avg = 0.0;
-        if ($count > 0) {
-            $avg = round($accumulators[$uid]['total_days'] / $count, 2);
+    foreach ($engineer_names as $uid => $name) {
+        if (isset($accumulators[$uid]) && $accumulators[$uid]['count'] > 0) {
+            $avg = $accumulators[$uid]['total_days'] / $accumulators[$uid]['count'];
+            $averages[$uid] = round($avg, 2);
+            $counts[$uid] = $accumulators[$uid]['count'];
+        } else {
+            $averages[$uid] = 0;
+            $counts[$uid] = 0;
         }
-        $averages[] = $avg;
-        $counts[] = $count;
-
-        // skipped info
-        $missing = isset($skipped_by_author[$uid]['missing']) ? $skipped_by_author[$uid]['missing'] : [];
-        $parse = isset($skipped_by_author[$uid]['parse']) ? $skipped_by_author[$uid]['parse'] : [];
-        $neg = isset($skipped_by_author[$uid]['negative']) ? $skipped_by_author[$uid]['negative'] : [];
-        $all_skipped = array_merge($missing, $parse, $neg);
-        $skipped_ids[$uid] = array_values($all_skipped);
-        $skipped_counts[$uid] = count($all_skipped);
     }
 
-    // The response includes labels, averages, uids, counts (number used), skipped_counts and skipped_ids (per uid)
+    // Sort by average descending
+    arsort($averages);
+
+    $labels = [];
+    $uids = [];
+    $counts_arr = [];
+    $skipped_counts = [];
+    $skipped_ids = [];
+    foreach ($averages as $uid => $avg) {
+        $labels[] = $engineer_names[$uid] ?? 'Unknown';
+        $avgs[] = $avg;
+        $uids[] = $uid;
+        $counts_arr[] = $counts[$uid];
+        $skipped_counts[$uid] = isset($skipped_ids_by_engineer[$uid]) ? count($skipped_ids_by_engineer[$uid]) : 0;
+        $skipped_ids[$uid] = isset($skipped_ids_by_engineer[$uid]) ? array_values($skipped_ids_by_engineer[$uid]) : [];
+    }
+
     wp_send_json_success([
         'labels' => $labels,
-        'averages' => $averages,
+        'averages' => $avgs,
         'uids' => $uids,
-        'counts' => $counts,
+        'counts' => $counts_arr,
         'skipped_counts' => $skipped_counts,
-        'skipped_ids' => $skipped_ids,
+        'skipped_ids' => $skipped_ids
     ]);
 }
 
@@ -2007,7 +2086,31 @@ public static function ajax_workorder_modal()
         // Pagination
         $page = isset($_POST['page']) ? max(1, intval($_POST['page'])) : 1;
         $per_page = self::MODAL_PER_PAGE;
-        $total = count($ids);
+
+        // Check for direct wo_ids filter (bypasses other filters)
+        $wo_ids_raw = isset($_POST['wo_ids']) ? sanitize_text_field($_POST['wo_ids']) : '';
+        if ($filter_type === 'ids' && !empty($wo_ids_raw)) {
+            // Parse comma-separated IDs into array of integers
+            $filtered_ids = array_filter(array_map('intval', explode(',', $wo_ids_raw)), function($id) {
+                return $id > 0;
+            });
+            $filtered_ids = array_values($filtered_ids);
+        } else {
+            // Get base workorders for the year
+            $workorders = self::get_workorders_in_year($year);
+
+            // Apply filters based on filter_type
+            $filtered_ids = self::filter_workorders($workorders, $filter_type, [
+                'year' => $year,
+                'month' => $month,
+                'state' => $state,
+                'engineer' => $engineer,
+                'lead_category' => $lead_category,
+                'reschedule_reason' => $reschedule_reason,
+            ]);
+        }
+
+        $total = count($filtered_ids);
         $max_pages = ceil($total / $per_page);
         $offset = ($page - 1) * $per_page;
         $paged_ids = array_slice($ids, $offset, $per_page);
