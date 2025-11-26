@@ -36,6 +36,7 @@ class DQ_Invoice_List
             'date_type' => 'qi_invoice_date', // Default to invoice date
             'date_from' => '',
             'date_to' => '',
+            'unpaid_only' => '', // <-- NEW attribute
         ], $atts, 'dqqb_invoice_list');
 
         // Enqueue scripts
@@ -72,28 +73,38 @@ class DQ_Invoice_List
         // Meta query for filters
         $meta_query = ['relation' => 'AND'];
 
-        // Status filter (paid/unpaid)
-        if (!empty($atts['status'])) {
-            $status = sanitize_text_field($atts['status']);
-            if ($status === 'paid') {
-                $meta_query[] = [
-                    'key' => 'qi_payment_status',
-                    'value' => 'paid',
-                    'compare' => '=',
-                ];
-            } elseif ($status === 'unpaid') {
-                $meta_query[] = [
-                    'relation' => 'OR',
-                    [
+        // If unpaid_only is true, remove status filter and just show invoices with positive balance
+        if (!empty($atts['unpaid_only']) && $atts['unpaid_only'] === 'true') {
+            $meta_query[] = [
+                'key' => 'qi_balance_due',
+                'value' => 0,
+                'compare' => '>',
+                'type' => 'NUMERIC',
+            ];
+        } else {
+            // Status filter (paid/unpaid)
+            if (!empty($atts['status'])) {
+                $status = sanitize_text_field($atts['status']);
+                if ($status === 'paid') {
+                    $meta_query[] = [
                         'key' => 'qi_payment_status',
                         'value' => 'paid',
-                        'compare' => '!=',
-                    ],
-                    [
-                        'key' => 'qi_payment_status',
-                        'compare' => 'NOT EXISTS',
-                    ],
-                ];
+                        'compare' => '=',
+                    ];
+                } elseif ($status === 'unpaid') {
+                    $meta_query[] = [
+                        'relation' => 'OR',
+                        [
+                            'key' => 'qi_payment_status',
+                            'value' => 'paid',
+                            'compare' => '!=',
+                        ],
+                        [
+                            'key' => 'qi_payment_status',
+                            'compare' => 'NOT EXISTS',
+                        ],
+                    ];
+                }
             }
         }
 
