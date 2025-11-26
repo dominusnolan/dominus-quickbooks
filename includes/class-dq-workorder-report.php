@@ -14,6 +14,7 @@ if (!defined('ABSPATH')) exit;
 class DQ_WorkOrder_Report
 {
     const MODAL_PER_PAGE = 10;
+    const ACCOUNT_MENU_ITEM_ID = 2379;
 
     public static function init()
     {
@@ -2136,7 +2137,7 @@ public static function ajax_fse_avg_workspeed()
      */
     public static function account_menu_link_attributes($atts, $item, $args, $depth)
     {
-        if ($item->ID == 2379 && is_user_logged_in()) {
+        if ($item->ID == self::ACCOUNT_MENU_ITEM_ID && is_user_logged_in()) {
             $atts['href'] = esc_url(home_url('/account-page/'));
         }
         return $atts;
