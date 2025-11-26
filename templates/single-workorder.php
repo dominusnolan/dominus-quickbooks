@@ -119,6 +119,23 @@ if (is_string($private_comments) && $private_comments !== '') {
     }
     
     #footer-page{display:none !important}
+
+    .dqqb-notice {
+        border-left: 4px solid #46b450;
+        background: #f0fff4;
+        padding: 10px 14px;
+        margin: 10px 0;
+        border-radius: 4px;
+        color: #094d36;
+    }
+    .dqqb-error {
+        border-left: 4px solid #cc3b3b;
+        background: #fff5f5;
+        padding: 10px 14px;
+        margin: 10px 0;
+        border-radius: 4px;
+        color: #7a1f1f;
+    }
 </style>
 <main id="primary" class="site-main dqqb-single-workorder" style="max-width:95%;margin:0 auto">
     <article id="post-<?php the_ID(); ?>" <?php post_class(); ?>>
@@ -131,14 +148,13 @@ if (is_string($private_comments) && $private_comments !== '') {
         <div class="entry-content-wrapper clearfix">
             <h3 style="font-size:30px;font-weight:700;text-align:center;margin:40px 0">Summary</h3>
             
-            <div class="wo-meta-engineer">
-                <img class="wo-meta-engineer-img" src="<?php echo $profile_img_url; ?>" alt="Engineer photo" />
-                <span class="wo-meta-engineer-name"><?php echo esc_html( $engineer_name ); ?><span>Field Engineer</span></span>
-                
-                
-            </div>
-           
-            <div class="flex_column av-84xd0k-39ee9eb5b055ef5e359eb528eb8e7746 av_three_fifth  avia-builder-el-1  el_after_av_textblock  el_before_av_two_fifth  first flex_column_div  column-top-margin">
+            
+
+            <div class="flex_column av-4t6g44-f63431ee47f87602bdd4dcb7a3f161e8 av_two_fifth  avia-builder-el-3  el_after_av_three_fifth  avia-builder-el-last  flex_column_div  column-top-margin">
+                <div class="wo-meta-engineer">
+                    <img class="wo-meta-engineer-img" src="<?php echo $profile_img_url; ?>" alt="Engineer photo" />
+                    <span class="wo-meta-engineer-name"><?php echo esc_html( $engineer_name ); ?><span>Field Engineer</span></span>
+                </div>
                 <div class="wo-meta-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
                     <?php
                     // A few handy bits users often want under the timeline; adjust/extend as needed.
@@ -211,17 +227,16 @@ if (is_string($private_comments) && $private_comments !== '') {
                     }
                     ?>
                 </div>
-                
+
                 <hr>
                 <h3 style="display:block">Customer Details:</h3>
                 <div class="wo-meta-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
                     
                     <?php
-                    // A few handy bits users often want under the timeline; adjust/extend as needed.
                     $pairs = [
                         'Name'             => $val('wo_contact_name'),
                         'Address'           => $val('wo_contact_address'),
-                        'Email'           => $val('wo_contact_email'),
+                        'Email'             => $val('wo_contact_email'),
                         'Number'           => $val('wo_service_contact_number'),
                     ];
                     foreach ( $pairs as $label => $value ) {
@@ -233,11 +248,28 @@ if (is_string($private_comments) && $private_comments !== '') {
                     }
                     ?>
                 </div>
-                 <div style="margin: 15px 0;">
-                <button type="button" id="dqqb-email-quotation-btn" data-post-id="<?php echo esc_attr( $post_id ); ?>" style="background:#0073aa;color:#fff;border:none;padding:10px 20px;border-radius:4px;cursor:pointer;font-size:14px;">
-                    Email Customer Quotation
-                </button>
-            </div>
+
+                   <?php
+                    // Show success/error after redirect from form submission
+                    if ( isset( $_GET['dqqb_quote_sent'] ) && intval( $_GET['dqqb_quote_sent'] ) === 1 ) {
+                        echo '<div class="dqqb-notice">Quotation email has been sent to the customer.</div>';
+                    } elseif ( isset( $_GET['dqqb_quote_error'] ) && $_GET['dqqb_quote_error'] !== '' ) {
+                        // sanitize the message for display
+                        $err = wp_kses_post( wp_unslash( $_GET['dqqb_quote_error'] ) );
+                        echo '<div class="dqqb-error">' . esc_html( $err ) . '</div>';
+                    }
+                    ?>
+
+                    <div style="margin: 15px 0;">
+                        <form method="post" action="<?php echo esc_url( admin_url('admin-post.php') ); ?>" style="display:inline;">
+                            <?php wp_nonce_field( 'dqqb_send_quotation', 'dqqb_send_quotation_nonce' ); ?>
+                            <input type="hidden" name="action" value="dqqb_send_quotation_nonajax" />
+                            <input type="hidden" name="post_id" value="<?php echo esc_attr( $post_id ); ?>" />
+                            <button type="submit" id="dqqb-email-quotation" style="background:#0073aa;color:#fff;border:none;padding:10px 20px;border-radius:6px;font-weight:600;cursor:pointer;">
+                                Email Customer Quotation
+                            </button>
+                        </form>
+                    </div>
             </div>
             
        
