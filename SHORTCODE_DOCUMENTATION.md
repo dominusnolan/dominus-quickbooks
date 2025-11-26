@@ -1,5 +1,148 @@
 # Dominus QuickBooks Shortcodes
 
+## Work Order Table Shortcode
+
+### Basic Usage
+
+Display a paginated table of work orders on any page or post:
+
+```
+[workorder_table]
+```
+
+### Features
+
+- **Configurable Pagination**: Control rows per page with `per_page` attribute (default: 10)
+- **AJAX Navigation**: Page changes happen without full page reload
+- **Responsive Design**: Works on desktop, tablet, and mobile devices
+- **Smooth Scrolling**: Automatically scrolls to top of table after page change
+- **Loading State**: Visual feedback while fetching new page
+- **Styled Table**: Teal headers, alternating row colors, grouped cells, clean spacing
+
+### Shortcode Attributes
+
+#### Control Rows Per Page
+
+Show 20 work orders per page:
+```
+[workorder_table per_page="20"]
+```
+
+Show 5 work orders per page:
+```
+[workorder_table per_page="5"]
+```
+
+#### Filter by Status
+
+Show only open work orders:
+```
+[workorder_table status="open"]
+```
+
+Show only closed work orders:
+```
+[workorder_table status="close"]
+```
+
+Show only scheduled work orders:
+```
+[workorder_table status="scheduled"]
+```
+
+#### Filter by State
+
+Show work orders from a specific state:
+```
+[workorder_table state="California"]
+```
+
+#### Combined Filters
+
+You can combine multiple filters:
+```
+[workorder_table per_page="15" status="open" state="Texas"]
+```
+
+### Display Format
+
+The work order table displays the following information:
+
+- **WO ID**: Work order number with link to individual work order page
+- **Customer**: Customer name (bold styling)
+- **Location**: Combined address, city, and state
+- **Service Details**: Grouped cell showing:
+  - Service Type
+  - Equipment
+  - Serial Number
+- **Dates**: Grouped cell showing:
+  - Date Requested
+  - Scheduled Date
+  - Closed Date
+- **Status**: Visual badge with color-coded status (Open, Scheduled, Closed)
+
+### Technical Notes
+
+- Requires the `workorder` custom post type to be registered
+- Uses ACF fields (or falls back to post meta):
+  - `wo_number`: Work order number
+  - `wo_customer`: Customer name
+  - `wo_address`: Street address
+  - `wo_city`: City
+  - `wo_state`: State
+  - `service_type`: Type of service
+  - `equipment`: Equipment name
+  - `serial_number`: Equipment serial number
+  - `date_requested_by_customer`: Requested date
+  - `schedule_date_time`: Scheduled date
+  - `closed_on`: Closed date
+- Works for logged-in and non-logged-in users
+- AJAX requests are secured with WordPress nonces
+- Server-side pagination for efficient handling of large datasets
+
+### Styling
+
+The shortcode includes built-in styling with:
+- Teal (#0996a0) header background
+- Alternating row colors for better readability
+- Hover effects on rows
+- Responsive table with horizontal scroll on mobile
+- Color-coded status badges
+
+You can override styles by targeting these CSS classes:
+
+- `.dq-workorder-table-wrapper`: Main container
+- `.dq-workorder-table`: Table element
+- `.dq-workorder-table-pagination`: Pagination controls
+- `.dq-workorder-status`: Status badges
+- `.wo-id-cell`: Work order ID column
+- `.wo-customer-cell`: Customer name column
+- `.wo-grouped-cell`: Grouped content cells (service details, dates)
+
+### Examples
+
+**Show all work orders with default 10 per page:**
+```
+[workorder_table]
+```
+
+**Show 25 work orders per page:**
+```
+[workorder_table per_page="25"]
+```
+
+**Show open work orders, 15 per page:**
+```
+[workorder_table per_page="15" status="open"]
+```
+
+**Show work orders from California:**
+```
+[workorder_table state="California"]
+```
+
+---
+
 ## Invoice List Shortcode
 
 ### Basic Usage
