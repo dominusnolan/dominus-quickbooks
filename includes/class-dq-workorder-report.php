@@ -1158,6 +1158,12 @@ private static function render_kpi_table($workorders)
                 const selYear = form ? form.querySelector('[name="fse_year"]').value : '<?php echo intval($year); ?>';
                 let infoHtml = '';
                 
+                // Helper function to escape HTML special characters for XSS prevention
+                function escapeHtml(str) {
+                    if (typeof str !== 'string') return str;
+                    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+                }
+                
                 for (let i = 0; i < data.uids.length; i++) {
                     const uid = data.uids[i];
                     const label = data.labels[i];
@@ -1166,10 +1172,13 @@ private static function render_kpi_table($workorders)
                     const skippedIds = (data.skipped_ids && data.skipped_ids[uid]) ? data.skipped_ids[uid] : [];
                     
                     if (skippedCount > 0) {
-                        const woIdsList = skippedIds.join(',');
+                        // Sanitize WO IDs to only allow numeric values separated by commas
+                        const woIdsList = skippedIds.filter(id => Number.isInteger(id) && id > 0).join(',');
+                        const safeLabel = escapeHtml(label);
+                        const safeYear = escapeHtml(String(selYear));
                         infoHtml += '<div style="margin-bottom:4px;">';
-                        infoHtml += '<span style="color:#666;">Skipped <strong>' + skippedCount + '</strong> WO' + (skippedCount > 1 ? 's' : '') + ' for <strong>' + label + '</strong></span>';
-                        infoHtml += ' &mdash; <a href="#" class="dq-inspect-skipped-link" data-wo-ids="' + woIdsList + '" data-year="' + selYear + '" data-engineer="' + label + '" style="color:#0996a0; text-decoration:underline; cursor:pointer;">Inspect</a>';
+                        infoHtml += '<span style="color:#666;">Skipped <strong>' + parseInt(skippedCount, 10) + '</strong> WO' + (skippedCount > 1 ? 's' : '') + ' for <strong>' + safeLabel + '</strong></span>';
+                        infoHtml += ' &mdash; <a href="#" class="dq-inspect-skipped-link" data-wo-ids="' + woIdsList + '" data-year="' + safeYear + '" data-engineer="' + safeLabel + '" style="color:#0996a0; text-decoration:underline; cursor:pointer;">Inspect</a>';
                         infoHtml += '</div>';
                     }
                 }
@@ -1191,6 +1200,8 @@ private static function render_kpi_table($workorders)
                     const engineer = link.dataset.engineer;
                     if (typeof window.dqOpenModalWithFilters === 'function') {
                         window.dqOpenModalWithFilters({ filter_type: 'ids', wo_ids: woIds, year: year }, 'Skipped Work Orders for ' + engineer);
+                    } else {
+                        console.warn('dqOpenModalWithFilters not available');
                     }
                 }
             });
