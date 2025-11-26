@@ -85,6 +85,9 @@ echo '<style>
             echo '<div class="flex-item">';
                 self::render_monthly_table($monthly_counts, $year);
             echo '</div>';
+            echo '<div class="flex-item">';
+                self::render_state_table($monthly_counts, $year);
+            echo '</div>';
             echo '<div class="flex-item">';   
             self::render_engineer_table($engineer_data);
             echo '</div>';
@@ -93,15 +96,14 @@ echo '<style>
             echo '</div>';
         echo '</div>'; 
         
-        self::render_state_table($state_counts);
+    
         self::render_leads_converted_table($workorders);
         self::render_lead_category_table($workorders);
 
         self::render_reschedule_reasons_table($workorders);
         self::render_rescheduled_orders_table($workorders);
 
-        self::render_engineer_table($engineer_data);
-        
+       
 
         echo '</div>';
     }
@@ -829,7 +831,9 @@ private static function render_reschedule_reasons_table($workorders)
         }
 
         // Query workorders for this author in the year
-        $engineer_ids = get_users(['role' => 'engineer', 'fields' => 'ID']);
+       
+        $engineer = isset($_POST['engineer']) ? intval($_POST['engineer']) : 0;
+        $year = isset($_POST['year']) ? intval($_POST['year']) : intval(date('Y'));
         $start = "{$year}-01-01";
         $end = "{$year}-12-31";
         $query = [
@@ -841,9 +845,10 @@ private static function render_reschedule_reasons_table($workorders)
             'date_query'     => [
                 ['after' => $start, 'before' => $end, 'inclusive' => true]
             ],
-            'author__in'     => $engineer_ids, // only authors with engineer role
+            
         ];
         $workorders = get_posts($query);
+
 
         $counts = array_fill(1,12,0);
         foreach ($workorders as $pid) {
@@ -1014,13 +1019,13 @@ public static function ajax_fse_chart()
     }
 
     // Get ALL possible workorders for the year, no date filter!
-    $engineer_ids = get_users(['role' => 'engineer', 'fields' => 'ID']);
+   
     $query = [
         'post_type'      => 'workorder',
         'post_status'    => ['publish', 'draft', 'pending', 'private'],
         'posts_per_page' => -1,
         'fields'         => 'ids',
-        'author__in'     => $engineer_ids, // only authors with engineer role
+
     ];
     $wos = get_posts($query);
 
