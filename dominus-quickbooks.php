@@ -88,6 +88,8 @@ add_action( 'plugins_loaded', function() {
     if ( class_exists( 'DQ_Workorder_Timeline' ) ) DQ_Workorder_Timeline::init(); // NEW
     if ( class_exists( 'DQ_Invoice_List' ) ) DQ_Invoice_List::init(); // NEW
     if ( class_exists( 'DQ_Workorder_Table' ) ) DQ_Workorder_Table::init(); // NEW
+    
+    if ( class_exists( 'DQ_Workorder_Template' ) ) DQ_Workorder_Template::init(); // NEW
 });
 
 // -----------------------------------------------------------------------------
