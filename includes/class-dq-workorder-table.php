@@ -3,357 +3,534 @@ if (!defined('ABSPATH')) exit;
 
 /**
  * Class DQ_Workorder_Table
- * Frontend shortcode that displays a table listing all Work Orders.
- * Usage: [workorder_table]
+ * Frontend workorder table shortcode with AJAX-powered pagination.
+ * Usage: [workorder_table] or [workorder_table per_page="20"]
  */
 class DQ_Workorder_Table
 {
+    const DEFAULT_PER_PAGE = 10;
+
     public static function init()
     {
         add_shortcode('workorder_table', [__CLASS__, 'render_shortcode']);
+        add_action('wp_ajax_dq_workorder_table_paginate', [__CLASS__, 'ajax_paginate']);
+        add_action('wp_ajax_nopriv_dq_workorder_table_paginate', [__CLASS__, 'ajax_paginate']);
+        add_action('wp_enqueue_scripts', [__CLASS__, 'register_scripts']);
     }
 
-    /**
-     * Render the workorder_table shortcode
-     *
-     * @param array $atts Shortcode attributes
-     * @return string HTML output
-     */
+    public static function register_scripts()
+    {
+        wp_register_script(
+            'dq-workorder-table',
+            false,
+            ['jquery'],
+            DQQB_VERSION,
+            true
+        );
+    }
+
     public static function render_shortcode($atts)
     {
-        $atts = shortcode_atts([], $atts, 'workorder_table');
+        $atts = shortcode_atts([
+            'per_page' => self::DEFAULT_PER_PAGE,
+            'status' => '', // Filter by status taxonomy (open, close, scheduled)
+            'state' => '', // Filter by wo_state meta field
+        ], $atts, 'workorder_table');
 
-        $workorders = self::get_workorders();
-        $output = self::get_styles();
-        $output .= self::render_table($workorders);
+        // Sanitize per_page
+        $atts['per_page'] = max(1, intval($atts['per_page']));
+
+        // Enqueue scripts
+        wp_enqueue_script('dq-workorder-table');
+
+        // Generate unique ID for this shortcode instance
+        static $instance = 0;
+        $instance++;
+        $wrapper_id = 'dq-workorder-table-' . $instance;
+
+        // Get initial page data
+        $page = 1;
+        $data = self::get_workorders($atts, $page);
+
+        $output = self::render_html($data, $atts, $wrapper_id);
+
+        // Add inline script with AJAX handler
+        self::enqueue_inline_script($wrapper_id, $atts);
 
         return $output;
     }
 
-    /**
-     * Get all workorders
-     *
-     * @return array Array of workorder posts
-     */
-    private static function get_workorders()
+    private static function get_workorders($atts, $page = 1)
     {
+        $per_page = isset($atts['per_page']) ? max(1, intval($atts['per_page'])) : self::DEFAULT_PER_PAGE;
+
         $args = [
-            'post_type'      => 'workorder',
-            'post_status'    => ['publish', 'draft', 'pending', 'private'],
-            'posts_per_page' => -1,
-            'orderby'        => 'date',
-            'order'          => 'DESC',
+            'post_type' => 'workorder',
+            'post_status' => ['publish', 'draft', 'pending', 'private'],
+            'posts_per_page' => $per_page,
+            'paged' => $page,
+            'orderby' => 'date',
+            'order' => 'DESC',
         ];
 
+        // Meta query for filters
+        $meta_query = ['relation' => 'AND'];
+
+        // State filter
+        if (!empty($atts['state'])) {
+            $meta_query[] = [
+                'key' => 'wo_state',
+                'value' => sanitize_text_field($atts['state']),
+                'compare' => '=',
+            ];
+        }
+
+        if (count($meta_query) > 1) {
+            $args['meta_query'] = $meta_query;
+        }
+
+        // Taxonomy filter for status
+        if (!empty($atts['status'])) {
+            $args['tax_query'] = [
+                [
+                    'taxonomy' => 'status',
+                    'field' => 'slug',
+                    'terms' => sanitize_text_field($atts['status']),
+                ],
+            ];
+        }
+
         $query = new WP_Query($args);
-        return $query->posts;
+
+        return [
+            'workorders' => $query->posts,
+            'total' => $query->found_posts,
+            'max_pages' => $query->max_num_pages,
+            'current_page' => $page,
+            'per_page' => $per_page,
+        ];
     }
 
-    /**
-     * Get a field value with ACF fallback
-     *
-     * @param string $key     Field key
-     * @param int    $post_id Post ID
-     * @return string Field value
-     */
-    private static function get_field_value($key, $post_id)
+    private static function render_html($data, $atts, $wrapper_id)
     {
-        if (function_exists('get_field')) {
-            $value = get_field($key, $post_id);
-            if (is_array($value)) {
-                return '';
-            }
-            return (string) $value;
-        }
-        $value = get_post_meta($post_id, $key, true);
-        return is_array($value) ? '' : (string) $value;
-    }
+        $output = '<div id="' . esc_attr($wrapper_id) . '" class="dq-workorder-table-wrapper">';
+        $output .= self::get_styles();
 
-    /**
-     * Normalize a date string to Y-m-d format
-     *
-     * @param string $raw_date Raw date string
-     * @return string|null Normalized date (Y-m-d) or null
-     */
-    private static function normalize_date($raw_date)
-    {
-        if (empty($raw_date) || !is_scalar($raw_date)) {
-            return null;
-        }
-        $raw_date = trim((string) $raw_date);
-        $timestamp = strtotime($raw_date);
-        if ($timestamp !== false) {
-            return date('Y-m-d', $timestamp);
-        }
-        // Fallback: try specific formats
-        $formats = ['Y-m-d', 'Y-m-d H:i:s', 'Y-m-d H:i', 'm/d/Y', 'd-m-Y', 'd/m/Y', 'n/j/Y'];
-        foreach ($formats as $format) {
-            $date = DateTime::createFromFormat($format, $raw_date);
-            if ($date && $date->format($format) === $raw_date) {
-                return $date->format('Y-m-d');
-            }
-        }
-        return null;
-    }
+        $output .= '<div class="dq-workorder-table-content">';
+        $output .= self::render_table($data['workorders']);
+        $output .= '</div>';
 
-    /**
-     * Format a date string for display (m/d/Y)
-     *
-     * @param string $raw_date Raw date string
-     * @return string Formatted date (m/d/Y) or empty string
-     */
-    private static function format_date($raw_date)
-    {
-        $normalized = self::normalize_date($raw_date);
-        if ($normalized === null) {
-            return '';
-        }
-        return date('m/d/Y', strtotime($normalized));
-    }
+        $output .= self::render_pagination($data['current_page'], $data['max_pages']);
 
-    /**
-     * Calculate days between two dates
-     * Returns positive days when date2 is after date1
-     *
-     * @param string $date1 First date string (start date)
-     * @param string $date2 Second date string (end date)
-     * @return string Number of days formatted as "X days" or empty string
-     */
-    private static function calculate_days_between($date1, $date2)
-    {
-        $normalized1 = self::normalize_date($date1);
-        $normalized2 = self::normalize_date($date2);
-
-        if ($normalized1 === null || $normalized2 === null) {
-            return '';
-        }
-
-        $datetime1 = new DateTime($normalized1);
-        $datetime2 = new DateTime($normalized2);
-        $interval = $datetime1->diff($datetime2);
-        
-        // Get days with sign: positive if date2 > date1, negative otherwise
-        $days = (int) $interval->days;
-        if ($interval->invert) {
-            $days = -$days;
-        }
-
-        return $days . ' days';
-    }
-
-    /**
-     * Get status term for a workorder (excluding Uncategorized)
-     *
-     * @param int $post_id Post ID
-     * @return string Status term name or empty string
-     */
-    private static function get_status_term($post_id)
-    {
-        $terms = get_the_terms($post_id, 'status');
-        if (is_wp_error($terms) || empty($terms) || !is_array($terms)) {
-            return '';
-        }
-
-        foreach ($terms as $term) {
-            // Skip Uncategorized
-            if (strtolower($term->name) === 'uncategorized') {
-                continue;
-            }
-            return $term->name;
-        }
-
-        return '';
-    }
-
-    /**
-     * Get CSS styles for the table
-     *
-     * @return string CSS styles
-     */
-    private static function get_styles()
-    {
-        return '<style>
-.workorder-table-wrapper { margin: 20px 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; overflow-x: auto; }
-.workorder-table { width: 100%; border-collapse: collapse; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1); min-width: 1400px; }
-.workorder-table th { background: #006d7b; color: #fff; padding: 12px 8px; text-align: left; font-weight: 600; font-size: 13px; white-space: nowrap; }
-.workorder-table td { padding: 10px 8px; border-bottom: 1px solid #eee; vertical-align: top; font-size: 13px; }
-.workorder-table tr:hover td { background: #f8f9fa; }
-.workorder-table tr:last-child td { border-bottom: none; }
-.workorder-table .wo-location-cell,
-.workorder-table .wo-customer-cell,
-.workorder-table .wo-leads-cell { font-size: 12px; line-height: 1.5; }
-.workorder-table .wo-location-cell strong,
-.workorder-table .wo-customer-cell strong,
-.workorder-table .wo-leads-cell strong { color: #333; }
-.workorder-table .wo-view-btn { display: inline-block; padding: 6px 12px; background: #006d7b; color: #fff; text-decoration: none; border-radius: 4px; font-size: 12px; font-weight: 500; }
-.workorder-table .wo-view-btn:hover { background: #005560; color: #fff; }
-.workorder-table .wo-status-badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; background: #e9ecef; color: #495057; }
-.workorder-table-empty { padding: 40px; text-align: center; color: #666; font-style: italic; background: #f8f9fa; border-radius: 4px; }
-</style>';
-    }
-
-    /**
-     * Render the HTML table
-     *
-     * @param array $workorders Array of workorder posts
-     * @return string HTML table
-     */
-    private static function render_table($workorders)
-    {
-        if (empty($workorders)) {
-            return '<div class="workorder-table-empty">No work orders found.</div>';
-        }
-
-        $output = '<div class="workorder-table-wrapper">';
-        $output .= '<table class="workorder-table">';
-        $output .= '<thead><tr>';
-        $output .= '<th>Work Order ID</th>';
-        $output .= '<th>Location</th>';
-        $output .= '<th>Field Engineer</th>';
-        $output .= '<th>Product ID</th>';
-        $output .= '<th>Customer Info</th>';
-        $output .= '<th>Date Received</th>';
-        $output .= '<th>FSC Contact Date</th>';
-        $output .= '<th>FSC Contact Days</th>';
-        $output .= '<th>Scheduled Date</th>';
-        $output .= '<th>Service Completed</th>';
-        $output .= '<th>Closed On</th>';
-        $output .= '<th>Reports Sent</th>';
-        $output .= '<th>Leads</th>';
-        $output .= '<th>Status</th>';
-        $output .= '<th>View</th>';
-        $output .= '</tr></thead>';
-        $output .= '<tbody>';
-
-        foreach ($workorders as $workorder) {
-            $post_id = $workorder->ID;
-            $output .= self::render_row($workorder, $post_id);
-        }
-
-        $output .= '</tbody></table>';
         $output .= '</div>';
 
         return $output;
     }
 
-    /**
-     * Render a single table row
-     *
-     * @param WP_Post $workorder Workorder post object
-     * @param int     $post_id   Post ID
-     * @return string HTML table row
-     */
-    private static function render_row($workorder, $post_id)
+    private static function get_styles()
     {
-        // Work Order ID (post_title)
-        $work_order_id = $workorder->post_title;
+        return '<style>
+.dq-workorder-table-wrapper { 
+    margin: 20px 0; 
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+}
+.dq-workorder-table-wrapper.loading { 
+    opacity: 0.6; 
+    pointer-events: none; 
+}
+.dq-workorder-table { 
+    width: 100%; 
+    border-collapse: collapse; 
+    background: #fff; 
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1); 
+    border-radius: 8px;
+    overflow: hidden;
+}
+.dq-workorder-table th { 
+    background: #0996a0; 
+    color: #fff; 
+    padding: 14px 12px; 
+    text-align: left; 
+    font-weight: 600; 
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.dq-workorder-table td { 
+    padding: 12px; 
+    border-bottom: 1px solid #e8e8e8; 
+    vertical-align: middle; 
+    font-size: 14px; 
+}
+.dq-workorder-table tbody tr:nth-child(even) td { 
+    background: #f8fafb; 
+}
+.dq-workorder-table tbody tr:hover td { 
+    background: #e5f4f6; 
+}
+.dq-workorder-table tr:last-child td { 
+    border-bottom: none; 
+}
+.dq-workorder-table .wo-id-cell {
+    font-weight: 700;
+    color: #0996a0;
+}
+.dq-workorder-table .wo-id-cell a {
+    color: #0996a0;
+    text-decoration: none;
+}
+.dq-workorder-table .wo-id-cell a:hover {
+    text-decoration: underline;
+    color: #067a82;
+}
+.dq-workorder-table .wo-customer-cell {
+    font-weight: 600;
+    color: #333;
+}
+.dq-workorder-table .wo-grouped-cell {
+    font-size: 13px;
+    line-height: 1.6;
+    color: #444;
+}
+.dq-workorder-table .wo-grouped-cell strong {
+    color: #333;
+    font-weight: 600;
+}
+.dq-workorder-status { 
+    display: inline-block; 
+    padding: 4px 12px; 
+    border-radius: 4px; 
+    font-size: 11px; 
+    font-weight: 700; 
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.dq-workorder-status.status-open { 
+    background: #fff3cd; 
+    color: #856404; 
+}
+.dq-workorder-status.status-scheduled { 
+    background: #cce5ff; 
+    color: #004085; 
+}
+.dq-workorder-status.status-close,
+.dq-workorder-status.status-closed { 
+    background: #d4edda; 
+    color: #155724; 
+}
+.dq-workorder-table-pagination { 
+    display: flex; 
+    justify-content: center; 
+    align-items: center; 
+    gap: 8px; 
+    margin-top: 20px; 
+    flex-wrap: wrap; 
+}
+.dq-workorder-table-pagination a, 
+.dq-workorder-table-pagination span { 
+    display: inline-block; 
+    padding: 8px 14px; 
+    border: 1px solid #ddd; 
+    border-radius: 4px; 
+    text-decoration: none; 
+    color: #333; 
+    background: #fff;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+.dq-workorder-table-pagination a:hover { 
+    background: #0996a0; 
+    color: #fff; 
+    border-color: #0996a0; 
+}
+.dq-workorder-table-pagination .current { 
+    background: #0996a0; 
+    color: #fff; 
+    border-color: #0996a0; 
+    font-weight: 600; 
+}
+.dq-workorder-table-pagination .disabled { 
+    opacity: 0.4; 
+    pointer-events: none; 
+}
+.dq-workorder-table-empty { 
+    padding: 40px; 
+    text-align: center; 
+    color: #666; 
+    font-style: italic; 
+    background: #f8f9fa; 
+    border-radius: 8px; 
+}
 
-        // Location
-        $wo_location = self::get_field_value('wo_location', $post_id);
-        $wo_city = self::get_field_value('wo_city', $post_id);
-        $wo_state = self::get_field_value('wo_state', $post_id);
+/* Responsive Styles */
+@media (max-width: 768px) {
+    .dq-workorder-table { 
+        display: block; 
+        overflow-x: auto; 
+        -webkit-overflow-scrolling: touch;
+    }
+    .dq-workorder-table th,
+    .dq-workorder-table td {
+        padding: 10px 8px;
+        font-size: 13px;
+    }
+    .dq-workorder-table .wo-grouped-cell {
+        min-width: 180px;
+    }
+}
 
-        // Field Engineer (Author)
-        $author_id = $workorder->post_author;
-        $author = get_user_by('id', $author_id);
-        $engineer_name = $author ? $author->display_name : '';
+@media (max-width: 480px) {
+    .dq-workorder-table-pagination a, 
+    .dq-workorder-table-pagination span {
+        padding: 6px 10px;
+        font-size: 12px;
+    }
+}
+</style>';
+    }
 
-        // Product ID
-        $product_id = self::get_field_value('installed_product_id', $post_id);
-
-        // Customer Info
-        $contact_name = self::get_field_value('wo_contact_name', $post_id);
-        $contact_address = self::get_field_value('wo_contact_address', $post_id);
-        $contact_email = self::get_field_value('wo_contact_email', $post_id);
-        $contact_number = self::get_field_value('wo_service_contact_number', $post_id);
-
-        // Date fields
-        $date_received_raw = self::get_field_value('date_requested_by_customer', $post_id);
-        $fsc_contact_date_raw = self::get_field_value('wo_fsc_contact_date', $post_id);
-        $schedule_date_raw = self::get_field_value('schedule_date_time', $post_id);
-        $service_completed_raw = self::get_field_value('date_service_completed_by_fse', $post_id);
-        $closed_on_raw = self::get_field_value('closed_on', $post_id);
-        $reports_sent_raw = self::get_field_value('date_fsr_and_dia_reports_sent_to_customer', $post_id);
-
-        // Format dates for display
-        $date_received = self::format_date($date_received_raw);
-        $fsc_contact_date = self::format_date($fsc_contact_date_raw);
-        $schedule_date = self::format_date($schedule_date_raw);
-        $service_completed = self::format_date($service_completed_raw);
-        $closed_on = self::format_date($closed_on_raw);
-        $reports_sent = self::format_date($reports_sent_raw);
-
-        // FSC Contact with client Days: wo_fsc_contact_date - date_requested_by_customer
-        $fsc_contact_days = self::calculate_days_between($date_received_raw, $fsc_contact_date_raw);
-
-        // Leads
-        $wo_leads = self::get_field_value('wo_leads', $post_id);
-        $wo_lead_category = self::get_field_value('wo_lead_category', $post_id);
-
-        // Status (term category, exclude Uncategorized)
-        $status = self::get_status_term($post_id);
-
-        // View button link
-        $permalink = get_permalink($post_id);
-
-        // Build location cell
-        $location_html = '<div class="wo-location-cell">';
-        if ($wo_location) {
-            $location_html .= '<strong>Account:</strong> ' . esc_html($wo_location) . '<br>';
+    private static function render_table($workorders)
+    {
+        if (empty($workorders)) {
+            return '<div class="dq-workorder-table-empty">No work orders found.</div>';
         }
-        if ($wo_city) {
-            $location_html .= '<strong>City:</strong> ' . esc_html($wo_city) . '<br>';
-        }
-        if ($wo_state) {
-            $location_html .= '<strong>State:</strong> ' . esc_html($wo_state);
-        }
-        $location_html .= '</div>';
 
-        // Build customer info cell
-        $customer_html = '<div class="wo-customer-cell">';
-        if ($contact_name) {
-            $customer_html .= '<strong>Name:</strong> ' . esc_html($contact_name) . '<br>';
-        }
-        if ($contact_address) {
-            $customer_html .= '<strong>Address:</strong> ' . esc_html($contact_address) . '<br>';
-        }
-        if ($contact_email) {
-            $customer_html .= '<strong>Email:</strong> ' . esc_html($contact_email) . '<br>';
-        }
-        if ($contact_number) {
-            $customer_html .= '<strong>Number:</strong> ' . esc_html($contact_number);
-        }
-        $customer_html .= '</div>';
+        $output = '<table class="dq-workorder-table">';
+        $output .= '<thead><tr>';
+        $output .= '<th>WO ID</th>';
+        $output .= '<th>Customer</th>';
+        $output .= '<th>Location</th>';
+        $output .= '<th>Service Details</th>';
+        $output .= '<th>Dates</th>';
+        $output .= '<th>Status</th>';
+        $output .= '</tr></thead>';
+        $output .= '<tbody>';
 
-        // Build leads cell
-        $leads_html = '<div class="wo-leads-cell">';
-        if ($wo_leads) {
-            $leads_html .= '<strong>Lead:</strong> ' . esc_html($wo_leads) . '<br>';
-        }
-        if ($wo_lead_category) {
-            $leads_html .= '<strong>Category:</strong> ' . esc_html($wo_lead_category);
-        }
-        $leads_html .= '</div>';
+        foreach ($workorders as $workorder) {
+            $post_id = $workorder->ID;
 
-        // Build row
-        $output = '<tr>';
-        $output .= '<td>' . esc_html($work_order_id) . '</td>';
-        $output .= '<td>' . $location_html . '</td>';
-        $output .= '<td>' . esc_html($engineer_name) . '</td>';
-        $output .= '<td>' . esc_html($product_id) . '</td>';
-        $output .= '<td>' . $customer_html . '</td>';
-        $output .= '<td>' . esc_html($date_received) . '</td>';
-        $output .= '<td>' . esc_html($fsc_contact_date) . '</td>';
-        $output .= '<td>' . esc_html($fsc_contact_days) . '</td>';
-        $output .= '<td>' . esc_html($schedule_date) . '</td>';
-        $output .= '<td>' . esc_html($service_completed) . '</td>';
-        $output .= '<td>' . esc_html($closed_on) . '</td>';
-        $output .= '<td>' . esc_html($reports_sent) . '</td>';
-        $output .= '<td>' . $leads_html . '</td>';
-        $output .= '<td><span class="wo-status-badge">' . esc_html($status) . '</span></td>';
-        $output .= '<td><a href="' . esc_url($permalink) . '" class="wo-view-btn">View</a></td>';
-        $output .= '</tr>';
+            // Get workorder fields
+            $wo_number = function_exists('get_field') ? get_field('wo_number', $post_id) : get_post_meta($post_id, 'wo_number', true);
+            $customer = function_exists('get_field') ? get_field('wo_customer', $post_id) : get_post_meta($post_id, 'wo_customer', true);
+            $wo_city = function_exists('get_field') ? get_field('wo_city', $post_id) : get_post_meta($post_id, 'wo_city', true);
+            $wo_state = function_exists('get_field') ? get_field('wo_state', $post_id) : get_post_meta($post_id, 'wo_state', true);
+            $wo_address = function_exists('get_field') ? get_field('wo_address', $post_id) : get_post_meta($post_id, 'wo_address', true);
+            
+            // Service details
+            $service_type = function_exists('get_field') ? get_field('service_type', $post_id) : get_post_meta($post_id, 'service_type', true);
+            $equipment = function_exists('get_field') ? get_field('equipment', $post_id) : get_post_meta($post_id, 'equipment', true);
+            $serial_number = function_exists('get_field') ? get_field('serial_number', $post_id) : get_post_meta($post_id, 'serial_number', true);
+            
+            // Dates
+            $date_requested = function_exists('get_field') ? get_field('date_requested_by_customer', $post_id) : get_post_meta($post_id, 'date_requested_by_customer', true);
+            $schedule_date = function_exists('get_field') ? get_field('schedule_date_time', $post_id) : get_post_meta($post_id, 'schedule_date_time', true);
+            $closed_on = function_exists('get_field') ? get_field('closed_on', $post_id) : get_post_meta($post_id, 'closed_on', true);
+            
+            // Get status from taxonomy
+            $status_terms = get_the_terms($post_id, 'status');
+            $status_name = '';
+            $status_slug = '';
+            if (!is_wp_error($status_terms) && !empty($status_terms) && is_array($status_terms)) {
+                $status_term = array_shift($status_terms);
+                $status_name = $status_term->name;
+                $status_slug = $status_term->slug;
+            }
 
+            // Build location string
+            $location_parts = array_filter([
+                $wo_address,
+                $wo_city,
+                $wo_state
+            ]);
+            $location = !empty($location_parts) ? implode(', ', $location_parts) : 'N/A';
+
+            // Build service details grouped cell
+            $service_html = '<div class="wo-grouped-cell">';
+            $service_html .= '<strong>Type:</strong> ' . esc_html($service_type ?: 'N/A') . '<br>';
+            $service_html .= '<strong>Equipment:</strong> ' . esc_html($equipment ?: 'N/A') . '<br>';
+            $service_html .= '<strong>Serial #:</strong> ' . esc_html($serial_number ?: 'N/A');
+            $service_html .= '</div>';
+
+            // Build dates grouped cell
+            $dates_html = '<div class="wo-grouped-cell">';
+            $dates_html .= '<strong>Requested:</strong> ' . esc_html(self::format_date($date_requested)) . '<br>';
+            $dates_html .= '<strong>Scheduled:</strong> ' . esc_html(self::format_date($schedule_date)) . '<br>';
+            $dates_html .= '<strong>Closed:</strong> ' . esc_html(self::format_date($closed_on));
+            $dates_html .= '</div>';
+
+            // Status badge
+            $status_class = 'status-' . sanitize_html_class($status_slug);
+            $status_html = $status_name ? '<span class="dq-workorder-status ' . $status_class . '">' . esc_html($status_name) . '</span>' : 'N/A';
+
+            $permalink = get_permalink($post_id);
+            $display_id = $wo_number ?: $post_id;
+
+            $output .= '<tr>';
+            $output .= '<td class="wo-id-cell"><a href="' . esc_url($permalink) . '">' . esc_html($display_id) . '</a></td>';
+            $output .= '<td class="wo-customer-cell">' . esc_html($customer ?: 'N/A') . '</td>';
+            $output .= '<td>' . esc_html($location) . '</td>';
+            $output .= '<td>' . $service_html . '</td>';
+            $output .= '<td>' . $dates_html . '</td>';
+            $output .= '<td>' . $status_html . '</td>';
+            $output .= '</tr>';
+        }
+
+        $output .= '</tbody></table>';
         return $output;
+    }
+
+    private static function format_date($raw_date)
+    {
+        if (empty($raw_date)) {
+            return 'N/A';
+        }
+        $timestamp = strtotime($raw_date);
+        if ($timestamp !== false) {
+            return date('m/d/Y', $timestamp);
+        }
+        return $raw_date;
+    }
+
+    private static function render_pagination($current_page, $max_pages)
+    {
+        if ($max_pages <= 1) {
+            return '';
+        }
+
+        $output = '<div class="dq-workorder-table-pagination">';
+
+        // Previous button
+        $prev_class = ($current_page <= 1) ? 'disabled' : '';
+        $output .= '<a href="#" class="dq-workorder-table-prev ' . $prev_class . '" data-page="' . ($current_page - 1) . '">« Previous</a>';
+
+        // Page numbers
+        $range = 2; // Show 2 pages on each side of current
+        $start = max(1, $current_page - $range);
+        $end = min($max_pages, $current_page + $range);
+
+        // First page + ellipsis
+        if ($start > 1) {
+            $output .= '<a href="#" data-page="1">1</a>';
+            if ($start > 2) {
+                $output .= '<span class="ellipsis">...</span>';
+            }
+        }
+
+        // Page numbers
+        for ($i = $start; $i <= $end; $i++) {
+            if ($i == $current_page) {
+                $output .= '<span class="current">' . $i . '</span>';
+            } else {
+                $output .= '<a href="#" data-page="' . $i . '">' . $i . '</a>';
+            }
+        }
+
+        // Last page + ellipsis
+        if ($end < $max_pages) {
+            if ($end < $max_pages - 1) {
+                $output .= '<span class="ellipsis">...</span>';
+            }
+            $output .= '<a href="#" data-page="' . $max_pages . '">' . $max_pages . '</a>';
+        }
+
+        // Next button
+        $next_class = ($current_page >= $max_pages) ? 'disabled' : '';
+        $output .= '<a href="#" class="dq-workorder-table-next ' . $next_class . '" data-page="' . ($current_page + 1) . '">Next »</a>';
+
+        $output .= '</div>';
+        return $output;
+    }
+
+    private static function enqueue_inline_script($wrapper_id, $atts)
+    {
+        $ajax_url = admin_url('admin-ajax.php');
+        $nonce = wp_create_nonce('dq_workorder_table_nonce');
+
+        $script = "
+        (function($) {
+            var wrapper = $('#" . esc_js($wrapper_id) . "');
+            var settings = " . json_encode([
+                'per_page' => intval($atts['per_page']),
+                'status' => sanitize_text_field(isset($atts['status']) ? $atts['status'] : ''),
+                'state' => sanitize_text_field(isset($atts['state']) ? $atts['state'] : ''),
+            ]) . ";
+
+            // Pagination click
+            wrapper.on('click', '.dq-workorder-table-pagination a:not(.disabled)', function(e) {
+                e.preventDefault();
+                var page = $(this).data('page');
+                if (!page || page < 1) return;
+                loadWorkorders(page);
+            });
+
+            function loadWorkorders(page) {
+                wrapper.addClass('loading');
+                $.ajax({
+                    url: '" . esc_js($ajax_url) . "',
+                    type: 'POST',
+                    data: {
+                        action: 'dq_workorder_table_paginate',
+                        nonce: '" . esc_js($nonce) . "',
+                        page: page,
+                        per_page: settings.per_page,
+                        status: settings.status,
+                        state: settings.state
+                    },
+                    success: function(response) {
+                        if (response.success && response.data) {
+                            if (response.data.table) {
+                                wrapper.find('.dq-workorder-table-content').html(response.data.table);
+                            }
+                            var existingPagination = wrapper.find('.dq-workorder-table-pagination');
+                            if (response.data.pagination) {
+                                if (existingPagination.length) {
+                                    existingPagination.replaceWith(response.data.pagination);
+                                } else {
+                                    wrapper.append(response.data.pagination);
+                                }
+                            } else {
+                                existingPagination.remove();
+                            }
+                            $('html, body').animate({
+                                scrollTop: wrapper.offset().top - 100
+                            }, 300);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Work order table AJAX error:', error);
+                        wrapper.find('.dq-workorder-table-content').html('<div class=\"dq-workorder-table-empty\">Error loading work orders. Please try again.</div>');
+                    },
+                    complete: function() {
+                        wrapper.removeClass('loading');
+                    }
+                });
+            }
+        })(jQuery);
+        ";
+
+        wp_add_inline_script('dq-workorder-table', $script);
+    }
+
+    public static function ajax_paginate()
+    {
+        check_ajax_referer('dq_workorder_table_nonce', 'nonce');
+
+        $page = isset($_POST['page']) ? intval($_POST['page']) : 1;
+        $per_page = isset($_POST['per_page']) ? intval($_POST['per_page']) : self::DEFAULT_PER_PAGE;
+        $status = isset($_POST['status']) ? sanitize_text_field($_POST['status']) : '';
+        $state = isset($_POST['state']) ? sanitize_text_field($_POST['state']) : '';
+
+        $atts = [
+            'per_page' => max(1, $per_page),
+            'status' => $status,
+            'state' => $state,
+        ];
+
+        $data = self::get_workorders($atts, $page);
+
+        wp_send_json_success([
+            'table' => self::render_table($data['workorders']),
+            'pagination' => self::render_pagination($data['current_page'], $data['max_pages']),
+        ]);
     }
 }

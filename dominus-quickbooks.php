@@ -49,7 +49,7 @@ require_once DQQB_PATH . 'includes/class-qi-invoice-template.php';
 // NEW: Invoice list shortcode with AJAX pagination
 require_once DQQB_PATH . 'includes/class-dq-invoice-list.php';
 
-// NEW: Workorder table shortcode
+// NEW: Workorder table shortcode with AJAX pagination
 require_once DQQB_PATH . 'includes/class-dq-workorder-table.php';
 
 // -----------------------------------------------------------------------------
