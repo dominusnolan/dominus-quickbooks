@@ -17,6 +17,7 @@ class DQ_WorkOrder_Report
     {
         add_action('admin_menu', [__CLASS__, 'menu']);
         add_action('wp_ajax_dq_fse_chart', [__CLASS__, 'ajax_fse_chart']);
+        add_action('wp_ajax_dq_engineer_monthly', [__CLASS__, 'ajax_engineer_monthly']);
     }
 
     public static function menu()
@@ -91,6 +92,7 @@ class DQ_WorkOrder_Report
 
     private static function get_workorders_in_year($year)
     {
+        $engineer_ids = get_users(['role' => 'engineer', 'fields' => 'ID']);
         $start = "{$year}-01-01";
         $end = "{$year}-12-31";
         $query = [
@@ -101,6 +103,7 @@ class DQ_WorkOrder_Report
             'date_query'     => [
                 ['after' => $start, 'before' => $end, 'inclusive' => true]
             ],
+            'author__in'     => $engineer_ids, // only authors with engineer role
         ];
         return get_posts($query);
     }
@@ -536,6 +539,7 @@ class DQ_WorkOrder_Report
         }
 
         // Query workorders for this author in the year
+        $engineer_ids = get_users(['role' => 'engineer', 'fields' => 'ID']);
         $start = "{$year}-01-01";
         $end = "{$year}-12-31";
         $query = [
@@ -547,6 +551,7 @@ class DQ_WorkOrder_Report
             'date_query'     => [
                 ['after' => $start, 'before' => $end, 'inclusive' => true]
             ],
+            'author__in'     => $engineer_ids, // only authors with engineer role
         ];
         $workorders = get_posts($query);
 
@@ -719,11 +724,13 @@ public static function ajax_fse_chart()
     }
 
     // Get ALL possible workorders for the year, no date filter!
+    $engineer_ids = get_users(['role' => 'engineer', 'fields' => 'ID']);
     $query = [
         'post_type'      => 'workorder',
         'post_status'    => ['publish', 'draft', 'pending', 'private'],
         'posts_per_page' => -1,
-        'fields'         => 'ids'
+        'fields'         => 'ids',
+        'author__in'     => $engineer_ids, // only authors with engineer role
     ];
     $wos = get_posts($query);
 
