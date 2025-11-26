@@ -174,14 +174,14 @@ class DQ_Workorder_Timeline
 
         $fields = array_merge($fields, [
             [
-                'label' => 'Date Service Completed by Engineer',
+                'label' => 'Date Service Completed by FSE',
                 'key' => 'date_service_completed_by_fse',
                 'help' => 'The date service was completed by the engineer.',
                 'color' => '#8c3fed',
                 'emoji' => '🛠️',
             ],
             [
-                'label' => 'Completed Date',
+                'label' => 'Date Field Service Report Closed in SMAX',
                 'key' => 'closed_on',
                 'help' => 'Date the workorder was closed/completed.',
                 'color' => '#36a829',
