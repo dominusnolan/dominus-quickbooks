@@ -70,48 +70,73 @@ class DQ_Workorder_Table
     }
 
     /**
-     * Normalize and format a date string for display
+     * Normalize a date string to Y-m-d format
+     *
+     * @param string $raw_date Raw date string
+     * @return string|null Normalized date (Y-m-d) or null
+     */
+    private static function normalize_date($raw_date)
+    {
+        if (empty($raw_date) || !is_scalar($raw_date)) {
+            return null;
+        }
+        $raw_date = trim((string) $raw_date);
+        $timestamp = strtotime($raw_date);
+        if ($timestamp !== false) {
+            return date('Y-m-d', $timestamp);
+        }
+        // Fallback: try specific formats
+        $formats = ['Y-m-d', 'Y-m-d H:i:s', 'Y-m-d H:i', 'm/d/Y', 'd-m-Y', 'd/m/Y', 'n/j/Y'];
+        foreach ($formats as $format) {
+            $date = DateTime::createFromFormat($format, $raw_date);
+            if ($date && $date->format($format) === $raw_date) {
+                return $date->format('Y-m-d');
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Format a date string for display (m/d/Y)
      *
      * @param string $raw_date Raw date string
      * @return string Formatted date (m/d/Y) or empty string
      */
     private static function format_date($raw_date)
     {
-        if (empty($raw_date) || !is_scalar($raw_date)) {
+        $normalized = self::normalize_date($raw_date);
+        if ($normalized === null) {
             return '';
         }
-        $raw_date = trim((string) $raw_date);
-        $timestamp = strtotime($raw_date);
-        if ($timestamp !== false) {
-            return date('m/d/Y', $timestamp);
-        }
-        return '';
+        return date('m/d/Y', strtotime($normalized));
     }
 
     /**
      * Calculate days between two dates
+     * Returns positive days when date2 is after date1
      *
-     * @param string $date1 First date string
-     * @param string $date2 Second date string
-     * @return string Number of days or empty string
+     * @param string $date1 First date string (start date)
+     * @param string $date2 Second date string (end date)
+     * @return string Number of days formatted as "X days" or empty string
      */
     private static function calculate_days_between($date1, $date2)
     {
-        if (empty($date1) || empty($date2)) {
+        $normalized1 = self::normalize_date($date1);
+        $normalized2 = self::normalize_date($date2);
+
+        if ($normalized1 === null || $normalized2 === null) {
             return '';
         }
 
-        $timestamp1 = strtotime($date1);
-        $timestamp2 = strtotime($date2);
-
-        if ($timestamp1 === false || $timestamp2 === false) {
-            return '';
-        }
-
-        $datetime1 = new DateTime(date('Y-m-d', $timestamp1));
-        $datetime2 = new DateTime(date('Y-m-d', $timestamp2));
+        $datetime1 = new DateTime($normalized1);
+        $datetime2 = new DateTime($normalized2);
         $interval = $datetime1->diff($datetime2);
-        $days = (int) $interval->format('%r%a');
+        
+        // Get days with sign: positive if date2 > date1, negative otherwise
+        $days = (int) $interval->days;
+        if ($interval->invert) {
+            $days = -$days;
+        }
 
         return $days . ' days';
     }
