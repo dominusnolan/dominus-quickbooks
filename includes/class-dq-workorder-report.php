@@ -9,12 +9,14 @@ if (!defined('ABSPATH')) exit;
  *   If taxonomy status is scheduled -> schedule_date_time (ACF text)
  * All date fields are text, robust parsing is done.
  * Adds engineer table: Field Service Engineer (with profile_picture), Total WO, Percentage.
+ * Adds AJAX dropdown to load per-engineer monthly table based on filter year. Default: Ramir Milay.
  */
 class DQ_WorkOrder_Report
 {
     public static function init()
     {
         add_action('admin_menu', [__CLASS__, 'menu']);
+        add_action('wp_ajax_dq_fse_chart', [__CLASS__, 'ajax_fse_chart']);
     }
 
     public static function menu()
@@ -36,6 +38,15 @@ class DQ_WorkOrder_Report
             'dq-workorder-report',
             [__CLASS__, 'main_dashboard']
         );
+        // New submenu
+        add_submenu_page(
+            'dq-workorder-report',
+            'Field Service Engineers Report',
+            'Field Service Engineers Report',
+            'manage_options',
+            'dq-fse-report',
+            [__CLASS__, 'fse_report_dashboard']
+        );
     }
 
     public static function main_dashboard()
@@ -49,9 +60,12 @@ class DQ_WorkOrder_Report
 
         echo '<div class="wrap"><h1>WorkOrder Monthly Summary</h1>';
         self::filters_form($year);
+
         self::render_monthly_table($monthly_counts, $year);
         self::render_state_table($state_counts);
         self::render_engineer_table($engineer_data);
+        self::render_engineer_ajax_selector($engineer_data, $year);
+
         echo '</div>';
     }
 
@@ -75,9 +89,6 @@ class DQ_WorkOrder_Report
         echo '</form>';
     }
 
-    /**
-     * Returns array of workorder IDs within the selected year filter.
-     */
     private static function get_workorders_in_year($year)
     {
         $start = "{$year}-01-01";
@@ -94,22 +105,17 @@ class DQ_WorkOrder_Report
         return get_posts($query);
     }
 
-    /**
-     * Returns array [1=>count, ..., 12=>count] for months, based on date field logic.
-     */
     private static function get_monthly_workorder_counts_from_workorders($workorders, $year)
     {
         $counts = [];
         for ($m = 1; $m <= 12; $m++) $counts[$m] = 0;
         foreach ($workorders as $pid) {
-            // Get status taxonomy term slug
             $terms = get_the_terms($pid, 'status');
             $status_slug = '';
             if (!is_wp_error($terms) && !empty($terms) && is_array($terms)) {
                 $term = array_shift($terms);
                 $status_slug = !empty($term->slug) ? $term->slug : (is_object($term) && isset($term->name) ? sanitize_title($term->name) : '');
             }
-            // Use correct date field based on status taxonomy
             $raw_date = '';
             if ($status_slug === 'open') {
                 $raw_date = function_exists('get_field') ? get_field('date_requested_by_customer', $pid) : get_post_meta($pid, 'date_requested_by_customer', true);
@@ -127,31 +133,23 @@ class DQ_WorkOrder_Report
         return $counts;
     }
 
-    /**
-     * Attempts to robustly extract month (1-12) from a date string for the selected year.
-     */
     private static function parse_month_from_text($raw_date, $year)
     {
         if (!$raw_date) return false;
         $raw_date = trim(str_replace('_x000D_', "\n", $raw_date));
 
-        // Try YYYY-MM-DD
         if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $raw_date, $m)) {
             if (intval($m[1]) == $year) return intval($m[2]);
         }
-        // Try YYYY-MM-DD HH:MM
         if (preg_match('/^(\d{4})-(\d{2})-(\d{2})\s+\d{2}:\d{2}/', $raw_date, $m)) {
             if (intval($m[1]) == $year) return intval($m[2]);
         }
-        // Try MM/DD/YYYY (US)
         if (preg_match('/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/', $raw_date, $m)) {
             if (intval($m[3]) == $year) return intval($m[1]);
         }
-        // Try DD-MM-YYYY (EU)
         if (preg_match('/^(\d{1,2})\-(\d{1,2})\-(\d{4})$/', $raw_date, $m)) {
             if (intval($m[3]) == $year) return intval($m[2]);
         }
-        // Try parsing with strtotime (last fallback)
         $ts = strtotime($raw_date);
         if ($ts) {
             $dtYear = intval(date('Y', $ts));
@@ -161,9 +159,6 @@ class DQ_WorkOrder_Report
         return false;
     }
 
-    /**
-     * Returns array: [state_name=>count,...] for workorders in filter.
-     */
     private static function get_state_workorder_counts($workorders)
     {
         $states = [];
@@ -177,9 +172,6 @@ class DQ_WorkOrder_Report
         return $states;
     }
 
-    /**
-     * Returns array with engineer_id as key: ['user_id', 'display_name', 'profile_picture', 'wo_count', 'percentage']
-     */
     private static function get_engineer_data($workorders)
     {
         $engineers = [];
@@ -212,11 +204,9 @@ class DQ_WorkOrder_Report
             }
             $engineers[$user_id]['wo_count']++;
         }
-        // Calculate percentage
         foreach ($engineers as $uid => &$data) {
             $data['percentage'] = ($total_wo > 0) ? round($data['wo_count'] * 100 / $total_wo, 2) : 0;
         }
-        // Sort by WO count descending
         usort($engineers, function($a, $b) { return $b['wo_count'] - $a['wo_count']; });
         return $engineers;
     }
@@ -232,7 +222,7 @@ class DQ_WorkOrder_Report
         $total = array_sum($monthly_counts);
         ?>
         <style>
-        .wo-monthly-table {width:350px; border-collapse:collapse; background:#fff; margin-top:22px;}
+        .wo-monthly-table {width:auto; border-collapse:collapse; background:#fff; margin-top:22px; display:inline-block; vertical-align:top; margin-right:18px;}
         .wo-monthly-table th {
             background:#0996a0;
             color:#fff;
@@ -287,7 +277,7 @@ class DQ_WorkOrder_Report
         $total = array_sum($state_counts);
         ?>
         <style>
-        .wo-state-table {width:350px; border-collapse:collapse; background:#fff; margin-top:22px;}
+        .wo-state-table {width:auto; border-collapse:collapse; background:#fff; margin-top:22px; display:inline-block; vertical-align:top;}
         .wo-state-table th {
             background:#0996a0;
             color:#fff;
@@ -414,6 +404,399 @@ class DQ_WorkOrder_Report
             </tbody>
         </table>
         <?php
+    }
+
+    /**
+     * Render AJAX dropdown and container for per-engineer monthly table.
+     * The dropdown's options are taken from $engineer_data (array returned by get_engineer_data).
+     * Default value is Ramir Milay.
+     */
+    private static function render_engineer_ajax_selector($engineer_data, $year)
+    {
+        $nonce = wp_create_nonce('dq_engineer_monthly');
+        $default_name = 'Ramir Milay';
+        $default_id = null;
+        foreach ($engineer_data as $eng) {
+            if (strcasecmp($eng['display_name'], $default_name) === 0) {
+                $default_id = $eng['user_id'];
+                break;
+            }
+        }
+        ?>
+        <style>
+        #dq-engineer-ajax-wrap { margin-top:22px; max-width:420px; }
+        #dq-engineer-monthly-container { margin-top:14px; }
+        #dq-engineer-select { width:100%; max-width:420px; padding:6px; }
+        .dq-ajax-loading { display:inline-block; margin-left:8px; color:#666; }
+        </style>
+
+        <div id="dq-engineer-ajax-wrap">
+            <label><strong>Engineer Monthly Breakdown</strong></label><br>
+            <select id="dq-engineer-select" aria-label="Select engineer">
+                <option value="">-- Select Engineer --</option>
+                <?php foreach ($engineer_data as $eng): ?>
+                    <option value="<?php echo intval($eng['user_id']); ?>"
+                        <?php echo ($default_id && $eng['user_id'] == $default_id) ? 'selected' : ''; ?>>
+                        <?php echo esc_html($eng['display_name']); ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+            <span class="dq-ajax-loading" id="dq-engineer-loading" style="display:none;">Loading…</span>
+            <div id="dq-engineer-monthly-container" data-year="<?php echo intval($year); ?>">
+                <!-- AJAX will inject per-engineer monthly table here -->
+            </div>
+        </div>
+
+        <script>
+        (function(){
+            const select = document.getElementById('dq-engineer-select');
+            const container = document.getElementById('dq-engineer-monthly-container');
+            const loading = document.getElementById('dq-engineer-loading');
+            const ajaxUrl = '<?php echo esc_js(admin_url('admin-ajax.php')); ?>';
+            const nonce = '<?php echo esc_js($nonce); ?>';
+            const year = container ? container.dataset.year : '<?php echo intval($year); ?>';
+            let defaultUid = '<?php echo esc_js($default_id); ?>';
+
+            function renderTableHtml(name, counts) {
+                const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+                let total = 0;
+                for (let i=0;i<12;i++) total += parseInt(counts[i+1]||0,10);
+                let html = '<div style="background:#09a2a9;color:#fff;padding:12px;border-radius:6px;margin-top:12px;">' + (name ? name : '') + '</div>';
+                html += '<table style="width:100%;border-collapse:collapse;margin-top:8px;">';
+                html += '<thead><tr><th style="text-align:left;padding:10px;background:#f2f2f2">Month</th><th style="text-align:right;padding:10px;background:#f2f2f2">WO</th></tr></thead><tbody>';
+                for (let i=0;i<12;i++) {
+                    const m = i+1;
+                    const c = counts[m] ? parseInt(counts[m],10) : 0;
+                    // alternate row background colors similar to reference
+                    let bg = '';
+                    if (i<=2) bg = 'background:#f7e9c6;';
+                    else if (i<=5) bg = 'background:#dff7f7;';
+                    else if (i<=8) bg = 'background:#dff7dc;';
+                    else bg = 'background:#cfeef7;';
+                    html += '<tr style="' + bg + '"><td style="padding:10px;text-align:left;">' + months[i] + '</td><td style="padding:10px;text-align:right;">' + c + '</td></tr>';
+                }
+                html += '<tr style="background:#f7e9c6;font-weight:700;"><td style="padding:10px;text-align:left;">Total</td><td style="padding:10px;text-align:right;">' + total + '</td></tr>';
+                html += '</tbody></table>';
+                return html;
+            }
+
+            function fetchAndRender(uid) {
+                container.innerHTML = '';
+                if (!uid) return;
+                loading.style.display = 'inline-block';
+                const form = new FormData();
+                form.append('action','dq_engineer_monthly');
+                form.append('nonce', nonce);
+                form.append('engineer', uid);
+                form.append('year', year);
+
+                fetch(ajaxUrl, { method: 'POST', credentials: 'same-origin', body: form })
+                    .then(r => r.json())
+                    .then(data => {
+                        loading.style.display = 'none';
+                        if (data && data.success && data.data && data.data.counts) {
+                            const counts = data.data.counts;
+                            const name = data.data.name || select.options[select.selectedIndex].text;
+                            container.innerHTML = renderTableHtml(name, counts);
+                        } else {
+                            container.innerHTML = '<div style="color:#c00;padding:8px;">Unable to load data.</div>';
+                        }
+                    }).catch(err => {
+                        loading.style.display = 'none';
+                        container.innerHTML = '<div style="color:#c00;padding:8px;">AJAX error</div>';
+                        console.error(err);
+                    });
+            }
+
+            if (select) {
+                select.addEventListener('change', function() {
+                    fetchAndRender(this.value);
+                });
+                // Fire on default engineer
+                if (defaultUid) {
+                    fetchAndRender(defaultUid);
+                }
+            }
+        })();
+        </script>
+        <?php
+    }
+
+    public static function ajax_engineer_monthly()
+    {
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Permission denied', 403);
+        }
+        check_ajax_referer('dq_engineer_monthly', 'nonce');
+
+        $engineer = isset($_POST['engineer']) ? intval($_POST['engineer']) : 0;
+        $year = isset($_POST['year']) ? intval($_POST['year']) : intval(date('Y'));
+        if (!$engineer) {
+            wp_send_json_error('Missing engineer id', 400);
+        }
+
+        // Query workorders for this author in the year
+        $start = "{$year}-01-01";
+        $end = "{$year}-12-31";
+        $query = [
+            'post_type'      => 'workorder',
+            'post_status'    => ['publish', 'draft', 'pending', 'private'],
+            'posts_per_page' => -1,
+            'fields'         => 'ids',
+            'author'         => $engineer,
+            'date_query'     => [
+                ['after' => $start, 'before' => $end, 'inclusive' => true]
+            ],
+        ];
+        $workorders = get_posts($query);
+
+        $counts = array_fill(1,12,0);
+        foreach ($workorders as $pid) {
+            $terms = get_the_terms($pid, 'status');
+            $status_slug = '';
+            if (!is_wp_error($terms) && !empty($terms) && is_array($terms)) {
+                $term = array_shift($terms);
+                $status_slug = !empty($term->slug) ? $term->slug : (is_object($term) && isset($term->name) ? sanitize_title($term->name) : '');
+            }
+            $raw_date = '';
+            if ($status_slug === 'open') {
+                $raw_date = function_exists('get_field') ? get_field('date_requested_by_customer', $pid) : get_post_meta($pid, 'date_requested_by_customer', true);
+            } elseif ($status_slug === 'close') {
+                $raw_date = function_exists('get_field') ? get_field('closed_on', $pid) : get_post_meta($pid, 'closed_on', true);
+            } elseif ($status_slug === 'scheduled') {
+                $raw_date = function_exists('get_field') ? get_field('schedule_date_time', $pid) : get_post_meta($pid, 'schedule_date_time', true);
+            }
+            if (!$raw_date) $raw_date = get_post_field('post_date', $pid);
+            $month_num = self::parse_month_from_text($raw_date, $year);
+            if ($month_num !== false && $month_num >=1 && $month_num <=12) {
+                $counts[$month_num]++;
+            }
+        }
+
+        $user = get_user_by('id', $engineer);
+        $name = $user ? $user->display_name : '';
+
+        wp_send_json_success(['counts' => $counts, 'name' => $name]);
+    }
+    
+    
+    
+    /**
+     * Dashboard for Field Service Engineers Report (bar chart)
+     */
+    public static function fse_report_dashboard()
+    {
+        $year = isset($_GET['fse_year']) ? intval($_GET['fse_year']) : intval(date('Y'));
+        $quarter = isset($_GET['fse_quarter']) ? intval($_GET['fse_quarter']) : 0;
+
+        echo '<div class="wrap"><h1>Field Services Engineer &#8211; total work orders</h1>';
+        self::fse_filters_form($year, $quarter);
+
+        echo '<div id="dq-fse-bar-chart-container" style="margin-top:35px; min-height:320px; background:#fafafb; border-radius:8px; padding:18px 10px;">';
+        // Container for chart, loaded via AJAX
+        echo '<canvas id="dq-fse-chart" width="1400" height="360"></canvas>';
+        echo '</div>';
+
+        // JS for AJAX chart rendering
+        ?>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script>
+        (function(){
+            let form = document.getElementById('dq-fse-filter-form');
+            let chartContainer = document.getElementById('dq-fse-chart');
+            let chart;
+            function renderChart(data) {
+                if (!chartContainer) return;
+                if (chart) { chart.destroy(); }
+                chart = new Chart(chartContainer, {
+                    type: 'bar',
+                    data: {
+                        labels: data.labels,
+                        datasets: [{
+                            label: 'Total WO',
+                            data: data.counts,
+                            backgroundColor: '#14b4db',
+                            borderRadius:6,
+                            maxBarThickness:30
+                        }]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        scales: {
+                            x: {
+                                beginAtZero: true,
+                                ticks: { color:'#888' }
+                            },
+                            y: {
+                                ticks: { color:'#222', font:{weight:600} }
+                            }
+                        }
+                    }
+                });
+            }
+            function ajaxLoad() {
+                if (!form) return;
+                const year = form.querySelector('[name="fse_year"]').value;
+                const quarter = form.querySelector('[name="fse_quarter"]').value;
+                chartContainer.style.opacity = "0.5";
+                fetch(ajaxurl, {
+                    method: 'POST',
+                    credentials:'same-origin',
+                    headers:{'Content-Type':'application/x-www-form-urlencoded'},
+                    body: 'action=dq_fse_chart&fse_year='+encodeURIComponent(year)+'&fse_quarter='+encodeURIComponent(quarter)
+                })
+                .then(resp => resp.json())
+                .then(data => {
+                    chartContainer.style.opacity = "1";
+                    if (data && data.success && data.data) {
+                        renderChart(data.data);
+                    }
+                });
+            }
+            if (form) {
+                form.addEventListener('submit', function(e){
+                    e.preventDefault();
+                    ajaxLoad();
+                });
+            }
+            // Initial load
+            ajaxLoad();
+        })();
+        </script>
+        <?php
+        echo '</div>';
+    }
+
+    /**
+     * Filter form for FSE report (year, quarter)
+     */
+    private static function fse_filters_form($year, $quarter)
+    {
+        echo '<form id="dq-fse-filter-form" method="get" style="margin:12px 0 0 0;display:flex;gap:12px;align-items:end;">';
+        echo '<input type="hidden" name="page" value="dq-fse-report">';
+        echo '<div>
+            <label><strong>Year</strong><br>
+                <select name="fse_year" style="width:110px;">';
+        for ($y = date('Y')-5; $y<=date('Y')+2; $y++) {
+            echo '<option value="'.$y.'"'.($year==$y?' selected':'').'>' . $y . '</option>';
+        }
+        echo '</select></label></div>';
+        echo '<div>
+            <label><strong>Quarter</strong><br>
+                <select name="fse_quarter" style="width:90px;">
+                    <option value="0"' . ($quarter==0?' selected':'') . '>Whole Year</option>';
+        for ($q=1; $q<=4; $q++) {
+            echo '<option value="'.$q.'"'.($quarter==$q?' selected':'').'>Q'.$q.'</option>';
+        }
+        echo '</select></label></div>';
+        echo '<div><br><button type="submit" class="button button-primary" style="height:33px;">Filter</button></div>';
+        echo '</form>';
+    }
+
+    /**
+     * AJAX handler for FSE bar chart
+     */
+public static function ajax_fse_chart()
+{
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error('Permission denied', 403);
+    }
+    $year = isset($_POST['fse_year']) ? intval($_POST['fse_year']) : intval(date('Y'));
+    $quarter = isset($_POST['fse_quarter']) ? intval($_POST['fse_quarter']) : 0;
+
+    // Compute correct TS range for the quarter
+    if ($quarter >= 1 && $quarter <= 4) {
+        $start_month = (($quarter - 1) * 3) + 1;
+        $start_ts = strtotime("$year-$start_month-01");
+        $end_month = $start_month + 2;
+        $end_ts = strtotime(date('Y-m-t', mktime(0,0,0,$end_month,1,$year)));
+    } else {
+        $start_ts = strtotime("$year-01-01");
+        $end_ts = strtotime("$year-12-31");
+    }
+
+    // Get ALL possible workorders for the year, no date filter!
+    $query = [
+        'post_type'      => 'workorder',
+        'post_status'    => ['publish', 'draft', 'pending', 'private'],
+        'posts_per_page' => -1,
+        'fields'         => 'ids'
+    ];
+    $wos = get_posts($query);
+
+    $wo_counts = [];
+    $wo_names = [];
+    foreach ($wos as $pid) {
+        // Date logic by status:
+        $terms = get_the_terms($pid, 'status');
+        $status_slug = '';
+        if (!is_wp_error($terms) && !empty($terms) && is_array($terms)) {
+            $term = array_shift($terms);
+            $status_slug = !empty($term->slug) ? $term->slug : (is_object($term) && isset($term->name) ? sanitize_title($term->name) : '');
+        }
+        $raw_date = '';
+        if ($status_slug === 'open') {
+            $raw_date = function_exists('get_field') ? get_field('date_requested_by_customer', $pid) : get_post_meta($pid, 'date_requested_by_customer', true);
+        } elseif ($status_slug === 'close') {
+            $raw_date = function_exists('get_field') ? get_field('closed_on', $pid) : get_post_meta($pid, 'closed_on', true);
+        } elseif ($status_slug === 'scheduled') {
+            $raw_date = function_exists('get_field') ? get_field('schedule_date_time', $pid) : get_post_meta($pid, 'schedule_date_time', true);
+        }
+        if (!$raw_date) $raw_date = get_post_field('post_date', $pid);
+
+        $ts = self::parse_date_for_chart($raw_date);
+        if (!$ts) continue;
+        if ($ts < $start_ts || $ts > $end_ts) continue;
+        $author_id = get_post_field('post_author', $pid);
+        if (!isset($wo_counts[$author_id])) $wo_counts[$author_id]=0;
+        $wo_counts[$author_id]++;
+    }
+    foreach ($wo_counts as $uid => $ct) {
+        $user = get_user_by('id', $uid);
+        $wo_names[$uid] = $user ? $user->display_name : 'Unknown';
+    }
+    arsort($wo_counts);
+    $labels = [];
+    $counts = [];
+    foreach ($wo_counts as $uid => $ct) {
+        $labels[] = $wo_names[$uid];
+        $counts[] = $ct;
+    }
+    wp_send_json_success([
+        'labels'=>$labels,
+        'counts'=>$counts
+    ]);
+}
+
+    /**
+     * Robust date parsing: try Y-m-d, d/m/Y, m/d/Y, fallback strtotime
+     */
+    private static function parse_date_for_chart($raw_date)
+    {
+        if (!$raw_date) return false;
+        $raw_date = trim(str_replace('_x000D_', "\n", $raw_date));
+        // Try YYYY-MM-DD
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $raw_date, $m)) {
+            return strtotime($raw_date);
+        }
+        // Try YYYY-MM-DD HH:MM
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})\s+\d{2}:\d{2}/', $raw_date, $m)) {
+            return strtotime($raw_date);
+        }
+        // Try MM/DD/YYYY
+        if (preg_match('/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/', $raw_date, $m)) {
+            return strtotime("{$m[3]}-{$m[1]}-{$m[2]}");
+        }
+        // Try DD-MM-YYYY
+        if (preg_match('/^(\d{1,2})\-(\d{1,2})\-(\d{4})$/', $raw_date, $m)) {
+            return strtotime("{$m[3]}-{$m[2]}-{$m[1]}");
+        }
+        // Fallback
+        $ts = strtotime($raw_date);
+        return $ts ? $ts : false;
     }
 }
 
