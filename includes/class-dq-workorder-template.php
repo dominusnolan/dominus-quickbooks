@@ -15,10 +15,9 @@ class DQ_Workorder_Template {
     public static function init() {
         add_filter( 'single_template', [ __CLASS__, 'single_template' ], 10, 1 );
 
-        // Enqueue scripts for single workorder view and add AJAX handlers
-        add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_scripts' ] );
-        add_action( 'wp_ajax_dqqb_send_quotation', [ __CLASS__, 'ajax_send_quotation' ] );
-        add_action( 'wp_ajax_nopriv_dqqb_send_quotation', [ __CLASS__, 'ajax_send_quotation' ] );
+        // ADDED: Handle non-AJAX submission from workorder form
+        add_action('admin_post_dqqb_send_quotation_nonajax', [__CLASS__, 'handle_post_quotation']);
+        add_action('admin_post_nopriv_dqqb_send_quotation_nonajax', [__CLASS__, 'handle_post_quotation']);
 
         // Force plugin template for single workorder pages (front-end only)
         add_filter( 'template_include', [ __CLASS__, 'force_plugin_template' ], 5 );
@@ -102,7 +101,7 @@ class DQ_Workorder_Template {
 
 
 
-    public static function handle_post_quotation() {
+     public static function handle_post_quotation() {
         // Validate nonce and post_id
         if (
             !isset($_POST['dqqb_send_quotation_nonce'])
@@ -120,23 +119,57 @@ class DQ_Workorder_Template {
             exit;
         }
 
-        // Find recipient
-        $email_keys = ['wo_contact_email', 'wo_customer_email', 'wo_email', 'customer_email'];
+        // Use ACF to fetch required fields
         $email = '';
-        foreach ($email_keys as $key) {
-            $val = get_post_meta($post_id, $key, true);
-            if (!empty($val)) { $email = (string)$val; break; }
+        $contact_name = '';
+        $attachment_id = '';
+        if ( function_exists('get_field') ) {
+            $email = get_field('wo_contact_email', $post_id);
+            $contact_name = get_field('wo_contact_name', $post_id);
+            $attachment_id = get_field('email_quotation', $post_id);
+        } else {
+            $email = get_post_meta($post_id, 'wo_contact_email', true);
+            $contact_name = get_post_meta($post_id, 'wo_contact_name', true);
+            $attachment_id = get_post_meta($post_id, 'email_quotation', true);
         }
         $email = sanitize_email($email);
+
+        // Validate email
         if (empty($email) || !is_email($email)) {
             wp_safe_redirect(add_query_arg('dqqb_quote_error', rawurlencode('No valid contact email found for this workorder.'), $referer));
             exit;
         }
 
-        $subject = 'Quotation';
-        $body = 'Hello';
+        // Prepare subject and body
+        $subject = 'Milay Mechanical Quotation for ' . ($contact_name ? $contact_name : '');
+        $body = 'Hello There';
 
-        $sent = wp_mail($email, $subject, $body);
+        // Prepare attachment (ACF field "email_quotation" can be either attachment ID or array)
+        $attachment_path = '';
+        if ($attachment_id) {
+            if (is_numeric($attachment_id)) {
+                $attachment_path = get_attached_file($attachment_id);
+            } elseif (is_array($attachment_id) && !empty($attachment_id['ID'])) {
+                $attachment_path = get_attached_file($attachment_id['ID']);
+            } elseif (is_string($attachment_id) && filter_var($attachment_id, FILTER_VALIDATE_URL)) {
+                // Download file temporarily
+                $tmp_file = download_url($attachment_id);
+                if (!is_wp_error($tmp_file)) {
+                    $attachment_path = $tmp_file;
+                }
+            }
+        }
+        $attachments = [];
+        if ($attachment_path && file_exists($attachment_path)) {
+            $attachments[] = $attachment_path;
+        }
+
+        $sent = wp_mail($email, $subject, $body, [], $attachments);
+
+        // Clean up temporary file if needed
+        if (!empty($tmp_file) && file_exists($tmp_file)) {
+            @unlink($tmp_file);
+        }
 
         if ($sent) {
             wp_safe_redirect(add_query_arg('dqqb_quote_sent', '1', $referer));
