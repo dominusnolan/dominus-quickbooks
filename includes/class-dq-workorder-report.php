@@ -1147,6 +1147,56 @@ private static function render_kpi_table($workorders)
                         }
                     }
                 });
+
+                // After rendering chart, populate skipped info area
+                try {
+                    var info = document.getElementById('dq-fse-workspeed-info');
+                    if (!info) return;
+                    info.innerHTML = '';
+                    var uids = data.uids || [];
+                    var skipped_counts = data.skipped_counts || {};
+                    var skipped_ids_map = data.skipped_ids || {};
+                    var counts = data.counts || [];
+
+                    // Build lines
+                    var lines = [];
+                    for (var i = 0; i < uids.length; i++) {
+                        var uid = String(uids[i]);
+                        var name = data.labels && data.labels[i] ? data.labels[i] : uid;
+                        var used = counts[i] || 0;
+                        var skipped = skipped_counts && skipped_counts[uid] ? parseInt(skipped_counts[uid],10) : 0;
+                        if (skipped > 0) {
+                            var ids = skipped_ids_map && skipped_ids_map[uid] ? skipped_ids_map[uid].join(',') : '';
+                            var a = document.createElement('a');
+                            a.href = '#';
+                            a.textContent = 'Inspect';
+                            a.style.marginLeft = '8px';
+                            // Capture uid-specific ids in closure
+                            (function(idsCopy, nameCopy) {
+                                a.addEventListener('click', function(ev){
+                                    ev.preventDefault();
+                                    var selYear = document.getElementById('dq-fse-filter-form') ? document.getElementById('dq-fse-filter-form').querySelector('[name=\"fse_year\"]').value : '<?php echo intval($year); ?>';
+                                    if (typeof window.dqOpenModalWithFilters === 'function') {
+                                        window.dqOpenModalWithFilters({ filter_type: 'ids', wo_ids: idsCopy, year: selYear }, 'Skipped Work Orders for ' + nameCopy);
+                                    } else {
+                                        alert('Open modal not available');
+                                    }
+                                });
+                            })(ids, name);
+
+                            var div = document.createElement('div');
+                            div.style.marginBottom = '6px';
+                            div.textContent = name + ' — used WOs: ' + used + ' — skipped: ' + skipped + ' ';
+                            div.appendChild(a);
+                            info.appendChild(div);
+                        }
+                    }
+                    if (info.innerHTML === '') {
+                        info.textContent = 'No skipped work orders detected.';
+                    }
+                } catch (err) {
+                    console.error('Failed to render workspeed skipped info', err);
+                }
             }
 
             function renderWorkspeedInfo(data) {
@@ -1413,10 +1463,11 @@ public static function ajax_fse_avg_workspeed()
     ];
     $wos = get_posts($query);
 
+    // Prepare per-author accumulators and skipped lists
     $accumulators = []; // author_id => ['total_days' => x, 'count' => y]
     $skipped_ids_by_engineer = [];  // author_id => array of ids skipped (invalid / negative / missing dates)
     foreach ($wos as $pid) {
-        // Use the same date logic as other charts to determine whether this WO falls into the selected range.
+        // Use same status->date logic as other charts to determine if WO falls into the selected range
         $terms = get_the_terms($pid, 'status');
         $status_slug = '';
         if (!is_wp_error($terms) && !empty($terms) && is_array($terms)) {
@@ -1441,9 +1492,18 @@ public static function ajax_fse_avg_workspeed()
 
         // Only calculate if date_service_completed_by_fse has value (user requirement)
         $completed_raw = function_exists('get_field') ? get_field('date_service_completed_by_fse', $pid) : get_post_meta($pid, 'date_service_completed_by_fse', true);
-        if (!$completed_raw) continue;
-
+        if (!$completed_raw) {
+            $author_id = intval(get_post_field('post_author', $pid));
+            $skipped_by_author[$author_id]['missing'][] = $pid;
+            continue;
+        }
         $completed_ts = self::parse_date_for_chart($completed_raw);
+        if (!$completed_ts) {
+            $author_id = intval(get_post_field('post_author', $pid));
+            $skipped_by_author[$author_id]['parse'][] = $pid;
+            continue;
+        }
+
         // Prefer 're-schedule' ACF field when present, otherwise fall back to schedule_date_time
         if (function_exists('get_field')) {
             $schedule_raw = get_field('re-schedule', $pid);
@@ -1451,11 +1511,15 @@ public static function ajax_fse_avg_workspeed()
                 $schedule_raw = get_field('schedule_date_time', $pid);
             }
         } else {
-            // fallback to post meta
             $schedule_raw = get_post_meta($pid, 're-schedule', true);
             if (empty($schedule_raw)) {
                 $schedule_raw = get_post_meta($pid, 'schedule_date_time', true);
             }
+        }
+        if (!$schedule_raw) {
+            $author_id = intval(get_post_field('post_author', $pid));
+            $skipped_by_author[$author_id]['missing'][] = $pid;
+            continue;
         }
         $schedule_ts = self::parse_date_for_chart($schedule_raw);
 
@@ -1468,9 +1532,9 @@ public static function ajax_fse_avg_workspeed()
             continue;
         }
 
-        $days = ($completed_ts - $schedule_ts) / 86400;
+        $days = ($completed_ts - $schedule_ts) / 86400.0;
 
-        // Skip negative durations (treat as data error) to avoid a single bad row producing huge negative averages.
+        // Skip negative durations (treat as data error) to avoid huge negative averages
         if ($days < 0) {
             if (!isset($skipped_ids_by_engineer[$author_id])) {
                 $skipped_ids_by_engineer[$author_id] = [];
@@ -1504,7 +1568,6 @@ public static function ajax_fse_avg_workspeed()
     arsort($averages);
 
     $labels = [];
-    $avgs = [];
     $uids = [];
     $counts_arr = [];
     $skipped_counts = [];
@@ -1527,6 +1590,8 @@ public static function ajax_fse_avg_workspeed()
         'skipped_ids' => $skipped_ids
     ]);
 }
+
+
 
     /**
      * Robust date parsing: try Y-m-d, d/m/Y, m/d/Y, fallback strtotime
@@ -2005,20 +2070,20 @@ public static function ajax_fse_avg_workspeed()
     /**
      * AJAX handler for modal workorder list
      */
-    public static function ajax_workorder_modal()
-    {
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error('Permission denied', 403);
-        }
-        check_ajax_referer('dq_workorder_modal', 'nonce');
+    
+public static function ajax_workorder_modal()
+{
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error('Permission denied', 403);
+    }
+    check_ajax_referer('dq_workorder_modal', 'nonce');
 
-        $filter_type = isset($_POST['filter_type']) ? sanitize_text_field($_POST['filter_type']) : '';
-        $year = isset($_POST['year']) ? intval($_POST['year']) : intval(date('Y'));
-        $month = isset($_POST['month']) ? intval($_POST['month']) : 0;
-        $state = isset($_POST['state']) ? sanitize_text_field($_POST['state']) : '';
-        $engineer = isset($_POST['engineer']) ? intval($_POST['engineer']) : 0;
-        $lead_category = isset($_POST['lead_category']) ? sanitize_text_field($_POST['lead_category']) : '';
-        $reschedule_reason = isset($_POST['reschedule_reason']) ? sanitize_text_field($_POST['reschedule_reason']) : '';
+    // If wo_ids is present, use that explicit set of IDs (comma-separated) as the filtered set.
+    $wo_ids_param = isset($_POST['wo_ids']) ? trim(strval($_POST['wo_ids'])) : '';
+    if ($wo_ids_param !== '') {
+        $ids = array_filter(array_map('intval', array_map('trim', explode(',', $wo_ids_param))));
+        $ids = array_values(array_unique($ids));
+        // Pagination
         $page = isset($_POST['page']) ? max(1, intval($_POST['page'])) : 1;
         $per_page = self::MODAL_PER_PAGE;
 
@@ -2048,8 +2113,7 @@ public static function ajax_fse_avg_workspeed()
         $total = count($filtered_ids);
         $max_pages = ceil($total / $per_page);
         $offset = ($page - 1) * $per_page;
-        $paged_ids = array_slice($filtered_ids, $offset, $per_page);
-
+        $paged_ids = array_slice($ids, $offset, $per_page);
         // Render HTML
         $html = self::render_modal_workorders_html($paged_ids, $total, $page, $per_page);
         $pagination = self::render_modal_pagination($page, $max_pages);
@@ -2061,7 +2125,50 @@ public static function ajax_fse_avg_workspeed()
             'max_pages' => $max_pages,
             'current_page' => $page,
         ]);
+        return;
     }
+
+    // Existing behavior (unchanged)
+    $filter_type = isset($_POST['filter_type']) ? sanitize_text_field($_POST['filter_type']) : '';
+    $year = isset($_POST['year']) ? intval($_POST['year']) : intval(date('Y'));
+    $month = isset($_POST['month']) ? intval($_POST['month']) : 0;
+    $state = isset($_POST['state']) ? sanitize_text_field($_POST['state']) : '';
+    $engineer = isset($_POST['engineer']) ? intval($_POST['engineer']) : 0;
+    $lead_category = isset($_POST['lead_category']) ? sanitize_text_field($_POST['lead_category']) : '';
+    $reschedule_reason = isset($_POST['reschedule_reason']) ? sanitize_text_field($_POST['reschedule_reason']) : '';
+    $page = isset($_POST['page']) ? max(1, intval($_POST['page'])) : 1;
+    $per_page = self::MODAL_PER_PAGE;
+
+    // Get base workorders for the year
+    $workorders = self::get_workorders_in_year($year);
+
+    // Apply filters based on filter_type
+    $filtered_ids = self::filter_workorders($workorders, $filter_type, [
+        'year' => $year,
+        'month' => $month,
+        'state' => $state,
+        'engineer' => $engineer,
+        'lead_category' => $lead_category,
+        'reschedule_reason' => $reschedule_reason,
+    ]);
+
+    $total = count($filtered_ids);
+    $max_pages = ceil($total / $per_page);
+    $offset = ($page - 1) * $per_page;
+    $paged_ids = array_slice($filtered_ids, $offset, $per_page);
+
+    // Render HTML
+    $html = self::render_modal_workorders_html($paged_ids, $total, $page, $per_page);
+    $pagination = self::render_modal_pagination($page, $max_pages);
+
+    wp_send_json_success([
+        'html' => $html,
+        'pagination' => $pagination,
+        'total' => $total,
+        'max_pages' => $max_pages,
+        'current_page' => $page,
+    ]);
+}
 
     /**
      * Filter workorders based on filter type
