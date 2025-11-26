@@ -137,11 +137,7 @@ if (is_string($private_comments) && $private_comments !== '') {
                 
                 
             </div>
-            <div style="margin: 15px 0;">
-                <button type="button" id="dqqb-email-quotation-btn" data-post-id="<?php echo esc_attr( $post_id ); ?>" style="background:#0073aa;color:#fff;border:none;padding:10px 20px;border-radius:4px;cursor:pointer;font-size:14px;">
-                    Email Customer Quotation
-                </button>
-            </div>
+           
             <div class="flex_column av-84xd0k-39ee9eb5b055ef5e359eb528eb8e7746 av_three_fifth  avia-builder-el-1  el_after_av_textblock  el_before_av_two_fifth  first flex_column_div  column-top-margin">
                 <div class="wo-meta-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
                     <?php
@@ -215,6 +211,33 @@ if (is_string($private_comments) && $private_comments !== '') {
                     }
                     ?>
                 </div>
+                
+                <hr>
+                <h3 style="display:block">Customer Details:</h3>
+                <div class="wo-meta-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
+                    
+                    <?php
+                    // A few handy bits users often want under the timeline; adjust/extend as needed.
+                    $pairs = [
+                        'Name'             => $val('wo_contact_name'),
+                        'Address'           => $val('wo_contact_address'),
+                        'Email'           => $val('wo_contact_email'),
+                        'Number'           => $val('wo_service_contact_number'),
+                    ];
+                    foreach ( $pairs as $label => $value ) {
+                        if ( $value === '' ) continue;
+                        echo '<div class="wo-meta-card" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;">';
+                        echo '<div style="font-weight:600;color:#222;margin-bottom:4px;">' . esc_html( $label ) . '</div>';
+                        echo '<div style="color:#333;">' . esc_html( is_numeric($value) ? number_format( (float)$value, 2 ) : (string)$value ) . '</div>';
+                        echo '</div>';
+                    }
+                    ?>
+                </div>
+                 <div style="margin: 15px 0;">
+                <button type="button" id="dqqb-email-quotation-btn" data-post-id="<?php echo esc_attr( $post_id ); ?>" style="background:#0073aa;color:#fff;border:none;padding:10px 20px;border-radius:4px;cursor:pointer;font-size:14px;">
+                    Email Customer Quotation
+                </button>
+            </div>
             </div>
             
        
