@@ -1108,6 +1108,20 @@ private static function render_kpi_table($workorders)
                                 }
                             }
                         },
+                        onClick: function(evt, elements) {
+                            // elements is an array - if a bar was clicked, open the modal showing the workorders for that engineer
+                            if (!elements || elements.length === 0) return;
+                            const idx = elements[0].index;
+                            const uid = (data.uids && typeof data.uids[idx] !== 'undefined') ? data.uids[idx] : null;
+                            if (!uid) return;
+                            const selYear = form ? form.querySelector('[name="fse_year"]').value : '<?php echo intval($year); ?>';
+                            if (typeof window.dqOpenModalWithFilters === 'function') {
+                                window.dqOpenModalWithFilters({ filter_type: 'engineer', engineer: uid, year: selYear }, 'Work Orders by Engineer (' + selYear + ')');
+                            } else {
+                                // Fallback: try to simulate click on a link if available (not likely)
+                                console.warn('dqOpenModalWithFilters not available');
+                            }
+                        },
                         scales: {
                             x: {
                                 beginAtZero: true,
@@ -1325,6 +1339,7 @@ public static function ajax_fse_avg_workspeed()
     $wos = get_posts($query);
 
     $accumulators = []; // author_id => ['total_days' => x, 'count' => y]
+    $skipped_ids = [];  // ids for which we skip calculation (invalid / negative)
     foreach ($wos as $pid) {
         // Use the same date logic as other charts to determine whether this WO falls into the selected range.
         $terms = get_the_terms($pid, 'status');
@@ -1352,13 +1367,34 @@ public static function ajax_fse_avg_workspeed()
         if (!$completed_raw) continue;
 
         $completed_ts = self::parse_date_for_chart($completed_raw);
-        // schedule_date_time is the other operand - require it to compute difference
-        $schedule_raw = function_exists('get_field') ? get_field('schedule_date_time', $pid) : get_post_meta($pid, 'schedule_date_time', true);
+        // Prefer 're-schedule' ACF field when present, otherwise fall back to schedule_date_time
+        if (function_exists('get_field')) {
+            $schedule_raw = get_field('re-schedule', $pid);
+            if (empty($schedule_raw)) {
+                $schedule_raw = get_field('schedule_date_time', $pid);
+            }
+        } else {
+            // fallback to post meta
+            $schedule_raw = get_post_meta($pid, 're-schedule', true);
+            if (empty($schedule_raw)) {
+                $schedule_raw = get_post_meta($pid, 'schedule_date_time', true);
+            }
+        }
         $schedule_ts = self::parse_date_for_chart($schedule_raw);
 
-        if (!$completed_ts || !$schedule_ts) continue;
+        // require both timestamps
+        if (!$completed_ts || !$schedule_ts) {
+            $skipped_ids[] = $pid;
+            continue;
+        }
 
         $days = ($completed_ts - $schedule_ts) / 86400;
+
+        // Skip negative durations (treat as data error) to avoid a single bad row producing huge negative averages.
+        if ($days < 0) {
+            $skipped_ids[] = $pid;
+            continue;
+        }
 
         $author_id = get_post_field('post_author', $pid);
         if (!isset($accumulators[$author_id])) {
@@ -1382,7 +1418,7 @@ public static function ajax_fse_avg_workspeed()
     }
 
     if (empty($averages)) {
-        wp_send_json_success(['labels' => [], 'averages' => []]);
+        wp_send_json_success(['labels' => [], 'averages' => [], 'uids' => [], 'skipped_ids' => array_values($skipped_ids)]);
     }
 
     // Sort by average descending
@@ -1390,12 +1426,14 @@ public static function ajax_fse_avg_workspeed()
 
     $labels = [];
     $avgs = [];
+    $uids = [];
     foreach ($averages as $uid => $avg) {
         $labels[] = $labels_map[$uid] ?? 'Unknown';
         $avgs[] = $avg;
+        $uids[] = $uid;
     }
 
-    wp_send_json_success(['labels' => $labels, 'averages' => $avgs]);
+    wp_send_json_success(['labels' => $labels, 'averages' => $avgs, 'uids' => $uids, 'skipped_ids' => array_values($skipped_ids)]);
 }
 
     /**
@@ -1858,6 +1896,15 @@ public static function ajax_fse_avg_workspeed()
                     }
                 });
             }
+
+            // Expose a global function so other scripts (charts) can open the modal with filters
+            window.dqOpenModalWithFilters = function(filters, title) {
+                try {
+                    openModal(filters, title);
+                } catch (err) {
+                    console.error('dqOpenModalWithFilters error:', err);
+                }
+            };
         })();
         </script>
         <?php
