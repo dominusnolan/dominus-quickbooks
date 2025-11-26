@@ -21,6 +21,8 @@ class DQ_WorkOrder_Report
         add_action('wp_ajax_dq_fse_chart', [__CLASS__, 'ajax_fse_chart']);
         add_action('wp_ajax_dq_engineer_monthly', [__CLASS__, 'ajax_engineer_monthly']);
         add_action('wp_ajax_dq_workorder_modal', [__CLASS__, 'ajax_workorder_modal']);
+        // New AJAX for average workspeed chart
+        add_action('wp_ajax_dq_fse_avg_workspeed', [__CLASS__, 'ajax_fse_avg_workspeed']);
     }
 
     public static function menu()
@@ -240,7 +242,7 @@ private static function render_reschedule_reasons_table($workorders)
             echo '<tr>';
             echo '<td>'.esc_html($reason).'</td>';
             if ($ct > 0) {
-                echo '<td style="text-align:right;"><a href="#" class="dq-wo-count-link" data-filter-type="reschedule_reason" data-reschedule-reason="'.esc_attr($reason).'" data-year="'.intval($year).'">'.intval($ct).'</a></td>';
+                echo '<td style="text-align:right;"><a href="#" class="dq-wo-count-link" data-filter-type="reschedule_reason" data-reschedule-reason="'.esc_attr($reason).'" data-year="'.intval($year).[...]
             } else {
                 echo '<td style="text-align:right;">0</td>';
             }
@@ -550,7 +552,7 @@ private static function render_kpi_table($workorders)
             echo '<tr>';
             echo '<td>'.esc_html($cat).'</td>';
             if ($ct > 0) {
-                echo '<td style="text-align:right;"><a href="#" class="dq-wo-count-link" data-filter-type="lead_category" data-lead-category="'.esc_attr($cat).'" data-year="'.intval($year).'">'.intval($ct).'</a></td>';
+                echo '<td style="text-align:right;"><a href="#" class="dq-wo-count-link" data-filter-type="lead_category" data-lead-category="'.esc_attr($cat).'" data-year="'.intval($year).'">'.intval[...]
             } else {
                 echo '<td style="text-align:right;">0</td>';
             }
@@ -675,7 +677,7 @@ private static function render_kpi_table($workorders)
                 <tr>
                     <td class="month-cell"><?php echo esc_html($label); ?></td>
                     <td><?php if ($monthly_counts[$num] > 0): ?>
-                        <a href="#" class="dq-wo-count-link" data-filter-type="month" data-month="<?php echo intval($num); ?>" data-year="<?php echo intval($year); ?>"><?php echo intval($monthly_counts[$num]); ?></a>
+                        <a href="#" class="dq-wo-count-link" data-filter-type="month" data-month="<?php echo intval($num); ?>" data-year="<?php echo intval($year); ?>"><?php echo intval($monthly_count[...]
                     <?php else: echo '0'; endif; ?></td>
                 </tr>
             <?php endforeach; ?>
@@ -735,7 +737,7 @@ private static function render_kpi_table($workorders)
                 <tr>
                     <td class="state-cell"><?php echo esc_html($state); ?></td>
                     <td><?php if ($count > 0): ?>
-                        <a href="#" class="dq-wo-count-link" data-filter-type="state" data-state="<?php echo esc_attr($state); ?>" data-year="<?php echo intval($year); ?>"><?php echo intval($count); ?></a>
+                        <a href="#" class="dq-wo-count-link" data-filter-type="state" data-state="<?php echo esc_attr($state); ?>" data-year="<?php echo intval($year); ?>"><?php echo intval($count); ?[...]
                     <?php else: echo '0'; endif; ?></td>
                 </tr>
             <?php endforeach; ?>
@@ -817,7 +819,7 @@ private static function render_kpi_table($workorders)
                         <span class="eng-name"><?php echo esc_html($eng['display_name']); ?></span>
                     </td>
                     <td><?php if ($eng['wo_count'] > 0): ?>
-                        <a href="#" class="dq-wo-count-link" data-filter-type="engineer" data-engineer="<?php echo intval($eng['user_id']); ?>" data-year="<?php echo intval($year); ?>"><?php echo intval($eng['wo_count']); ?></a>
+                        <a href="#" class="dq-wo-count-link" data-filter-type="engineer" data-engineer="<?php echo intval($eng['user_id']); ?>" data-year="<?php echo intval($year); ?>"><?php echo intv[...]
                     <?php else: echo '0'; endif; ?></td>
                     <td class="percent-cell"><?php echo number_format($eng['percentage'], 2); ?>%</td>
                 </tr>
@@ -1029,6 +1031,12 @@ private static function render_kpi_table($workorders)
         echo '<canvas id="dq-fse-chart" width="1400" height="360"></canvas>';
         echo '</div>';
 
+        // New chart: Average WorkSpeed Quarterly Views
+        echo '<div id="dq-fse-avg-workspeed-container" style="margin-top:22px; min-height:220px; background:#fafafb; border-radius:8px; padding:18px 10px;">';
+        echo '<h3 style="margin:0 0 10px 0; font-weight:600;">FSE Average WorkSpeed Quarterly Views</h3>';
+        echo '<canvas id="dq-fse-workspeed-chart" width="1400" height="260"></canvas>';
+        echo '</div>';
+
         // JS for AJAX chart rendering
         ?>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -1036,7 +1044,10 @@ private static function render_kpi_table($workorders)
         (function(){
             let form = document.getElementById('dq-fse-filter-form');
             let chartContainer = document.getElementById('dq-fse-chart');
+            let chartAvgContainer = document.getElementById('dq-fse-workspeed-chart');
             let chart;
+            let chartAvg;
+
             function renderChart(data) {
                 if (!chartContainer) return;
                 if (chart) { chart.destroy(); }
@@ -1069,25 +1080,99 @@ private static function render_kpi_table($workorders)
                     }
                 });
             }
+
+            function renderAvgChart(data) {
+                if (!chartAvgContainer) return;
+                if (chartAvg) { chartAvg.destroy(); }
+                chartAvg = new Chart(chartAvgContainer, {
+                    type: 'bar',
+                    data: {
+                        labels: data.labels,
+                        datasets: [{
+                            label: 'Avg Days',
+                            data: data.averages,
+                            backgroundColor: '#14b4db',
+                            borderRadius:6,
+                            maxBarThickness:30
+                        }]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(ctx) {
+                                        return (ctx.raw !== null ? ctx.raw.toFixed(2) : ctx.raw) + ' days';
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                beginAtZero: true,
+                                ticks: {
+                                    color:'#888'
+                                },
+                                title: {
+                                    display: true,
+                                    text: 'Average days (date_service_completed_by_fse - schedule_date_time)'
+                                }
+                            },
+                            y: {
+                                ticks: { color:'#222', font:{weight:600} }
+                            }
+                        }
+                    }
+                });
+            }
+
             function ajaxLoad() {
                 if (!form) return;
                 const year = form.querySelector('[name="fse_year"]').value;
                 const quarter = form.querySelector('[name="fse_quarter"]').value;
-                chartContainer.style.opacity = "0.5";
-                fetch(ajaxurl, {
+                // dim the containers while loading
+                if (chartContainer) chartContainer.style.opacity = "0.5";
+                if (chartAvgContainer) chartAvgContainer.style.opacity = "0.5";
+
+                const body1 = 'action=dq_fse_chart&fse_year='+encodeURIComponent(year)+'&fse_quarter='+encodeURIComponent(quarter);
+                const body2 = 'action=dq_fse_avg_workspeed&fse_year='+encodeURIComponent(year)+'&fse_quarter='+encodeURIComponent(quarter);
+
+                const fetch1 = fetch(ajaxurl, {
                     method: 'POST',
                     credentials:'same-origin',
                     headers:{'Content-Type':'application/x-www-form-urlencoded'},
-                    body: 'action=dq_fse_chart&fse_year='+encodeURIComponent(year)+'&fse_quarter='+encodeURIComponent(quarter)
-                })
-                .then(resp => resp.json())
-                .then(data => {
-                    chartContainer.style.opacity = "1";
-                    if (data && data.success && data.data) {
-                        renderChart(data.data);
-                    }
-                });
+                    body: body1
+                }).then(r => r.json());
+
+                const fetch2 = fetch(ajaxurl, {
+                    method: 'POST',
+                    credentials:'same-origin',
+                    headers:{'Content-Type':'application/x-www-form-urlencoded'},
+                    body: body2
+                }).then(r => r.json());
+
+                Promise.all([fetch1, fetch2])
+                    .then(([data1, data2]) => {
+                        if (chartContainer) chartContainer.style.opacity = "1";
+                        if (chartAvgContainer) chartAvgContainer.style.opacity = "1";
+
+                        if (data1 && data1.success && data1.data) {
+                            renderChart(data1.data);
+                        }
+                        if (data2 && data2.success && data2.data) {
+                            renderAvgChart(data2.data);
+                        } else if (data2 && !data2.success) {
+                            // clear avg chart if error
+                            if (chartAvg) { chartAvg.destroy(); chartAvg = null; }
+                        }
+                    }).catch(err => {
+                        if (chartContainer) chartContainer.style.opacity = "1";
+                        if (chartAvgContainer) chartAvgContainer.style.opacity = "1";
+                        console.error('FSE charts AJAX error', err);
+                    });
             }
+
             if (form) {
                 form.addEventListener('submit', function(e){
                     e.preventDefault();
@@ -1203,6 +1288,114 @@ public static function ajax_fse_chart()
         'labels'=>$labels,
         'counts'=>$counts
     ]);
+}
+
+/**
+ * AJAX handler for FSE average workspeed chart
+ *
+ * Computes average (date_service_completed_by_fse - schedule_date_time) in days per engineer
+ * Only includes workorders that have date_service_completed_by_fse value and valid schedule date.
+ */
+public static function ajax_fse_avg_workspeed()
+{
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error('Permission denied', 403);
+    }
+    $year = isset($_POST['fse_year']) ? intval($_POST['fse_year']) : intval(date('Y'));
+    $quarter = isset($_POST['fse_quarter']) ? intval($_POST['fse_quarter']) : 0;
+
+    // Compute correct TS range for the quarter
+    if ($quarter >= 1 && $quarter <= 4) {
+        $start_month = (($quarter - 1) * 3) + 1;
+        $start_ts = strtotime("$year-$start_month-01");
+        $end_month = $start_month + 2;
+        $end_ts = strtotime(date('Y-m-t', mktime(0,0,0,$end_month,1,$year)));
+    } else {
+        $start_ts = strtotime("$year-01-01");
+        $end_ts = strtotime("$year-12-31");
+    }
+
+    // Query all workorders
+    $query = [
+        'post_type'      => 'workorder',
+        'post_status'    => ['publish', 'draft', 'pending', 'private'],
+        'posts_per_page' => -1,
+        'fields'         => 'ids',
+    ];
+    $wos = get_posts($query);
+
+    $accumulators = []; // author_id => ['total_days' => x, 'count' => y]
+    foreach ($wos as $pid) {
+        // Use the same date logic as other charts to determine whether this WO falls into the selected range.
+        $terms = get_the_terms($pid, 'status');
+        $status_slug = '';
+        if (!is_wp_error($terms) && !empty($terms) && is_array($terms)) {
+            $term = array_shift($terms);
+            $status_slug = !empty($term->slug) ? $term->slug : (is_object($term) && isset($term->name) ? sanitize_title($term->name) : '');
+        }
+        $raw_date = '';
+        if ($status_slug === 'open') {
+            $raw_date = function_exists('get_field') ? get_field('date_requested_by_customer', $pid) : get_post_meta($pid, 'date_requested_by_customer', true);
+        } elseif ($status_slug === 'close') {
+            $raw_date = function_exists('get_field') ? get_field('closed_on', $pid) : get_post_meta($pid, 'closed_on', true);
+        } elseif ($status_slug === 'scheduled') {
+            $raw_date = function_exists('get_field') ? get_field('schedule_date_time', $pid) : get_post_meta($pid, 'schedule_date_time', true);
+        }
+        if (!$raw_date) $raw_date = get_post_field('post_date', $pid);
+
+        $ts = self::parse_date_for_chart($raw_date);
+        if (!$ts) continue;
+        if ($ts < $start_ts || $ts > $end_ts) continue;
+
+        // Only calculate if date_service_completed_by_fse has value (user requirement)
+        $completed_raw = function_exists('get_field') ? get_field('date_service_completed_by_fse', $pid) : get_post_meta($pid, 'date_service_completed_by_fse', true);
+        if (!$completed_raw) continue;
+
+        $completed_ts = self::parse_date_for_chart($completed_raw);
+        // schedule_date_time is the other operand - require it to compute difference
+        $schedule_raw = function_exists('get_field') ? get_field('schedule_date_time', $pid) : get_post_meta($pid, 'schedule_date_time', true);
+        $schedule_ts = self::parse_date_for_chart($schedule_raw);
+
+        if (!$completed_ts || !$schedule_ts) continue;
+
+        $days = ($completed_ts - $schedule_ts) / 86400;
+
+        $author_id = get_post_field('post_author', $pid);
+        if (!isset($accumulators[$author_id])) {
+            $accumulators[$author_id] = ['total_days' => 0.0, 'count' => 0];
+        }
+        $accumulators[$author_id]['total_days'] += $days;
+        $accumulators[$author_id]['count'] += 1;
+    }
+
+    // Compute averages and prepare labels
+    $averages = [];
+    $labels_map = [];
+    foreach ($accumulators as $uid => $data) {
+        if ($data['count'] <= 0) continue;
+        $avg = $data['total_days'] / $data['count'];
+        // round to 2 decimals
+        $avg = round($avg, 2);
+        $averages[$uid] = $avg;
+        $user = get_user_by('id', $uid);
+        $labels_map[$uid] = $user ? $user->display_name : 'Unknown';
+    }
+
+    if (empty($averages)) {
+        wp_send_json_success(['labels' => [], 'averages' => []]);
+    }
+
+    // Sort by average descending
+    arsort($averages);
+
+    $labels = [];
+    $avgs = [];
+    foreach ($averages as $uid => $avg) {
+        $labels[] = $labels_map[$uid] ?? 'Unknown';
+        $avgs[] = $avg;
+    }
+
+    wp_send_json_success(['labels' => $labels, 'averages' => $avgs]);
 }
 
     /**
