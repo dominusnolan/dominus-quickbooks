@@ -286,6 +286,33 @@ class DQ_Workorder_Table
         font-size: 12px;
     }
 }
+
+.dq-workorder-table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.dq-workorder-table {
+    min-width: 1200px; /* or however wide your table needs */
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 991px) {
+    .dq-workorder-table {
+        min-width: 900px;
+    }
+}
+
+@media (max-width: 768px) {
+    .dq-workorder-table-wrapper {
+        padding-bottom: 16px;
+    }
+    .dq-workorder-table {
+        min-width: 650px;
+    }
+}
 </style>';
     }
 
