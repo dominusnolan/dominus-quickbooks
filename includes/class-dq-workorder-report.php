@@ -112,6 +112,8 @@ echo '<style>
             echo '</div>';
         echo '</div>';
 
+        self::render_kpi_table($workorders);
+
         echo '</div>';
     }
 
@@ -236,6 +238,77 @@ private static function render_reschedule_reasons_table($workorders)
         echo '<td style="text-align:right;">'.intval($yearly_total).'</td>';
         echo '</tr>';
         ?>
+        </tbody>
+    </table>
+    <?php
+}
+
+
+private static function render_kpi_table($workorders)
+{
+    // 1. Total Work Orders Received (wo_date_received not empty)
+    $received_count = 0;
+    $queue_days = [];
+    $completed_count = 0;
+    foreach ($workorders as $pid) {
+        // Work order received
+        $date_received = function_exists('get_field') ? get_field('wo_date_received', $pid) : get_post_meta($pid, 'wo_date_received', true);
+        if ($date_received) $received_count++;
+        // Average queue days
+        $fsc_contact = function_exists('get_field') ? get_field('wo_fsc_contact_date', $pid) : get_post_meta($pid, 'wo_fsc_contact_date', true);
+        if ($date_received && $fsc_contact) {
+            $received_ts = strtotime($date_received);
+            $contact_ts = strtotime($fsc_contact);
+            if ($contact_ts > $received_ts && $received_ts) {
+                $diff = ($contact_ts - $received_ts) / 86400;
+                $queue_days[] = $diff;
+            }
+        }
+        // Completed WO (closed_on present or status Close)
+        $closed_on = function_exists('get_field') ? get_field('closed_on', $pid) : get_post_meta($pid, 'closed_on', true);
+        $terms = get_the_terms($pid, 'status');
+        $status_slug = '';
+        if (!is_wp_error($terms) && !empty($terms) && is_array($terms)) {
+            $term = array_shift($terms);
+            $status_slug = !empty($term->slug) ? $term->slug : (is_object($term) && isset($term->name) ? sanitize_title($term->name) : '');
+        }
+        if ($closed_on || $status_slug === 'close') $completed_count++;
+    }
+    $avg_queue_days = count($queue_days) ? round(array_sum($queue_days)/count($queue_days),2) : 0;
+
+    ?>
+    <style>
+    .wo-kpi-table {
+        width:100%; max-width:480px; border-collapse:collapse; margin-top:22px; background:#fff; border-radius:14px; overflow:hidden;
+    }
+    .wo-kpi-table th {
+        background: #08b0d2;
+        color: #fff; padding:18px 12px; font-size:18px; font-weight:600; text-align:left;
+    }
+    .wo-kpi-table td {
+        padding:16px 12px; font-size:16px; border-bottom:1px solid #f4f4f4; background:#fff;
+    }
+    .wo-kpi-table tr:last-child td { border-bottom:none; }
+    </style>
+    <table class="wo-kpi-table">
+        <thead>
+            <tr>
+                <th colspan="2">KPI Summary</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Total Work Orders Received</td>
+                <td style="text-align:right;"><?php echo intval($received_count); ?></td>
+            </tr>
+            <tr>
+                <td>Average Days in Queue for Work Orders</td>
+                <td style="text-align:right;"><?php echo number_format($avg_queue_days,2); ?></td>
+            </tr>
+            <tr>
+                <td>Number of Work Orders Completed</td>
+                <td style="text-align:right;"><?php echo intval($completed_count); ?></td>
+            </tr>
         </tbody>
     </table>
     <?php
