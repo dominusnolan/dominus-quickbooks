@@ -103,3 +103,73 @@ The shortcode includes built-in styling that matches the plugin's design. You ca
 ```
 [dqqb_invoice_list status="paid" date_from="2024-01-01" date_to="2024-03-31"]
 ```
+
+---
+
+## Work Order Table Shortcode
+
+### Basic Usage
+
+Display a table listing all Work Orders on any page or post:
+
+```
+[workorder_table]
+```
+
+### Features
+
+- **Complete Overview**: Displays all work orders in a comprehensive table
+- **15 Column Layout**: Shows all important work order information at a glance
+- **Responsive Design**: Horizontal scrolling on smaller screens
+- **View Links**: Direct links to individual work order pages
+- **Status Badges**: Visual status indicators for each work order
+- **Date Calculations**: Automatic calculation of FSC contact days
+
+### Display Format
+
+The work order table displays the following columns:
+
+| Column | Description |
+|--------|-------------|
+| **Work Order ID** | The post title of the work order |
+| **Location** | Account (`wo_location`), City (`wo_city`), State (`wo_state`) |
+| **Field Engineer** | The author's display name |
+| **Product ID** | Installed product ID (`installed_product_id`) |
+| **Customer Info** | Name (`wo_contact_name`), Address (`wo_contact_address`), Email (`wo_contact_email`), Number (`wo_service_contact_number`) |
+| **Date Received** | Date requested by customer (`date_requested_by_customer`) |
+| **FSC Contact Date** | FSC contact date (`wo_fsc_contact_date`) |
+| **FSC Contact Days** | Calculated: FSC Contact Date - Date Received (displayed as "X days") |
+| **Scheduled Date** | Scheduled date and time (`schedule_date_time`) |
+| **Service Completed** | Date service completed by FSE (`date_service_completed_by_fse`) |
+| **Closed On** | Date closed (`closed_on`) |
+| **Reports Sent** | Date FSR and DIA reports sent to customer (`date_fsr_and_dia_reports_sent_to_customer`) |
+| **Leads** | Lead (`wo_leads`) and Category (`wo_lead_category`) |
+| **Status** | Status taxonomy term (excludes "Uncategorized") |
+| **View** | Button linking to the single work order page |
+
+### Technical Notes
+
+- Requires the `workorder` custom post type to be registered
+- Uses ACF fields (or falls back to post meta) for all custom fields
+- Queries work orders with status: publish, draft, pending, or private
+- All dates are formatted as MM/DD/YYYY
+- Works for logged-in and non-logged-in users
+
+### Styling
+
+The shortcode includes built-in styling. You can override styles by targeting these CSS classes:
+
+- `.workorder-table-wrapper`: Main container with horizontal scroll
+- `.workorder-table`: Table element
+- `.wo-location-cell`: Location column content
+- `.wo-customer-cell`: Customer info column content
+- `.wo-leads-cell`: Leads column content
+- `.wo-status-badge`: Status badge styling
+- `.wo-view-btn`: View button styling
+
+### Example
+
+**Display all work orders:**
+```
+[workorder_table]
+```
