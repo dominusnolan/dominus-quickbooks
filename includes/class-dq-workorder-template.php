@@ -140,7 +140,6 @@ class DQ_Workorder_Template {
 
         // Get customer email from workorder meta
         $email = get_post_meta( $post_id, 'wo_contact_email', true );
-        $name  = get_post_meta( $post_id, 'wo_contact_name', true );
 
         // Validate email
         if ( empty( $email ) || ! is_email( $email ) ) {
