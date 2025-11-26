@@ -3,7 +3,7 @@ if (!defined('ABSPATH')) exit;
 
 /**
  * Class DQ_Workorder_Table
- * Frontend workorder table shortcode with AJAX-powered pagination.
+ * Frontend workorder table shortcode with AJAX-powered pagination and advanced filtering.
  * Usage: [workorder_table] or [workorder_table per_page="20"]
  */
 class DQ_Workorder_Table
@@ -33,8 +33,9 @@ class DQ_Workorder_Table
     {
         $atts = shortcode_atts([
             'per_page' => self::DEFAULT_PER_PAGE,
-            'status' => '', // Filter by status taxonomy (open, close, scheduled)
-            'state' => '', // Filter by wo_state meta field
+            'status' => '',
+            'state' => '',
+            'engineer' => '',
         ], $atts, 'workorder_table');
 
         // Sanitize per_page
@@ -63,7 +64,6 @@ class DQ_Workorder_Table
     private static function get_workorders($atts, $page = 1)
     {
         $per_page = isset($atts['per_page']) ? max(1, intval($atts['per_page'])) : self::DEFAULT_PER_PAGE;
-
         $args = [
             'post_type' => 'workorder',
             'post_status' => ['publish', 'draft', 'pending', 'private'],
@@ -75,7 +75,6 @@ class DQ_Workorder_Table
 
         // Meta query for filters
         $meta_query = ['relation' => 'AND'];
-
         // State filter
         if (!empty($atts['state'])) {
             $meta_query[] = [
@@ -84,16 +83,19 @@ class DQ_Workorder_Table
                 'compare' => '=',
             ];
         }
-
+        // Engineer filter (author)
+        if (!empty($atts['engineer'])) {
+            $args['author'] = intval($atts['engineer']);
+        }
         if (count($meta_query) > 1) {
             $args['meta_query'] = $meta_query;
         }
 
-        // Taxonomy filter for status
+        // Taxonomy filter for status (category)
         if (!empty($atts['status'])) {
             $args['tax_query'] = [
                 [
-                    'taxonomy' => 'status',
+                    'taxonomy' => 'category',
                     'field' => 'slug',
                     'terms' => sanitize_text_field($atts['status']),
                 ],
@@ -113,26 +115,63 @@ class DQ_Workorder_Table
 
     private static function render_html($data, $atts, $wrapper_id)
     {
+        // Status dropdown
+        $status_terms = get_terms([
+            'taxonomy' => 'category',
+            'hide_empty' => false,
+        ]);
+        $status_options = '<option value="">All Status</option>';
+        foreach ($status_terms as $term) {
+            if (strtolower($term->name) !== 'uncategorized') {
+                $selected = ($atts['status'] === $term->slug) ? ' selected' : '';
+                $status_options .= '<option value="' . esc_attr($term->slug) . '"' . $selected . '>' . esc_html($term->name) . '</option>';
+            }
+        }
+
+        // Engineer dropdown
+        $author_posts = get_posts([
+            'post_type' => 'workorder',
+            'post_status' => ['publish', 'draft', 'pending', 'private'],
+            'posts_per_page' => -1,
+            'fields' => 'ids',
+            'no_found_rows' => true
+        ]);
+        $engineers = [];
+        foreach ($author_posts as $pid) {
+            $p = get_post($pid);
+            if ($p && $p->post_author) $engineers[$p->post_author] = true;
+        }
+        $engineer_dropdown = '<option value="">All Field Engineers</option>';
+        foreach (array_keys($engineers) as $uid) {
+            $user = get_userdata($uid);
+            if ($user) {
+                $selected = (isset($atts['engineer']) && intval($atts['engineer']) === $uid) ? ' selected' : '';
+                $engineer_dropdown .= '<option value="' . esc_attr($uid) . '"' . $selected . '>' . esc_html($user->display_name) . '</option>';
+            }
+        }
+
+        // Filter UI
         $output = '<div id="' . esc_attr($wrapper_id) . '" class="dq-workorder-table-wrapper">';
         $output .= self::get_styles();
+        $output .= '<form class="dq-workorder-table-filters" style="display:flex;gap:16px;align-items:center;margin-bottom:18px;">';
+        $output .= '<label>Status <select name="dq_filter_status">' . $status_options . '</select></label>';
+        $output .= '<label>Field Engineer <select name="dq_filter_engineer">' . $engineer_dropdown . '</select></label>';
+        $output .= '</form>';
 
+        // Scroll hint
         $output .= '<div class="dq-scroll-hint">
-    <svg width="54" height="32">
-       <!-- simple right arrow with "scroll" text -->
-        <text x="4" y="24" font-size="14" fill="#0996a0">Scroll →</text>
-        <line x1="35" y1="16" x2="52" y2="16" stroke="#0996a0" stroke-width="2"/>
-        <polygon points="52,12 54,16 52,20" fill="#0996a0" />
-    </svg>
-</div>';
+        <svg width="54" height="32">
+            <text x="4" y="24" font-size="14" fill="#0996a0">Scroll →</text>
+            <line x1="35" y1="16" x2="52" y2="16" stroke="#0996a0" stroke-width="2"/>
+            <polygon points="52,12 54,16 52,20" fill="#0996a0" />
+        </svg>
+        </div>';
 
         $output .= '<div class="dq-workorder-table-content">';
         $output .= self::render_table($data['workorders']);
         $output .= '</div>';
-
         $output .= self::render_pagination($data['current_page'], $data['max_pages']);
-
         $output .= '</div>';
-
         return $output;
     }
 
@@ -141,11 +180,29 @@ class DQ_Workorder_Table
         return '<style>
 .dq-workorder-table-wrapper { 
     margin: 20px 0; 
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    position: relative;
+    width: 100%;
+    overflow-x: auto;
 }
 .dq-workorder-table-wrapper.loading { 
     opacity: 0.6; 
     pointer-events: none; 
+}
+.dq-workorder-table-filters {
+    margin-bottom: 1em;
+}
+.dq-workorder-table-filters label {
+    font-weight: 600;
+    color: #0996a0;
+    font-size: 15px;
+}
+.dq-workorder-table-filters select {
+    margin-left:8px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    border: 1px solid #e8e8e8;
+    font-size: 14px;
 }
 .dq-workorder-table { 
     width: 100%; 
@@ -154,6 +211,10 @@ class DQ_Workorder_Table
     box-shadow: 0 1px 3px rgba(0,0,0,0.1); 
     border-radius: 8px;
     overflow: hidden;
+    min-width: 1200px;
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 .dq-workorder-table th { 
     background: #0996a0; 
@@ -272,11 +333,20 @@ class DQ_Workorder_Table
 }
 
 /* Responsive Styles */
+@media (max-width: 991px) {
+    .dq-workorder-table {
+        min-width: 900px;
+    }
+    .dq-workorder-table-wrapper .dq-scroll-hint {
+        display: block;
+    }
+}
 @media (max-width: 768px) {
-    .dq-workorder-table { 
-        display: block; 
-        overflow-x: auto; 
-        -webkit-overflow-scrolling: touch;
+    .dq-workorder-table-wrapper {
+        padding-bottom: 16px;
+    }
+    .dq-workorder-table {
+        min-width: 650px;
     }
     .dq-workorder-table th,
     .dq-workorder-table td {
@@ -287,7 +357,6 @@ class DQ_Workorder_Table
         min-width: 180px;
     }
 }
-
 @media (max-width: 480px) {
     .dq-workorder-table-pagination a, 
     .dq-workorder-table-pagination span {
@@ -295,188 +364,156 @@ class DQ_Workorder_Table
         font-size: 12px;
     }
 }
-
-.dq-workorder-table-wrapper {
-  position: relative;
-  width: 100%;
-  overflow-x: auto;
-}
 .dq-scroll-hint {
-  position: absolute;
-  bottom: 8px;
-  right: 18px;
-  z-index: 20;
-  pointer-events: none;
-  opacity: 0.85;
-  display: none;
+    position: absolute;
+    bottom: 8px;
+    right: 18px;
+    z-index: 20;
+    pointer-events: none;
+    opacity: 0.85;
+    display: none;
 }
 @media (max-width: 991px) {
-  .dq-workorder-table-wrapper .dq-scroll-hint {
-    display: block;
-  }
-}
-
-
-.dq-workorder-table {
-    min-width: 1200px; /* or however wide your table needs */
-    display: block;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-}
-
-@media (max-width: 991px) {
-    .dq-workorder-table {
-        min-width: 900px;
-    }
     .dq-workorder-table-wrapper .dq-scroll-hint {
         display: block;
-    }
-}
-
-@media (max-width: 768px) {
-    .dq-workorder-table-wrapper {
-        padding-bottom: 16px;
-    }
-    .dq-workorder-table {
-        min-width: 650px;
     }
 }
 </style>';
     }
 
     private static function render_table($workorders)
-{
-    if (empty($workorders)) {
-        return '<div class="dq-workorder-table-empty">No work orders found.</div>';
-    }
+    {
+        if (empty($workorders)) {
+            return '<div class="dq-workorder-table-empty">No work orders found.</div>';
+        }
 
-    $output = '<table class="dq-workorder-table">';
-    $output .= '<thead><tr>
-        <th>Work Order ID</th>
-        <th>Location</th>
-        <th>Field Engineer</th>
-        <th>Product ID</th>
-        <th>Customer Info</th>
-        <th>Date Received</th>
-        <th>FSC Contact Date</th>
-        <th>FSC Contact with client Days</th>
-        <th>Scheduled date</th>
-        <th>Date Service Completed by FSE</th>
-        <th>Closed On</th>
-        <th>Date FSR and DIA Reports sent</th>
-        <th>Leads</th>
-        <th>Status</th>
-        <th>View</th>
-    </tr></thead><tbody>';
+        $output = '<table class="dq-workorder-table">';
+        $output .= '<thead><tr>
+            <th>Work Order ID</th>
+            <th>Location</th>
+            <th>Field Engineer</th>
+            <th>Product ID</th>
+            <th>Customer Info</th>
+            <th>Date Received</th>
+            <th>FSC Contact Date</th>
+            <th>FSC Contact with client Days</th>
+            <th>Scheduled date</th>
+            <th>Date Service Completed by FSE</th>
+            <th>Closed On</th>
+            <th>Date FSR and DIA Reports sent</th>
+            <th>Leads</th>
+            <th>Status</th>
+            <th>View</th>
+        </tr></thead><tbody>';
 
-    foreach ($workorders as $workorder) {
-        $post_id = $workorder->ID;
+        foreach ($workorders as $workorder) {
+            $post_id = $workorder->ID;
 
-        // 1. Work Order ID: post_title
-        $workorder_id = esc_html(get_the_title($post_id));
+            // 1. Work Order ID: post_title
+            $workorder_id = esc_html(get_the_title($post_id));
 
-        // 2. Location (ACF fields)
-        $wo_location = function_exists('get_field') ? get_field('wo_location', $post_id) : get_post_meta($post_id, 'wo_location', true);
-        $wo_city     = function_exists('get_field') ? get_field('wo_city', $post_id) : get_post_meta($post_id, 'wo_city', true);
-        $wo_state    = function_exists('get_field') ? get_field('wo_state', $post_id) : get_post_meta($post_id, 'wo_state', true);
-        $location = '<strong>Account:</strong> ' . esc_html($wo_location) . '<br>'
-            . '<strong>City:</strong> ' . esc_html($wo_state) . '<br>'
-            . '<strong>State:</strong> ' . esc_html($wo_city);
+            // 2. Location (ACF fields)
+            $wo_location = function_exists('get_field') ? get_field('wo_location', $post_id) : get_post_meta($post_id, 'wo_location', true);
+            $wo_city     = function_exists('get_field') ? get_field('wo_city', $post_id) : get_post_meta($post_id, 'wo_city', true);
+            $wo_state    = function_exists('get_field') ? get_field('wo_state', $post_id) : get_post_meta($post_id, 'wo_state', true);
+            $location = '<strong>Account:</strong> ' . esc_html($wo_location) . '<br>'
+                . '<strong>City:</strong> ' . esc_html($wo_state) . '<br>'
+                . '<strong>State:</strong> ' . esc_html($wo_city);
 
-        // 3. Field Engineer (author display name & ACF profile_picture)
-        $author_id = $workorder->post_author;
-        $engineer = '';
-        if ($author_id) {
-            $user        = get_userdata($author_id);
-            $display_name = $user ? esc_html($user->display_name) : '';
-            $profile_picture_id = function_exists('get_field') ? get_field('profile_picture', "user_$author_id") : '';
-            $profile_url = '';
-            if ($profile_picture_id) {
-                $profile_url = wp_get_attachment_image($profile_picture_id, [32,32], false, ['class' => 'wo-profile-picture', 'style' => 'border-radius:50%;vertical-align:middle;margin-right:8px;']);
+            // 3. Field Engineer (author display name & ACF profile_picture)
+            $author_id = $workorder->post_author;
+            $engineer = '';
+            if ($author_id) {
+                $user        = get_userdata($author_id);
+                $display_name = $user ? esc_html($user->display_name) : '';
+                $profile_picture_id = function_exists('get_field') ? get_field('profile_picture', "user_$author_id") : '';
+                $profile_url = '';
+                if ($profile_picture_id) {
+                    $profile_url = wp_get_attachment_image($profile_picture_id, [32,32], false, ['class' => 'wo-profile-picture', 'style' => 'border-radius:50%;vertical-align:middle;margin-right:8px;']);
+                }
+                $engineer = $profile_url . $display_name;
             }
-            $engineer = $profile_url . $display_name;
+
+            // 4. Product ID (ACF)
+            $installed_product_id = function_exists('get_field') ? get_field('installed_product_id', $post_id) : get_post_meta($post_id, 'installed_product_id', true);
+
+            // 5. Customer Info (ACF)
+            $customer_info = '<strong>Name:</strong> ' . esc_html(function_exists('get_field') ? get_field('wo_contact_name', $post_id) : get_post_meta($post_id, 'wo_contact_name', true)) . '<br>'
+                . '<strong>Address:</strong> ' . esc_html(function_exists('get_field') ? get_field('wo_contact_address', $post_id) : get_post_meta($post_id, 'wo_contact_address', true)) . '<br>'
+                . '<strong>Email:</strong> ' . esc_html(function_exists('get_field') ? get_field('wo_contact_email', $post_id) : get_post_meta($post_id, 'wo_contact_email', true)) . '<br>'
+                . '<strong>Number:</strong> ' . esc_html(function_exists('get_field') ? get_field('wo_service_contact_number', $post_id) : get_post_meta($post_id, 'wo_service_contact_number', true));
+
+            // 6. Date Received
+            $date_received_raw = function_exists('get_field') ? get_field('date_requested_by_customer', $post_id) : get_post_meta($post_id, 'date_requested_by_customer', true);
+            $date_received     = self::format_date($date_received_raw);
+
+            // 7. FSC Contact Date
+            $fsc_contact_date_raw = function_exists('get_field') ? get_field('wo_fsc_contact_date', $post_id) : get_post_meta($post_id, 'wo_fsc_contact_date', true);
+            $fsc_contact_date     = self::format_date($fsc_contact_date_raw);
+
+            // 8. FSC Contact with client Days
+            $client_days = '';
+            if ($fsc_contact_date_raw && $date_received_raw) {
+                $diff_days = abs(round((strtotime($fsc_contact_date_raw) - strtotime($date_received_raw)) / (60 * 60 * 24)));
+                $client_days = $diff_days . ' day' . ($diff_days === 1 ? '' : 's');
+            } else {
+                $client_days = 'N/A';
+            }
+
+            // 9. Scheduled date
+            $schedule_date = self::format_date(function_exists('get_field') ? get_field('schedule_date_time', $post_id) : get_post_meta($post_id, 'schedule_date_time', true));
+
+            // 10. Date Service Completed by FSE
+            $date_service_completed_by_fse = self::format_date(function_exists('get_field') ? get_field('date_service_completed_by_fse', $post_id) : get_post_meta($post_id, 'date_service_completed_by_fse', true));
+
+            // 11. Closed on
+            $closed_on = self::format_date(function_exists('get_field') ? get_field('closed_on', $post_id) : get_post_meta($post_id, 'closed_on', true));
+
+            // 12. Date FSR and DIA Reports sent to Customer
+            $report_date = self::format_date(function_exists('get_field') ? get_field('date_fsr_and_dia_reports_sent_to_customer', $post_id) : get_post_meta($post_id, 'date_fsr_and_dia_reports_sent_to_customer', true));
+
+            // 13. Leads (ACF)
+            $leads_info = '<strong>Lead:</strong> ' . esc_html(function_exists('get_field') ? get_field('wo_leads', $post_id) : get_post_meta($post_id, 'wo_leads', true)) . '<br>'
+                . '<strong>Category:</strong> ' . esc_html(function_exists('get_field') ? get_field('wo_lead_category', $post_id) : get_post_meta($post_id, 'wo_lead_category', true));
+
+            // 14. Status: get the term category value (don't include uncategorized)
+            $status_terms = get_the_terms($post_id, 'category');
+            $status_value = '';
+            if (!empty($status_terms) && !is_wp_error($status_terms)) {
+                $filtered_terms = array_filter($status_terms, function($term) {
+                    return strtolower($term->name) !== 'uncategorized';
+                });
+                $status_names = array_map(function($term) {
+                    return esc_html($term->name);
+                }, $filtered_terms);
+                $status_value = implode(', ', $status_names);
+            }
+
+            // 15. View button
+            $view_btn = '<a href="' . esc_url(get_permalink($post_id)) . '" class="button">View</a>';
+
+            $output .= '<tr>
+                <td>' . $workorder_id . '</td>
+                <td>' . $location . '</td>
+                <td>' . $engineer . '</td>
+                <td>' . esc_html($installed_product_id) . '</td>
+                <td>' . $customer_info . '</td>
+                <td>' . $date_received . '</td>
+                <td>' . $fsc_contact_date . '</td>
+                <td>' . $client_days . '</td>
+                <td>' . $schedule_date . '</td>
+                <td>' . $date_service_completed_by_fse . '</td>
+                <td>' . $closed_on . '</td>
+                <td>' . $report_date . '</td>
+                <td>' . $leads_info . '</td>
+                <td>' . $status_value . '</td>
+                <td>' . $view_btn . '</td>
+            </tr>';
         }
 
-        // 4. Product ID (ACF)
-        $installed_product_id = function_exists('get_field') ? get_field('installed_product_id', $post_id) : get_post_meta($post_id, 'installed_product_id', true);
-
-        // 5. Customer Info (ACF)
-        $customer_info = '<strong>Name:</strong> ' . esc_html(function_exists('get_field') ? get_field('wo_contact_name', $post_id) : get_post_meta($post_id, 'wo_contact_name', true)) . '<br>'
-            . '<strong>Address:</strong> ' . esc_html(function_exists('get_field') ? get_field('wo_contact_address', $post_id) : get_post_meta($post_id, 'wo_contact_address', true)) . '<br>'
-            . '<strong>Email:</strong> ' . esc_html(function_exists('get_field') ? get_field('wo_contact_email', $post_id) : get_post_meta($post_id, 'wo_contact_email', true)) . '<br>'
-            . '<strong>Number:</strong> ' . esc_html(function_exists('get_field') ? get_field('wo_service_contact_number', $post_id) : get_post_meta($post_id, 'wo_service_contact_number', true));
-
-        // 6. Date Received
-        $date_received_raw = function_exists('get_field') ? get_field('date_requested_by_customer', $post_id) : get_post_meta($post_id, 'date_requested_by_customer', true);
-        $date_received     = self::format_date($date_received_raw);
-
-        // 7. FSC Contact Date
-        $fsc_contact_date_raw = function_exists('get_field') ? get_field('wo_fsc_contact_date', $post_id) : get_post_meta($post_id, 'wo_fsc_contact_date', true);
-        $fsc_contact_date     = self::format_date($fsc_contact_date_raw);
-
-        // 8. FSC Contact with client Days
-        $client_days = '';
-        if ($fsc_contact_date_raw && $date_received_raw) {
-            $diff_days = abs(round((strtotime($fsc_contact_date_raw) - strtotime($date_received_raw)) / (60 * 60 * 24)));
-            $client_days = $diff_days . ' day' . ($diff_days === 1 ? '' : 's');
-        } else {
-            $client_days = 'N/A';
-        }
-
-        // 9. Scheduled date
-        $schedule_date = self::format_date(function_exists('get_field') ? get_field('schedule_date_time', $post_id) : get_post_meta($post_id, 'schedule_date_time', true));
-
-        // 10. Date Service Completed by FSE
-        $date_service_completed_by_fse = self::format_date(function_exists('get_field') ? get_field('date_service_completed_by_fse', $post_id) : get_post_meta($post_id, 'date_service_completed_by_fse', true));
-
-        // 11. Closed on
-        $closed_on = self::format_date(function_exists('get_field') ? get_field('closed_on', $post_id) : get_post_meta($post_id, 'closed_on', true));
-
-        // 12. Date FSR and DIA Reports sent to Customer
-        $report_date = self::format_date(function_exists('get_field') ? get_field('date_fsr_and_dia_reports_sent_to_customer', $post_id) : get_post_meta($post_id, 'date_fsr_and_dia_reports_sent_to_customer', true));
-
-        // 13. Leads (ACF)
-        $leads_info = '<strong>Lead:</strong> ' . esc_html(function_exists('get_field') ? get_field('wo_leads', $post_id) : get_post_meta($post_id, 'wo_leads', true)) . '<br>'
-            . '<strong>Category:</strong> ' . esc_html(function_exists('get_field') ? get_field('wo_lead_category', $post_id) : get_post_meta($post_id, 'wo_lead_category', true));
-
-        // 14. Status: get the term category value (don't include uncategorized)
-        $status_terms = get_the_terms($post_id, 'category');
-        $status_value = '';
-        if (!empty($status_terms) && !is_wp_error($status_terms)) {
-            $filtered_terms = array_filter($status_terms, function($term) {
-                return strtolower($term->name) !== 'uncategorized';
-            });
-            $status_names = array_map(function($term) {
-                return esc_html($term->name);
-            }, $filtered_terms);
-            $status_value = implode(', ', $status_names);
-        }
-
-        // 15. View button
-        $view_btn = '<a href="' . esc_url(get_permalink($post_id)) . '" class="button">View</a>';
-
-        $output .= '<tr>
-            <td>' . $workorder_id . '</td>
-            <td>' . $location . '</td>
-            <td>' . $engineer . '</td>
-            <td>' . esc_html($installed_product_id) . '</td>
-            <td>' . $customer_info . '</td>
-            <td>' . $date_received . '</td>
-            <td>' . $fsc_contact_date . '</td>
-            <td>' . $client_days . '</td>
-            <td>' . $schedule_date . '</td>
-            <td>' . $date_service_completed_by_fse . '</td>
-            <td>' . $closed_on . '</td>
-            <td>' . $report_date . '</td>
-            <td>' . $leads_info . '</td>
-            <td>' . $status_value . '</td>
-            <td>' . $view_btn . '</td>
-        </tr>';
+        $output .= '</tbody></table>';
+        return $output;
     }
-
-    $output .= '</tbody></table>';
-    return $output;
-}
 
     private static function format_date($raw_date)
     {
@@ -544,6 +581,7 @@ class DQ_Workorder_Table
     {
         $ajax_url = admin_url('admin-ajax.php');
         $nonce = wp_create_nonce('dq_workorder_table_nonce');
+        $engineer_val = isset($atts['engineer']) ? intval($atts['engineer']) : '';
 
         $script = "
         (function($) {
@@ -552,7 +590,17 @@ class DQ_Workorder_Table
                 'per_page' => intval($atts['per_page']),
                 'status' => sanitize_text_field(isset($atts['status']) ? $atts['status'] : ''),
                 'state' => sanitize_text_field(isset($atts['state']) ? $atts['state'] : ''),
+                'engineer' => $engineer_val
             ]) . ";
+
+            // Filtering: On change, reset to page 1 and send AJAX
+            wrapper.on('change', '.dq-workorder-table-filters select', function(e){
+                var status = wrapper.find('select[name=\"dq_filter_status\"]').val();
+                var engineer = wrapper.find('select[name=\"dq_filter_engineer\"]').val();
+                settings.status = status;
+                settings.engineer = engineer;
+                loadWorkorders(1); // Always reset to first page
+            });
 
             // Pagination click
             wrapper.on('click', '.dq-workorder-table-pagination a:not(.disabled)', function(e) {
@@ -573,7 +621,8 @@ class DQ_Workorder_Table
                         page: page,
                         per_page: settings.per_page,
                         status: settings.status,
-                        state: settings.state
+                        state: settings.state,
+                        engineer: settings.engineer
                     },
                     success: function(response) {
                         if (response.success && response.data) {
@@ -618,11 +667,13 @@ class DQ_Workorder_Table
         $per_page = isset($_POST['per_page']) ? intval($_POST['per_page']) : self::DEFAULT_PER_PAGE;
         $status = isset($_POST['status']) ? sanitize_text_field($_POST['status']) : '';
         $state = isset($_POST['state']) ? sanitize_text_field($_POST['state']) : '';
+        $engineer = isset($_POST['engineer']) ? intval($_POST['engineer']) : '';
 
         $atts = [
             'per_page' => max(1, $per_page),
             'status' => $status,
             'state' => $state,
+            'engineer' => $engineer,
         ];
 
         $data = self::get_workorders($atts, $page);
