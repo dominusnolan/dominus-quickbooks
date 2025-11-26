@@ -274,25 +274,39 @@ add_action('save_post_workorder', function($post_id) {
     // If a matching user is found and their ID differs from the current post_author, update the post_author
     if ( $user && $user->ID !== (int) $post->post_author ) {
         $is_updating = true;
+        $old_author = $post->post_author;
 
-        wp_update_post([
+        $result = wp_update_post([
             'ID'          => $post_id,
             'post_author' => $user->ID,
-        ]);
+        ], true);
+
+        $is_updating = false;
 
         // Log the change via DQ_Logger::info() when available
         if ( class_exists('DQ_Logger') ) {
-            DQ_Logger::info(
-                sprintf(
-                    'Work Order #%d post_author changed from %d to %d (member_name: %s)',
-                    $post_id,
-                    $post->post_author,
-                    $user->ID,
-                    $member_name
-                )
-            );
+            if ( is_wp_error($result) ) {
+                DQ_Logger::error(
+                    sprintf(
+                        'Work Order #%d failed to update post_author from %d to %d (member_name: %s): %s',
+                        $post_id,
+                        $old_author,
+                        $user->ID,
+                        $member_name,
+                        $result->get_error_message()
+                    )
+                );
+            } else {
+                DQ_Logger::info(
+                    sprintf(
+                        'Work Order #%d post_author changed from %d to %d (member_name: %s)',
+                        $post_id,
+                        $old_author,
+                        $user->ID,
+                        $member_name
+                    )
+                );
+            }
         }
-
-        $is_updating = false;
     }
 });
