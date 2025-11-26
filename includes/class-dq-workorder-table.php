@@ -116,6 +116,15 @@ class DQ_Workorder_Table
         $output = '<div id="' . esc_attr($wrapper_id) . '" class="dq-workorder-table-wrapper">';
         $output .= self::get_styles();
 
+        $output .= '<div class="dq-scroll-hint">
+    <svg width="54" height="32">
+       <!-- simple right arrow with "scroll" text -->
+        <text x="4" y="24" font-size="14" fill="#0996a0">Scroll →</text>
+        <line x1="35" y1="16" x2="52" y2="16" stroke="#0996a0" stroke-width="2"/>
+        <polygon points="52,12 54,16 52,20" fill="#0996a0" />
+    </svg>
+</div>';
+
         $output .= '<div class="dq-workorder-table-content">';
         $output .= self::render_table($data['workorders']);
         $output .= '</div>';
@@ -288,9 +297,25 @@ class DQ_Workorder_Table
 }
 
 .dq-workorder-table-wrapper {
-    width: 100%;
-    overflow-x: auto;
+  position: relative;
+  width: 100%;
+  overflow-x: auto;
 }
+.dq-scroll-hint {
+  position: absolute;
+  bottom: 8px;
+  right: 18px;
+  z-index: 20;
+  pointer-events: none;
+  opacity: 0.85;
+  display: none;
+}
+@media (max-width: 991px) {
+  .dq-workorder-table-wrapper .dq-scroll-hint {
+    display: block;
+  }
+}
+
 
 .dq-workorder-table {
     min-width: 1200px; /* or however wide your table needs */
@@ -302,6 +327,9 @@ class DQ_Workorder_Table
 @media (max-width: 991px) {
     .dq-workorder-table {
         min-width: 900px;
+    }
+    .dq-workorder-table-wrapper .dq-scroll-hint {
+        display: block;
     }
 }
 
