@@ -9,6 +9,9 @@ if (!defined('ABSPATH')) exit;
 class DQ_Invoice_List
 {
     const PER_PAGE = 25;
+    const PER_PAGE_MIN = 1;
+    const PER_PAGE_MAX = 100;
+    const DEFAULT_WRAPPER_ID = 'dq-invoice-list-1';
 
     public static function init()
     {
@@ -75,7 +78,7 @@ class DQ_Invoice_List
     {
         // Support per_page attribute, default to self::PER_PAGE
         $per_page = !empty($atts['per_page']) ? intval($atts['per_page']) : self::PER_PAGE;
-        if ($per_page < 1 || $per_page > 100) {
+        if ($per_page < self::PER_PAGE_MIN || $per_page > self::PER_PAGE_MAX) {
             $per_page = self::PER_PAGE;
         }
 
@@ -498,7 +501,7 @@ class DQ_Invoice_List
 
         $page = isset($_POST['page']) ? intval($_POST['page']) : 1;
         $filters = isset($_POST['filters']) ? $_POST['filters'] : [];
-        $wrapper_id = isset($_POST['wrapper_id']) ? sanitize_text_field($_POST['wrapper_id']) : 'dq-invoice-list-1';
+        $wrapper_id = isset($_POST['wrapper_id']) ? sanitize_text_field($_POST['wrapper_id']) : self::DEFAULT_WRAPPER_ID;
 
         // Sanitize filters
         $atts = [
