@@ -13,6 +13,8 @@ if (!defined('ABSPATH')) exit;
  */
 class DQ_WorkOrder_Report
 {
+    const MODAL_PER_PAGE = 10;
+
     public static function init()
     {
         add_action('admin_menu', [__CLASS__, 'menu']);
@@ -1489,6 +1491,7 @@ public static function ajax_fse_chart()
             const closeBtn = overlay ? overlay.querySelector('.dq-wo-modal-close') : null;
             const ajaxUrl = '<?php echo esc_js($ajax_url); ?>';
             const nonce = '<?php echo esc_js($nonce); ?>';
+            const defaultYear = '<?php echo intval($year); ?>';
             
             let currentFilters = {};
             let currentPage = 1;
@@ -1568,7 +1571,7 @@ public static function ajax_fse_chart()
 
             // Build title based on filter type
             function buildTitle(filterType, data) {
-                const year = data.year || '<?php echo intval($year); ?>';
+                const year = data.year || defaultYear;
                 switch (filterType) {
                     case 'month':
                         const months = ['', 'January', 'February', 'March', 'April', 'May', 'June', 
@@ -1606,7 +1609,7 @@ public static function ajax_fse_chart()
                     const filterType = link.dataset.filterType;
                     const filters = {
                         filter_type: filterType,
-                        year: link.dataset.year || '<?php echo intval($year); ?>'
+                        year: link.dataset.year || defaultYear
                     };
 
                     // Add specific filter data
@@ -1685,7 +1688,7 @@ public static function ajax_fse_chart()
         $lead_category = isset($_POST['lead_category']) ? sanitize_text_field($_POST['lead_category']) : '';
         $reschedule_reason = isset($_POST['reschedule_reason']) ? sanitize_text_field($_POST['reschedule_reason']) : '';
         $page = isset($_POST['page']) ? max(1, intval($_POST['page'])) : 1;
-        $per_page = 10;
+        $per_page = self::MODAL_PER_PAGE;
 
         // Get base workorders for the year
         $workorders = self::get_workorders_in_year($year);
