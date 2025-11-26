@@ -137,6 +137,11 @@ if (is_string($private_comments) && $private_comments !== '') {
                 
                 
             </div>
+            <div style="margin: 15px 0;">
+                <button type="button" id="dqqb-email-quotation-btn" data-post-id="<?php echo esc_attr( $post_id ); ?>" style="background:#0073aa;color:#fff;border:none;padding:10px 20px;border-radius:4px;cursor:pointer;font-size:14px;">
+                    Email Customer Quotation
+                </button>
+            </div>
             <div class="flex_column av-84xd0k-39ee9eb5b055ef5e359eb528eb8e7746 av_three_fifth  avia-builder-el-1  el_after_av_textblock  el_before_av_two_fifth  first flex_column_div  column-top-margin">
                 <div class="wo-meta-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
                     <?php
