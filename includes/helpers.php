@@ -203,110 +203,87 @@ add_action('save_post_quickbooks_invoice', function($post_id) {
 });
 
 /**
- * When a Work Order is saved/updated, set the post_author based on the ACF field 'member_name'.
+ * NEW: When a workorder is saved/updated, update the post_author to match ACF field 'member_name'
+ * Behavior:
+ *  - Skip autosaves and revisions
+ *  - Read ACF's member_name (get_field) when available, else post meta
+ *  - Resolve member_name to a WP_User using: numeric ID -> login -> email -> display_name search
+ *  - If resolved user differs from current post_author, update post_author (guarded to avoid recursion)
+ *  - Log change via DQ_Logger::info() when available
  */
-add_action('save_post_workorder', function($post_id) {
-    // Static guard flag to prevent infinite recursion
-    static $is_updating = false;
-    if ( $is_updating ) {
-        return;
-    }
+add_action('save_post_workorder', function( $post_id ) {
+    // Basic guards: autosave, revision
+    if ( defined('DOING_AUTOSAVE') && DOING_AUTOSAVE ) return;
+    if ( wp_is_post_revision( $post_id ) ) return;
 
-    // Skip autosaves
-    if ( defined('DOING_AUTOSAVE') && DOING_AUTOSAVE ) {
-        return;
-    }
+    $post = get_post( $post_id );
+    if ( ! $post || $post->post_type !== 'workorder' ) return;
 
-    // Skip revisions
-    if ( wp_is_post_revision($post_id) ) {
-        return;
-    }
+    static $dqqb_updating_author = false;
+    if ( $dqqb_updating_author ) return; // prevent recursion
 
-    // Validate post exists and is of the correct type
-    $post = get_post($post_id);
-    if ( ! $post || $post->post_type !== 'workorder' ) {
-        return;
-    }
-
-    // Read the ACF field 'member_name', fallback to get_post_meta
+    // Read member_name from ACF if available, else fallback to post meta
+    $member_raw = '';
     if ( function_exists('get_field') ) {
-        $member_name = get_field('member_name', $post_id);
-    } else {
-        $member_name = get_post_meta($post_id, 'member_name', true);
+        $member_raw = get_field( 'member_name', $post_id );
     }
-
-    // If member_name is empty, do nothing
-    if ( empty($member_name) ) {
-        return;
+    if ( empty( $member_raw ) ) {
+        $member_raw = get_post_meta( $post_id, 'member_name', true );
     }
+    $member_name = trim( (string) $member_raw );
+    if ( $member_name === '' ) return;
 
-    $user = null;
+    $found_user_id = 0;
 
-    // 1. If the value looks like an integer and a user with that ID exists, use it
-    if ( is_numeric($member_name) && intval($member_name) > 0 ) {
-        $user_by_id = get_user_by('id', intval($member_name));
-        if ( $user_by_id ) {
-            $user = $user_by_id;
+    // 1) If numeric -> treat as user ID
+    if ( ctype_digit( (string) $member_name ) ) {
+        $try_id = intval( $member_name );
+        if ( $try_id > 0 ) {
+            $u = get_user_by( 'id', $try_id );
+            if ( $u ) $found_user_id = $u->ID;
         }
     }
 
-    // 2. Try get_user_by('login', $member_name) and get_user_by('email', $member_name)
-    if ( ! $user ) {
-        $user = get_user_by('login', $member_name);
-    }
-    if ( ! $user ) {
-        $user = get_user_by('email', $member_name);
+    // 2) Try login then email
+    if ( ! $found_user_id ) {
+        $u = get_user_by( 'login', $member_name );
+        if ( ! $u ) $u = get_user_by( 'email', $member_name );
+        if ( $u ) $found_user_id = $u->ID;
     }
 
-    // 3. Use WP_User_Query to search display_name (exact-ish match)
-    if ( ! $user ) {
-        $user_query = new WP_User_Query([
+    // 3) Search display_name (WP_User_Query) as a last resort
+    if ( ! $found_user_id ) {
+        $uq = new WP_User_Query([
             'search'         => $member_name,
-            'search_columns' => ['display_name'],
+            'search_columns' => [ 'display_name' ],
             'number'         => 1,
         ]);
-        $results = $user_query->get_results();
-        if ( ! empty($results) ) {
-            $user = $results[0];
+        $results = $uq->get_results();
+        if ( ! empty( $results ) && isset( $results[0]->ID ) ) {
+            $found_user_id = intval( $results[0]->ID );
         }
     }
 
-    // If a matching user is found and their ID differs from the current post_author, update the post_author
-    if ( $user && $user->ID !== (int) $post->post_author ) {
-        $is_updating = true;
-        $old_author = $post->post_author;
+    if ( ! $found_user_id || $found_user_id <= 0 ) return;
 
-        $result = wp_update_post([
-            'ID'          => $post_id,
-            'post_author' => $user->ID,
-        ], true);
+    $current_author = intval( $post->post_author );
+    if ( $current_author === $found_user_id ) return; // nothing to do
 
-        $is_updating = false;
+    // Update post_author with recursion guard
+    $dqqb_updating_author = true;
+    wp_update_post( [
+        'ID' => $post_id,
+        'post_author' => $found_user_id,
+    ] );
+    $dqqb_updating_author = false;
 
-        // Log the change via DQ_Logger::info() when available
-        if ( class_exists('DQ_Logger') ) {
-            if ( is_wp_error($result) ) {
-                DQ_Logger::error(
-                    sprintf(
-                        'Work Order #%d failed to update post_author from %d to %d (member_name: %s): %s',
-                        $post_id,
-                        $old_author,
-                        $user->ID,
-                        $member_name,
-                        $result->get_error_message()
-                    )
-                );
-            } else {
-                DQ_Logger::info(
-                    sprintf(
-                        'Work Order #%d post_author changed from %d to %d (member_name: %s)',
-                        $post_id,
-                        $old_author,
-                        $user->ID,
-                        $member_name
-                    )
-                );
-            }
-        }
+    // Log the change
+    if ( class_exists( 'DQ_Logger' ) ) {
+        DQ_Logger::info( 'Workorder author updated from member_name field', [
+            'post_id' => $post_id,
+            'from'    => $current_author,
+            'to'      => $found_user_id,
+            'member_name' => $member_name,
+        ] );
     }
-});
+}, 20);
