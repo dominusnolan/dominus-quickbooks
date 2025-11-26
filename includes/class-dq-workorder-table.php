@@ -289,90 +289,132 @@ class DQ_Workorder_Table
 </style>';
     }
 
-    private static function render_table($workorders)
+        private static function render_table($workorders)
     {
         if (empty($workorders)) {
             return '<div class="dq-workorder-table-empty">No work orders found.</div>';
         }
 
         $output = '<table class="dq-workorder-table">';
-        $output .= '<thead><tr>';
-        $output .= '<th>WO ID</th>';
-        $output .= '<th>Customer</th>';
-        $output .= '<th>Location</th>';
-        $output .= '<th>Service Details</th>';
-        $output .= '<th>Dates</th>';
-        $output .= '<th>Status</th>';
-        $output .= '</tr></thead>';
-        $output .= '<tbody>';
+        $output .= '<thead><tr>
+            <th>Work Order ID</th>
+            <th>Location</th>
+            <th>Field Engineer</th>
+            <th>Product ID</th>
+            <th>Customer Info</th>
+            <th>Date Received</th>
+            <th>FSC Contact Date</th>
+            <th>FSC Contact with client Days</th>
+            <th>Scheduled Date</th>
+            <th>Date Service Completed by FSE</th>
+            <th>Closed On</th>
+            <th>Date FSR and DIA Reports sent</th>
+            <th>Leads</th>
+            <th>Status</th>
+            <th>View</th>
+        </tr></thead><tbody>';
 
         foreach ($workorders as $workorder) {
             $post_id = $workorder->ID;
 
-            // Get workorder fields
-            $wo_number = function_exists('get_field') ? get_field('wo_number', $post_id) : get_post_meta($post_id, 'wo_number', true);
-            $customer = function_exists('get_field') ? get_field('wo_customer', $post_id) : get_post_meta($post_id, 'wo_customer', true);
-            $wo_city = function_exists('get_field') ? get_field('wo_city', $post_id) : get_post_meta($post_id, 'wo_city', true);
-            $wo_state = function_exists('get_field') ? get_field('wo_state', $post_id) : get_post_meta($post_id, 'wo_state', true);
-            $wo_address = function_exists('get_field') ? get_field('wo_address', $post_id) : get_post_meta($post_id, 'wo_address', true);
-            
-            // Service details
-            $service_type = function_exists('get_field') ? get_field('service_type', $post_id) : get_post_meta($post_id, 'service_type', true);
-            $equipment = function_exists('get_field') ? get_field('equipment', $post_id) : get_post_meta($post_id, 'equipment', true);
-            $serial_number = function_exists('get_field') ? get_field('serial_number', $post_id) : get_post_meta($post_id, 'serial_number', true);
-            
-            // Dates
-            $date_requested = function_exists('get_field') ? get_field('date_requested_by_customer', $post_id) : get_post_meta($post_id, 'date_requested_by_customer', true);
-            $schedule_date = function_exists('get_field') ? get_field('schedule_date_time', $post_id) : get_post_meta($post_id, 'schedule_date_time', true);
-            $closed_on = function_exists('get_field') ? get_field('closed_on', $post_id) : get_post_meta($post_id, 'closed_on', true);
-            
-            // Get status from taxonomy
-            $status_terms = get_the_terms($post_id, 'status');
-            $status_name = '';
-            $status_slug = '';
-            if (!is_wp_error($status_terms) && !empty($status_terms) && is_array($status_terms)) {
-                $status_term = array_shift($status_terms);
-                $status_name = $status_term->name;
-                $status_slug = $status_term->slug;
+            // 1. Work Order ID: post_title
+            $workorder_id = esc_html(get_the_title($post_id));
+
+            // 2. Location
+            $wo_location = get_post_meta($post_id, 'wo_location', true);
+            $wo_city = get_post_meta($post_id, 'wo_city', true);
+            $wo_state = get_post_meta($post_id, 'wo_state', true);
+            $location = esc_html($wo_location) . '<br>' . esc_html($wo_city) . ', ' . esc_html($wo_state);
+
+            // 3. Field Engineer (author display name)
+            $author_id = $workorder->post_author;
+            $engineer = '';
+            if ($author_id) {
+                $user = get_userdata($author_id);
+                if ($user) {
+                    $engineer = esc_html($user->display_name);
+                }
             }
 
-            // Build location string
-            $location_parts = array_filter([
-                $wo_address,
-                $wo_city,
-                $wo_state
-            ]);
-            $location = !empty($location_parts) ? implode(', ', $location_parts) : 'N/A';
+            // 4. Product ID
+            $installed_product_id = get_post_meta($post_id, 'installed_product_id', true);
 
-            // Build service details grouped cell
-            $service_html = '<div class="wo-grouped-cell">';
-            $service_html .= '<strong>Type:</strong> ' . esc_html($service_type ?: 'N/A') . '<br>';
-            $service_html .= '<strong>Equipment:</strong> ' . esc_html($equipment ?: 'N/A') . '<br>';
-            $service_html .= '<strong>Serial #:</strong> ' . esc_html($serial_number ?: 'N/A');
-            $service_html .= '</div>';
+            // 5. Customer Info
+            $customer_rows = [];
+            $customer_rows[] = '<strong>Name:</strong> ' . esc_html(get_post_meta($post_id, 'wo_contact_name', true));
+            $customer_rows[] = '<strong>Address:</strong> ' . esc_html(get_post_meta($post_id, 'wo_contact_address', true));
+            $customer_rows[] = '<strong>Email:</strong> ' . esc_html(get_post_meta($post_id, 'wo_contact_email', true));
+            $customer_rows[] = '<strong>Number:</strong> ' . esc_html(get_post_meta($post_id, 'wo_service_contact_number', true));
+            $customer_info = implode('<br>', $customer_rows);
 
-            // Build dates grouped cell
-            $dates_html = '<div class="wo-grouped-cell">';
-            $dates_html .= '<strong>Requested:</strong> ' . esc_html(self::format_date($date_requested)) . '<br>';
-            $dates_html .= '<strong>Scheduled:</strong> ' . esc_html(self::format_date($schedule_date)) . '<br>';
-            $dates_html .= '<strong>Closed:</strong> ' . esc_html(self::format_date($closed_on));
-            $dates_html .= '</div>';
+            // 6. Date Received
+            $date_received = self::format_date(get_post_meta($post_id, 'date_requested_by_customer', true));
 
-            // Status badge
-            $status_class = 'status-' . sanitize_html_class($status_slug);
-            $status_html = $status_name ? '<span class="dq-workorder-status ' . $status_class . '">' . esc_html($status_name) . '</span>' : 'N/A';
+            // 7. FSC Contact Date
+            $fsc_contact_date_raw = get_post_meta($post_id, 'wo_fsc_contact_date', true);
+            $fsc_contact_date = self::format_date($fsc_contact_date_raw);
 
-            $permalink = get_permalink($post_id);
-            $display_id = $wo_number ?: $post_id;
+            // 8. FSC Contact with client Days
+            $date_requested_raw = get_post_meta($post_id, 'date_requested_by_customer', true);
+            $client_days = '';
+            if ($fsc_contact_date_raw && $date_requested_raw) {
+                $diff_days = abs(round((strtotime($fsc_contact_date_raw) - strtotime($date_requested_raw)) / (60 * 60 * 24)));
+                $client_days = $diff_days . ' day' . ($diff_days === 1 ? '' : 's');
+            } else {
+                $client_days = 'N/A';
+            }
 
-            $output .= '<tr>';
-            $output .= '<td class="wo-id-cell"><a href="' . esc_url($permalink) . '">' . esc_html($display_id) . '</a></td>';
-            $output .= '<td class="wo-customer-cell">' . esc_html($customer ?: 'N/A') . '</td>';
-            $output .= '<td>' . esc_html($location) . '</td>';
-            $output .= '<td>' . $service_html . '</td>';
-            $output .= '<td>' . $dates_html . '</td>';
-            $output .= '<td>' . $status_html . '</td>';
-            $output .= '</tr>';
+            // 9. Scheduled date
+            $schedule_date = self::format_date(get_post_meta($post_id, 'schedule_date_time', true));
+
+            // 10. Date Service Completed by FSE
+            $date_service_completed_by_fse = self::format_date(get_post_meta($post_id, 'date_service_completed_by_fse', true));
+
+            // 11. Closed on
+            $closed_on = self::format_date(get_post_meta($post_id, 'closed_on', true));
+
+            // 12. Date FSR and DIA Reports sent to Customer
+            $report_date = self::format_date(get_post_meta($post_id, 'date_fsr_and_dia_reports_sent_to_customer', true));
+
+            // 13. Leads
+            $leads_rows = [];
+            $leads_rows[] = '<strong>Lead:</strong> ' . esc_html(get_post_meta($post_id, 'wo_leads', true));
+            $leads_rows[] = '<strong>Category:</strong> ' . esc_html(get_post_meta($post_id, 'wo_lead_category', true));
+            $leads_info = implode('<br>', $leads_rows);
+
+            // 14. Status: get term category value (exclude uncategorized)
+            $status_terms = get_the_terms($post_id, 'category');
+            $status_value = '';
+            if (!empty($status_terms) && !is_wp_error($status_terms)) {
+                $filtered_terms = array_filter($status_terms, function($term) {
+                    return strtolower($term->name) !== 'uncategorized';
+                });
+                $status_names = array_map(function($term) {
+                    return esc_html($term->name);
+                }, $filtered_terms);
+                $status_value = implode(', ', $status_names);
+            }
+
+            // 15. View button
+            $view_btn = '<a href="' . esc_url(get_permalink($post_id)) . '" class="button">View</a>';
+
+            $output .= '<tr>
+                <td>' . $workorder_id . '</td>
+                <td>' . $location . '</td>
+                <td>' . $engineer . '</td>
+                <td>' . esc_html($installed_product_id) . '</td>
+                <td>' . $customer_info . '</td>
+                <td>' . $date_received . '</td>
+                <td>' . $fsc_contact_date . '</td>
+                <td>' . $client_days . '</td>
+                <td>' . $schedule_date . '</td>
+                <td>' . $date_service_completed_by_fse . '</td>
+                <td>' . $closed_on . '</td>
+                <td>' . $report_date . '</td>
+                <td>' . $leads_info . '</td>
+                <td>' . $status_value . '</td>
+                <td>' . $view_btn . '</td>
+            </tr>';
         }
 
         $output .= '</tbody></table>';
