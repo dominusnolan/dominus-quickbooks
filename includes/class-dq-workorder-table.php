@@ -451,8 +451,8 @@ class DQ_Workorder_Table
             var wrapper = $('#" . esc_js($wrapper_id) . "');
             var settings = " . json_encode([
                 'per_page' => intval($atts['per_page']),
-                'status' => sanitize_text_field($atts['status'] ?? ''),
-                'state' => sanitize_text_field($atts['state'] ?? ''),
+                'status' => sanitize_text_field(isset($atts['status']) ? $atts['status'] : ''),
+                'state' => sanitize_text_field(isset($atts['state']) ? $atts['state'] : ''),
             ]) . ";
 
             // Pagination click
@@ -495,6 +495,10 @@ class DQ_Workorder_Table
                                 scrollTop: wrapper.offset().top - 100
                             }, 300);
                         }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Work order table AJAX error:', error);
+                        wrapper.find('.dq-workorder-table-content').html('<div class=\"dq-workorder-table-empty\">Error loading work orders. Please try again.</div>');
                     },
                     complete: function() {
                         wrapper.removeClass('loading');
