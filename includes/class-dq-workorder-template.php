@@ -100,137 +100,50 @@ class DQ_Workorder_Template {
         return $template;
     }
 
-    /**
-     * Enqueue front-end scripts for single workorder page and localize AJAX data.
-     */
-    public static function enqueue_scripts() {
-        if ( ! is_singular( 'workorder' ) ) {
-            return;
+
+
+    public static function handle_post_quotation() {
+        // Validate nonce and post_id
+        if (
+            !isset($_POST['dqqb_send_quotation_nonce'])
+            || !check_admin_referer('dqqb_send_quotation', 'dqqb_send_quotation_nonce', false)
+        ) {
+            $referer = wp_get_referer() ?: home_url();
+            wp_safe_redirect(add_query_arg('dqqb_quote_error', rawurlencode('Security check failed.'), $referer));
+            exit;
         }
 
-        // Register a handle and enqueue an inline script (no external file required).
-        // Use false as the src to avoid an empty-string src causing issues.
-        wp_register_script( 'dqqb-workorder', false );
-        wp_enqueue_script( 'dqqb-workorder' );
-
-        // Localize AJAX url and nonce
-        wp_localize_script( 'dqqb-workorder', 'dqqb_ajax', [
-            'ajax_url' => admin_url( 'admin-ajax.php' ),
-            'nonce'    => wp_create_nonce( 'dqqb_send_quotation' ),
-        ] );
-
-        // Inline JavaScript to handle button click and AJAX post
-        $inline_js = <<<JS
-(function(){
-    // support either button id used in templates
-    var btn = document.querySelector('#dqqb-email-quotation, #dqqb-email-quotation-btn');
-    if (!btn) {
-        if (window.console && console.log) console.log('DQQB: email button not found on page.');
-        return;
-    }
-
-    btn.addEventListener('click', function(e){
-        e.preventDefault();
-        var postId = this.getAttribute('data-post-id') || (typeof window.dqqb_post_id !== 'undefined' ? window.dqqb_post_id : null);
-        if (!postId) {
-            alert('Post ID not available.');
-            return;
-        }
-        var nonce = (typeof dqqb_ajax !== 'undefined' && dqqb_ajax.nonce) ? dqqb_ajax.nonce : '';
-        var self = this;
-        self.disabled = true;
-        var origText = self.innerText;
-        self.innerText = 'Sending...';
-
-        var xhr = new XMLHttpRequest();
-        xhr.open('POST', (typeof dqqb_ajax !== 'undefined' ? dqqb_ajax.ajax_url : '/wp-admin/admin-ajax.php'));
-        xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded; charset=UTF-8');
-
-        xhr.onload = function() {
-            var res;
-            try {
-                res = JSON.parse(xhr.responseText);
-            } catch (e) {
-                alert('Unexpected response from server.');
-                self.disabled = false;
-                self.innerText = origText;
-                return;
-            }
-            if (res && res.success) {
-                self.innerText = 'Email sent';
-            } else {
-                var msg = (res && res.data) ? res.data : 'Failed to send email.';
-                alert(msg);
-                self.disabled = false;
-                self.innerText = origText;
-            }
-        };
-
-        xhr.onerror = function() {
-            alert('Request failed. Please try again.');
-            self.disabled = false;
-            self.innerText = origText;
-        };
-
-        var body = 'action=dqqb_send_quotation&post_id=' + encodeURIComponent(postId) + '&nonce=' + encodeURIComponent(nonce);
-        xhr.send(body);
-    });
-})();
-JS;
-        wp_add_inline_script( 'dqqb-workorder', $inline_js );
-    }
-
-    /**
-     * AJAX handler to send a simple quotation email to the workorder contact.
-     *
-     * Expects POST: post_id (int), nonce
-     */
-    public static function ajax_send_quotation() {
-        // Verify nonce (will die with -1 on failure)
-        check_ajax_referer( 'dqqb_send_quotation', 'nonce' );
-
-        $post_id = isset( $_POST['post_id'] ) ? intval( $_POST['post_id'] ) : 0;
-        if ( $post_id <= 0 ) {
-            wp_send_json_error( 'Invalid post ID.' );
+        $post_id = isset($_POST['post_id']) ? intval($_POST['post_id']) : 0;
+        $referer = wp_get_referer() ?: get_permalink($post_id);
+        if ($post_id <= 0) {
+            wp_safe_redirect(add_query_arg('dqqb_quote_error', rawurlencode('Invalid post ID.'), $referer));
+            exit;
         }
 
-        // Try common meta keys for customer email
-        $email_keys = [ 'wo_contact_email', 'wo_customer_email', 'wo_email', 'customer_email' ];
+        // Find recipient
+        $email_keys = ['wo_contact_email', 'wo_customer_email', 'wo_email', 'customer_email'];
         $email = '';
-        foreach ( $email_keys as $key ) {
-            $val = get_post_meta( $post_id, $key, true );
-            if ( ! empty( $val ) ) {
-                $email = (string) $val;
-                break;
-            }
+        foreach ($email_keys as $key) {
+            $val = get_post_meta($post_id, $key, true);
+            if (!empty($val)) { $email = (string)$val; break; }
         }
-        $email = sanitize_email( $email );
-
-        // Try name fallback keys
-        $name_keys = [ 'wo_contact_name', 'wo_customer_name', 'customer_name' ];
-        $name = '';
-        foreach ( $name_keys as $k ) {
-            $v = get_post_meta( $post_id, $k, true );
-            if ( ! empty( $v ) ) {
-                $name = (string) $v;
-                break;
-            }
-        }
-
-        if ( empty( $email ) || ! is_email( $email ) ) {
-            wp_send_json_error( 'No valid contact email found for this workorder.' );
+        $email = sanitize_email($email);
+        if (empty($email) || !is_email($email)) {
+            wp_safe_redirect(add_query_arg('dqqb_quote_error', rawurlencode('No valid contact email found for this workorder.'), $referer));
+            exit;
         }
 
         $subject = 'Quotation';
-        $message = 'Hello';
+        $body = 'Hello';
 
-        // Attempt to send the email
-        $sent = wp_mail( $email, $subject, $message );
+        $sent = wp_mail($email, $subject, $body);
 
-        if ( $sent ) {
-            wp_send_json_success( 'Email sent successfully.' );
+        if ($sent) {
+            wp_safe_redirect(add_query_arg('dqqb_quote_sent', '1', $referer));
+            exit;
         } else {
-            wp_send_json_error( 'Failed to send email (wp_mail returned false).' );
+            wp_safe_redirect(add_query_arg('dqqb_quote_error', rawurlencode('Failed to send email.'), $referer));
+            exit;
         }
     }
 }

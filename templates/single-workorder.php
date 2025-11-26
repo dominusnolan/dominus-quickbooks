@@ -249,23 +249,12 @@ if (is_string($private_comments) && $private_comments !== '') {
                     ?>
                 </div>
 
-                   <?php
-                    // Show success/error after redirect from form submission
-                    if ( isset( $_GET['dqqb_quote_sent'] ) && intval( $_GET['dqqb_quote_sent'] ) === 1 ) {
-                        echo '<div class="dqqb-notice">Quotation email has been sent to the customer.</div>';
-                    } elseif ( isset( $_GET['dqqb_quote_error'] ) && $_GET['dqqb_quote_error'] !== '' ) {
-                        // sanitize the message for display
-                        $err = wp_kses_post( wp_unslash( $_GET['dqqb_quote_error'] ) );
-                        echo '<div class="dqqb-error">' . esc_html( $err ) . '</div>';
-                    }
-                    ?>
-
-                    <div style="margin: 15px 0;">
-                        <form method="post" action="<?php echo esc_url( admin_url('admin-post.php') ); ?>" style="display:inline;">
+                   <div style="margin: 15px 0;">
+                        <form method="post" action="<?php echo esc_url( admin_url('admin-post.php') ); ?>">
                             <?php wp_nonce_field( 'dqqb_send_quotation', 'dqqb_send_quotation_nonce' ); ?>
                             <input type="hidden" name="action" value="dqqb_send_quotation_nonajax" />
                             <input type="hidden" name="post_id" value="<?php echo esc_attr( $post_id ); ?>" />
-                            <button type="submit" id="dqqb-email-quotation" style="background:#0073aa;color:#fff;border:none;padding:10px 20px;border-radius:6px;font-weight:600;cursor:pointer;">
+                            <button type="submit" style="background:#0073aa;color:#fff;border:none;padding:10px 20px;border-radius:6px;font-weight:600;cursor:pointer;">
                                 Email Customer Quotation
                             </button>
                         </form>
