@@ -179,13 +179,16 @@ class DQ_Invoice_List
         ];
 
         $output = '<form class="dq-invoice-list-filter" data-wrapper="' . esc_attr($wrapper_id) . '" style="margin-bottom:20px; display:flex; gap:16px; align-items:flex-end; flex-wrap:wrap;">';
-        $output .= '<div><label>Status<br>
-            <select name="status">
-                <option value="">All</option>
-                <option value="paid"' . ($status == 'paid' ? ' selected' : '') . '>Paid</option>
-                <option value="unpaid"' . ($status == 'unpaid' ? ' selected' : '') . '>Unpaid</option>
-            </select>
-        </label></div>';
+
+        if (empty($atts['unpaid_only']) ) {    
+            $output .= '<div><label>Status<br>
+                <select name="status">
+                    <option value="">All</option>
+                    <option value="paid"' . ($status == 'paid' ? ' selected' : '') . '>Paid</option>
+                    <option value="unpaid"' . ($status == 'unpaid' ? ' selected' : '') . '>Unpaid</option>
+                </select>
+            </label></div>';
+        }
         $output .= '<div><label>Date Type<br>
             <select name="date_type">';
         foreach($date_type_options as $key => $label) {
