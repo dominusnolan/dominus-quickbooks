@@ -128,7 +128,7 @@ if (is_string($private_comments) && $private_comments !== '') {
             <?php endif; ?>
         </header>
 
-        <section class="wo-meta" style="margin:26px 0;">
+        <div class="entry-content-wrapper clearfix">
             <h3 style="font-size:30px;font-weight:700;text-align:center;margin:40px 0">Summary</h3>
             
             <div class="wo-meta-engineer">
@@ -137,50 +137,94 @@ if (is_string($private_comments) && $private_comments !== '') {
                 
                 
             </div>
-            <div class="wo-meta-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
-                <?php
-                // A few handy bits users often want under the timeline; adjust/extend as needed.
-                $pairs = [
-                    'Product ID'             => $val('installed_product_id'),
-                    'Work Order ID'                  => $val('work_order_number'),
-                    'State'                  => $val('wo_state'),
-                    'City'                   => $val('wo_city'),
-                    'Account'               => $val('wo_location'),
-                    'Invoice No'             => $val('wo_invoice_no'),
-                    'Total Billed'           => $val('wo_total_billed'),
-                    'Balance Due'            => $val('wo_balance_due'),
-                ];
-                foreach ( $pairs as $label => $value ) {
-                    if ( $value === '' ) continue;
-                    echo '<div class="wo-meta-card" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;">';
-                    echo '<div style="font-weight:600;color:#222;margin-bottom:4px;">' . esc_html( $label ) . '</div>';
-                    echo '<div style="color:#333;">' . esc_html( is_numeric($value) ? number_format( (float)$value, 2 ) : (string)$value ) . '</div>';
-                    echo '</div>';
-                }
-                ?>
-            </div>
-        </section>
-
-        <?php if ( $private_comments && trim((string)$private_comments) !== '' ) : ?>
-            <section class="wo-private-comments">
-                <h3>Private Comments</h3>
-                <div>
+            <div class="flex_column av-84xd0k-39ee9eb5b055ef5e359eb528eb8e7746 av_three_fifth  avia-builder-el-1  el_after_av_textblock  el_before_av_two_fifth  first flex_column_div  column-top-margin">
+                <div class="wo-meta-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
                     <?php
-                        // Supports basic line breaks, but escapes HTML
-                        echo nl2br( esc_html( (string)$private_comments ) );
+                    // A few handy bits users often want under the timeline; adjust/extend as needed.
+                    $pairs = [
+                        'Product ID'             => $val('installed_product_id'),
+                        'Work Order ID'          => $val('work_order_number'),
+                        'State'                  => $val('wo_state'),
+                        'City'                   => $val('wo_city'),
+                        'Account'               => $val('wo_location'),
+
+                    ];
+                    foreach ( $pairs as $label => $value ) {
+                        if ( $value === '' ) continue;
+                        echo '<div class="wo-meta-card" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;">';
+                        echo '<div style="font-weight:600;color:#222;margin-bottom:4px;">' . esc_html( $label ) . '</div>';
+                        echo '<div style="color:#333;">' . esc_html( is_numeric($value) ? number_format( (float)$value, 2 ) : (string)$value ) . '</div>';
+                        echo '</div>';
+                    }
                     ?>
                 </div>
-            </section>
-        <?php endif; ?>
-        
-        <section class="wo-process" aria-labelledby="wo-process-heading" style="margin:20px 0 10px;">
-         
-            <?php
-            // Render the infographic timeline (loads its own CSS)
-            echo do_shortcode('[workorder_timeline descriptions="1"]');
-            ?>
-        </section>
+                <?php if ( $private_comments && trim((string)$private_comments) !== '' ) : ?>
+                    <div class="wo-private-comments">
+                        <h3>Private Comments</h3>
+                        <div>
+                            <?php
+                                // Supports basic line breaks, but escapes HTML
+                                echo nl2br( esc_html( (string)$private_comments ) );
+                            ?>
+                        </div>
+                    </div>
+                <?php endif; ?>
+            </div>
+                
+            <div class="flex_column av-4t6g44-f63431ee47f87602bdd4dcb7a3f161e8 av_two_fifth  avia-builder-el-3  el_after_av_three_fifth  avia-builder-el-last  flex_column_div  column-top-margin">
+                <h3 style="display:block">Invoice Details:</h3>
+                <div class="wo-meta-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
+                    
+                    <?php
+                    // A few handy bits users often want under the timeline; adjust/extend as needed.
+                    $pairs = [
+                        'Invoice No'             => $val('wo_invoice_no'),
+                        'Total Billed'           => $val('wo_total_billed'),
+                        'Balance Due'            => $val('wo_balance_due'),
+                    ];
+                    foreach ( $pairs as $label => $value ) {
+                        if ( $value === '' ) continue;
+                        echo '<div class="wo-meta-card" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;">';
+                        echo '<div style="font-weight:600;color:#222;margin-bottom:4px;">' . esc_html( $label ) . '</div>';
+                        echo '<div style="color:#333;">' . esc_html( is_numeric($value) ? number_format( (float)$value, 2 ) : (string)$value ) . '</div>';
+                        echo '</div>';
+                    }
+                    ?>
+                </div>
+                <hr>
+                <h3 style="display:block">Lead Details:</h3>
+                <div class="wo-meta-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
+                    
+                    <?php
+                    // A few handy bits users often want under the timeline; adjust/extend as needed.
+                    $pairs = [
+                        'Leads'             => $val('wo_leads'),
+                        'Category'           => $val('wo_lead_category'),
+                    ];
+                    foreach ( $pairs as $label => $value ) {
+                        if ( $value === '' ) continue;
+                        echo '<div class="wo-meta-card" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;">';
+                        echo '<div style="font-weight:600;color:#222;margin-bottom:4px;">' . esc_html( $label ) . '</div>';
+                        echo '<div style="color:#333;">' . esc_html( is_numeric($value) ? number_format( (float)$value, 2 ) : (string)$value ) . '</div>';
+                        echo '</div>';
+                    }
+                    ?>
+                </div>
+            </div>
+            
+       
 
+            <div class="flex_column av-4hfcms-f9d3836b86fa268345cf372c3ccd7dd8 av_one_full  avia-builder-el-5  el_after_av_two_fifth  avia-builder-el-last  first flex_column_div  ">
+
+                <section class="wo-process" aria-labelledby="wo-process-heading" style="margin:20px 0 10px;">
+
+                    <?php
+                    // Render the infographic timeline (loads its own CSS)
+                    echo do_shortcode('[workorder_timeline descriptions="1"]');
+                    ?>
+                </section>
+            </div>
+        </div>
         <div class="entry-content" style="margin:30px 0;">
             <?php
             // Show the post content if you use the editor to add additional information
