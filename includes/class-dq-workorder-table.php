@@ -162,10 +162,9 @@ class DQ_Workorder_Table
         return '<style>
 .dq-workorder-table-wrapper {
     width: 100%;
-    margin: 20px 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    position: relative;
-    overflow-x: auto;
+    margin: 0 auto;
+    padding: 0;
+    box-sizing: border-box;
 }
 .dq-workorder-table-wrapper.loading {
     opacity: 0.6;
@@ -188,13 +187,12 @@ class DQ_Workorder_Table
 }
 .dq-workorder-table {
     width: 100%;
+    min-width: 0;
     border-collapse: collapse;
     background: #fff;
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     border-radius: 8px;
-    min-width: 800px;
-    display: block;
-    overflow-x: auto;
+    display: table;
     box-sizing: border-box;
 }
 .dq-workorder-table th {
@@ -221,7 +219,7 @@ class DQ_Workorder_Table
 .dq-view-btn {
     display: inline-block;
     background: #0996a0;
-    color: #fff;
+    color: #fff !important;
     padding: 6px 16px;
     border-radius: 5px;
     text-decoration: none;
@@ -247,7 +245,7 @@ class DQ_Workorder_Table
     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
     gap:18px;
 }
-.dq-expanded-content .dq-details-block {
+.dq-details-block {
     background: #fff;
     border: 1px solid #c7e4eb;
     border-radius: 7px;
@@ -264,7 +262,11 @@ class DQ_Workorder_Table
     display: none;
 }
 @media (max-width: 991px) {
-    .dq-workorder-table { min-width: 640px; }
+    .dq-workorder-table-wrapper, .dq-workorder-table {
+        width: 100vw;
+        min-width: 0;
+        max-width: 100vw;
+    }
     .dq-workorder-table-wrapper .dq-scroll-hint { display: block; }
 }
 @media (max-width: 768px) {
@@ -334,7 +336,13 @@ class DQ_Workorder_Table
             <th>Work Order ID</th>
             <th>Field Engineer</th>
             <th>Status</th>
-            <th>Location</th>
+            <th>Date Received</th>
+            <th>FSC Contact Date</th>
+            <th>FSC Contact with client Days</th>
+            <th>Scheduled date</th>
+            <th>Date Service Completed by FSE</th>
+            <th>Closed On</th>
+            <th>Date FSR and DIA Reports sent</th>
             <th>Product ID</th>
             <th>Action</th>
         </tr></thead><tbody>';
@@ -365,48 +373,57 @@ class DQ_Workorder_Table
                 }, $filtered_terms);
                 $status_value = implode(', ', $status_names);
             }
-            $wo_location = function_exists('get_field') ? get_field('wo_location', $post_id) : get_post_meta($post_id, 'wo_location', true);
-            $wo_city     = function_exists('get_field') ? get_field('wo_city', $post_id) : get_post_meta($post_id, 'wo_city', true);
-            $wo_state    = function_exists('get_field') ? get_field('wo_state', $post_id) : get_post_meta($post_id, 'wo_state', true);
-            $location = '<div><span style="font-weight:bold;">Account:</span> ' . esc_html($wo_location) . '<br>'
-                . '<span style="font-weight:bold;">City:</span> ' . esc_html($wo_state) . '<br>'
-                . '<span style="font-weight:bold;">State:</span> ' . esc_html($wo_city) . '</div>';
-            $product_id = function_exists('get_field') ? get_field('installed_product_id', $post_id) : get_post_meta($post_id, 'installed_product_id', true);
-            $view_btn = '<a href="' . esc_url(get_permalink($post_id)) . '" class="dq-view-btn" target="_blank">View</a>';
-            $expand_btn = '<button class="dq-expand-btn" data-expand-id="dq-details-' . $post_id . '">&#x25BC; Expand</button>';
-            $output .= '<tr class="dq-workorder-row"><td>' . $workorder_id . '</td><td>' . $engineer . '</td><td>' . $status_value . '</td><td>' . $location . '</td><td>' . esc_html($product_id) . '</td><td>' . $view_btn . $expand_btn . '</td></tr>';
-
-            // Details row (hidden by default)
-            $output .= '<tr id="dq-details-' . $post_id . '" class="dq-expanded-row" style="display:none;"><td colspan="6"><div class="dq-expanded-content">';
-            // Block 1: Dates
+            // Main columns dates and product
             $date_received_raw = function_exists('get_field') ? get_field('date_requested_by_customer', $post_id) : get_post_meta($post_id, 'date_requested_by_customer', true);
             $date_received = self::format_date($date_received_raw);
 
             $fsc_contact_date_raw = function_exists('get_field') ? get_field('wo_fsc_contact_date', $post_id) : get_post_meta($post_id, 'wo_fsc_contact_date', true);
             $fsc_contact_date = self::format_date($fsc_contact_date_raw);
 
-            $client_days = ($fsc_contact_date_raw && $date_received_raw) ? abs(round((strtotime($fsc_contact_date_raw) - strtotime($date_received_raw)) / (60 * 60 * 24))) . ' day' . (abs(round((strtotime($fsc_contact_date_raw) - strtotime($date_received_raw)) / (60 * 60 * 24))) === 1 ? '' : 's') : 'N/A';
+            $client_days = '';
+            if ($fsc_contact_date_raw && $date_received_raw) {
+                $diff_days = abs(round((strtotime($fsc_contact_date_raw) - strtotime($date_received_raw)) / (60 * 60 * 24)));
+                $client_days = $diff_days . ' day' . ($diff_days === 1 ? '' : 's');
+            } else {
+                $client_days = 'N/A';
+            }
+
             $schedule_date = self::format_date(function_exists('get_field') ? get_field('schedule_date_time', $post_id) : get_post_meta($post_id, 'schedule_date_time', true));
             $date_service_completed_by_fse = self::format_date(function_exists('get_field') ? get_field('date_service_completed_by_fse', $post_id) : get_post_meta($post_id, 'date_service_completed_by_fse', true));
             $closed_on = self::format_date(function_exists('get_field') ? get_field('closed_on', $post_id) : get_post_meta($post_id, 'closed_on', true));
             $report_date = self::format_date(function_exists('get_field') ? get_field('date_fsr_and_dia_reports_sent_to_customer', $post_id) : get_post_meta($post_id, 'date_fsr_and_dia_reports_sent_to_customer', true));
-            $output .= '<div class="dq-details-block"><strong>Dates &amp; Lead</strong><br>Date Received: ' . $date_received . '<br>FSC Contact Date: ' . $fsc_contact_date .
-                '<br>FSC Contact with client Days: ' . $client_days .
-                '<br>Scheduled date: ' . $schedule_date .
-                '<br>Date Service Completed by FSE: ' . $date_service_completed_by_fse .
-                '<br>Closed On: ' . $closed_on .
-                '<br>Date FSR and DIA Reports sent: ' . $report_date . '</div>';
-            // Block 2: Leads
-            $leads_info = '<div class="dq-details-block"><strong>Leads</strong><br>Lead: ' . esc_html(function_exists('get_field') ? get_field('wo_leads', $post_id) : get_post_meta($post_id, 'wo_leads', true)) . '<br>Category: ' . esc_html(function_exists('get_field') ? get_field('wo_lead_category', $post_id) : get_post_meta($post_id, 'wo_lead_category', true)) . '</div>';
-            $output .= $leads_info;
+            $product_id = function_exists('get_field') ? get_field('installed_product_id', $post_id) : get_post_meta($post_id, 'installed_product_id', true);
+            $view_btn = '<a href="' . esc_url(get_permalink($post_id)) . '" class="dq-view-btn" target="_blank">View</a>';
+            $expand_btn = '<button class="dq-expand-btn" data-expand-id="dq-details-' . $post_id . '">&#x25BC; Expand</button>';
+            $output .= '<tr class="dq-workorder-row"><td>' . $workorder_id . '</td><td>' . $engineer . '</td><td>' . $status_value . '</td><td>' . $date_received . '</td><td>' . $fsc_contact_date . '</td><td>' . $client_days . '</td><td>' . $schedule_date . '</td><td>' . $date_service_completed_by_fse . '</td><td>' . $closed_on . '</td><td>' . $report_date . '</td><td>' . esc_html($product_id) . '</td><td>' . $view_btn . $expand_btn . '</td></tr>';
 
-            // Block 3: Customer Info
-            $customer_info = '<div class="dq-details-block"><strong>Customer Info</strong><br>Name: ' . esc_html(function_exists('get_field') ? get_field('wo_contact_name', $post_id) : get_post_meta($post_id, 'wo_contact_name', true)) . '<br>Address: ' . esc_html(function_exists('get_field') ? get_field('wo_contact_address', $post_id) : get_post_meta($post_id, 'wo_contact_address', true)) . '<br>Email: ' . esc_html(function_exists('get_field') ? get_field('wo_contact_email', $post_id) : get_post_meta($post_id, 'wo_contact_email', true)) . '<br>Contact: ' . esc_html(function_exists('get_field') ? get_field('wo_service_contact_number', $post_id) : get_post_meta($post_id, 'wo_service_contact_number', true)) . '</div>';
-            $output .= $customer_info;
-            $output .= '</div></td></tr>';
+            // Details row (expand)
+            // Location
+            $wo_location = function_exists('get_field') ? get_field('wo_location', $post_id) : get_post_meta($post_id, 'wo_location', true);
+            $wo_city     = function_exists('get_field') ? get_field('wo_city', $post_id) : get_post_meta($post_id, 'wo_city', true);
+            $wo_state    = function_exists('get_field') ? get_field('wo_state', $post_id) : get_post_meta($post_id, 'wo_state', true);
+            $location_blk = '<div class="dq-details-block"><strong>Location Details</strong><br>'
+                . 'Account: ' . esc_html($wo_location) . '<br>'
+                . 'City: ' . esc_html($wo_state) . '<br>'
+                . 'State: ' . esc_html($wo_city) . '</div>';
+
+            // Leads Section
+            $leads_blk = '<div class="dq-details-block"><strong>Leads</strong><br>Lead: ' . esc_html(function_exists('get_field') ? get_field('wo_leads', $post_id) : get_post_meta($post_id, 'wo_leads', true))
+                . '<br>Category: ' . esc_html(function_exists('get_field') ? get_field('wo_lead_category', $post_id) : get_post_meta($post_id, 'wo_lead_category', true)) . '</div>';
+
+            // Customer Information Section
+            $customer_blk = '<div class="dq-details-block"><strong>Customer Info</strong><br>Name: ' . esc_html(function_exists('get_field') ? get_field('wo_contact_name', $post_id) : get_post_meta($post_id, 'wo_contact_name', true))
+                . '<br>Address: ' . esc_html(function_exists('get_field') ? get_field('wo_contact_address', $post_id) : get_post_meta($post_id, 'wo_contact_address', true))
+                . '<br>Email: ' . esc_html(function_exists('get_field') ? get_field('wo_contact_email', $post_id) : get_post_meta($post_id, 'wo_contact_email', true))
+                . '<br>Contact: ' . esc_html(function_exists('get_field') ? get_field('wo_service_contact_number', $post_id) : get_post_meta($post_id, 'wo_service_contact_number', true)) . '</div>';
+
+            $output .= '<tr id="dq-details-' . $post_id . '" class="dq-expanded-row" style="display:none;"><td colspan="12"><div class="dq-expanded-content">'
+                . $location_blk . $leads_blk . $customer_blk
+                . '</div></td></tr>';
         }
-
         $output .= '</tbody></table>';
+
+        // Inline JS for expand/collapse (one open at a time)
         $output .= "<script>
         (function($){
             $(document).off('click.dqExpandBtn').on('click.dqExpandBtn','.dq-expand-btn', function(e){
