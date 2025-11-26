@@ -62,6 +62,7 @@ echo '<style>
 .flex-container {
   display: flex;
   flex-direction: row;
+
 }
 
 .flex-container .flex-item {
@@ -81,12 +82,14 @@ echo '<style>
         echo '<div class="wrap"><h1>WorkOrder Monthly Summary</h1>';
         self::filters_form($year);
 
-        echo '<div class="table-set-1 flex-container">';
+        echo '<div class="table-set-1 flex-container" style="border: 1px solid;
+    border-radius: 8px;
+    padding: 23px;">';
             echo '<div class="flex-item">';
                 self::render_monthly_table($monthly_counts, $year);
             echo '</div>';
             echo '<div class="flex-item">';
-                self::render_state_table($monthly_counts, $year);
+                self::render_state_table($state_counts);
             echo '</div>';
             echo '<div class="flex-item">';   
             self::render_engineer_table($engineer_data);
@@ -96,14 +99,18 @@ echo '<style>
             echo '</div>';
         echo '</div>'; 
         
-    
-        self::render_leads_converted_table($workorders);
-        self::render_lead_category_table($workorders);
-
-        self::render_reschedule_reasons_table($workorders);
-        self::render_rescheduled_orders_table($workorders);
-
-       
+        echo '<div class="table-set-2 flex-container">';
+            echo '<div class="flex-item">';
+                echo '<h4 style="font-size:20px">Lead Summary</h4>';
+                self::render_leads_converted_table($workorders);
+                self::render_lead_category_table($workorders);
+            echo '</div>';
+            echo '<div class="flex-item">';
+                echo '<h4 style="font-size:20px">Re-Schedule Summary</h4>';
+                self::render_reschedule_reasons_table($workorders);
+                self::render_rescheduled_orders_table($workorders);
+            echo '</div>';
+        echo '</div>';
 
         echo '</div>';
     }
