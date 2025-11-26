@@ -13,9 +13,20 @@ class DQ_Invoice_List
     public static function init()
     {
         add_shortcode('dqqb_invoice_list', [__CLASS__, 'render_shortcode']);
+        add_shortcode('dqqb_unpaid_invoices', [__CLASS__, 'render_unpaid_shortcode']);
         add_action('wp_ajax_dq_invoice_list_paginate', [__CLASS__, 'ajax_paginate']);
         add_action('wp_ajax_nopriv_dq_invoice_list_paginate', [__CLASS__, 'ajax_paginate']);
         add_action('wp_enqueue_scripts', [__CLASS__, 'register_scripts']);
+    }
+
+    /**
+     * Shortcode for unpaid invoices - same as dqqb_invoice_list with unpaid_only="true"
+     */
+    public static function render_unpaid_shortcode($atts)
+    {
+        $atts = is_array($atts) ? $atts : [];
+        $atts['unpaid_only'] = 'true';
+        return self::render_shortcode($atts);
     }
 
     public static function register_scripts()
@@ -36,7 +47,8 @@ class DQ_Invoice_List
             'date_type' => 'qi_invoice_date', // Default to invoice date
             'date_from' => '',
             'date_to' => '',
-            'unpaid_only' => '', // <-- NEW attribute
+            'unpaid_only' => '', // When 'true', only show invoices with qi_balance_due > 0
+            'per_page' => '', // Optional: override default per_page
         ], $atts, 'dqqb_invoice_list');
 
         // Enqueue scripts
@@ -61,10 +73,16 @@ class DQ_Invoice_List
 
     private static function get_invoices($atts, $page = 1)
     {
+        // Support per_page attribute, default to self::PER_PAGE
+        $per_page = !empty($atts['per_page']) ? intval($atts['per_page']) : self::PER_PAGE;
+        if ($per_page < 1 || $per_page > 100) {
+            $per_page = self::PER_PAGE;
+        }
+
         $args = [
             'post_type' => 'quickbooks_invoice',
             'post_status' => ['publish', 'draft', 'pending', 'private'],
-            'posts_per_page' => self::PER_PAGE,
+            'posts_per_page' => $per_page,
             'paged' => $page,
             'orderby' => 'date',
             'order' => 'DESC',
@@ -389,10 +407,16 @@ class DQ_Invoice_List
         $ajax_url = admin_url('admin-ajax.php');
         $nonce = wp_create_nonce('dq_invoice_list_nonce');
 
+        // Prepare shortcode-level attributes that must persist across AJAX
+        $shortcode_atts = [
+            'unpaid_only' => isset($atts['unpaid_only']) ? $atts['unpaid_only'] : '',
+            'per_page' => isset($atts['per_page']) ? $atts['per_page'] : '',
+        ];
+
         $script = "
         (function($) {
             var wrapper = $('#" . esc_js($wrapper_id) . "');
-            var filters = " . json_encode($atts) . ";
+            var shortcodeAtts = " . wp_json_encode($shortcode_atts) . ";
 
             // Pagination click
             wrapper.on('click', '.dq-invoice-list-pagination a:not(.disabled)', function(e) {
@@ -416,6 +440,9 @@ class DQ_Invoice_List
                     var val = $(this).val();
                     filters[name] = val;
                 });
+                // Merge in shortcode-level attributes
+                filters.unpaid_only = shortcodeAtts.unpaid_only;
+                filters.per_page = shortcodeAtts.per_page;
                 return filters;
             }
 
@@ -428,6 +455,7 @@ class DQ_Invoice_List
                         action: 'dq_invoice_list_paginate',
                         nonce: '" . esc_js($nonce) . "',
                         page: page,
+                        wrapper_id: '" . esc_js($wrapper_id) . "',
                         filters: filters
                     },
                     success: function(response) {
@@ -470,19 +498,22 @@ class DQ_Invoice_List
 
         $page = isset($_POST['page']) ? intval($_POST['page']) : 1;
         $filters = isset($_POST['filters']) ? $_POST['filters'] : [];
+        $wrapper_id = isset($_POST['wrapper_id']) ? sanitize_text_field($_POST['wrapper_id']) : 'dq-invoice-list-1';
 
         // Sanitize filters
         $atts = [
-            'status'    => isset($filters['status']) ? sanitize_text_field($filters['status']) : '',
-            'date_type' => isset($filters['date_type']) ? sanitize_text_field($filters['date_type']) : 'qi_invoice_date',
-            'date_from' => isset($filters['date_from']) ? sanitize_text_field($filters['date_from']) : '',
-            'date_to'   => isset($filters['date_to']) ? sanitize_text_field($filters['date_to']) : '',
+            'status'     => isset($filters['status']) ? sanitize_text_field($filters['status']) : '',
+            'date_type'  => isset($filters['date_type']) ? sanitize_text_field($filters['date_type']) : 'qi_invoice_date',
+            'date_from'  => isset($filters['date_from']) ? sanitize_text_field($filters['date_from']) : '',
+            'date_to'    => isset($filters['date_to']) ? sanitize_text_field($filters['date_to']) : '',
+            'unpaid_only'=> isset($filters['unpaid_only']) ? sanitize_text_field($filters['unpaid_only']) : '',
+            'per_page'   => isset($filters['per_page']) ? sanitize_text_field($filters['per_page']) : '',
         ];
 
         $data = self::get_invoices($atts, $page);
 
         wp_send_json_success([
-            'filter_form' => self::render_filter_form($atts, $_POST['wrapper_id'] ?? 'dq-invoice-list-1'),
+            'filter_form' => self::render_filter_form($atts, $wrapper_id),
             'table' => self::render_table($data['invoices']),
             'pagination' => self::render_pagination($data['current_page'], $data['max_pages']),
         ]);
