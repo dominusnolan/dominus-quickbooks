@@ -164,8 +164,13 @@ class DQ_Workorder_Template {
             $attachments[] = $attachment_path;
         }
 
-        $sent = wp_mail($email, $subject, $body, [], $attachments);
-
+        $from_email_filter = function($old) { return 'admin@milaymechanical.com'; };
+        $from_name_filter = function($old) { return 'Milay Mechanical'; };
+        add_filter('wp_mail_from', $from_email_filter);
+        add_filter('wp_mail_from_name', $from_name_filter);
+       $sent = wp_mail($email, $subject, $body, [], $attachments);
+        remove_filter('wp_mail_from', $from_email_filter);
+        remove_filter('wp_mail_from_name', $from_name_filter);
         // Clean up temporary file if needed
         if (!empty($tmp_file) && file_exists($tmp_file)) {
             @unlink($tmp_file);
