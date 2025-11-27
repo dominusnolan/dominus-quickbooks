@@ -429,3 +429,98 @@ The shortcode includes built-in styling. You can override styles by targeting th
 ```
 [workorder_table]
 ```
+
+---
+
+## Login Form Shortcode
+
+### Basic Usage
+
+Display a login form on any page (designed for the /access page):
+
+```
+[dq_login]
+```
+
+### Features
+
+- **Username/Email Support**: Accepts both username and email address for login
+- **AJAX Login**: Login happens without page reload with instant feedback
+- **Remember Me**: Optional "remember me" checkbox for persistent sessions
+- **Error Messages**: Clear, user-friendly error messages for failed login attempts
+- **Automatic Redirect**: On successful login, redirects to /account-page/
+- **Already Logged In**: Shows info message with link to /account-page/ if user is already logged in
+- **Lost Password Link**: Includes link to WordPress password recovery
+- **Responsive Design**: Works on desktop, tablet, and mobile devices
+- **Styled to Match**: Uses same styling as dashboard components
+
+### Display Format
+
+The login form displays:
+
+| Element | Description |
+|---------|-------------|
+| **Header** | "Sign In" heading with description |
+| **Username/Email Field** | Text input for username or email address |
+| **Password Field** | Password input field |
+| **Remember Me** | Checkbox to keep user logged in |
+| **Sign In Button** | Submit button with loading state |
+| **Forgot Password** | Link to WordPress password recovery |
+
+### Logged In State
+
+When a user is already logged in, the shortcode displays:
+
+- Success icon and "Already Signed In" heading
+- Current user's display name
+- "Go to Account Page" button linking to /account-page/
+- "Sign out" link to log out
+
+### Error Handling
+
+The form displays user-friendly error messages for:
+
+- Invalid username/email
+- Incorrect password
+- Empty fields
+- Security/nonce failures
+- Network errors
+
+### Technical Notes
+
+- Uses WordPress native `wp_signon()` for authentication
+- AJAX requests are secured with WordPress nonces
+- Supports both username and email address for login
+- Redirects to `/account-page/` after successful login
+- Compatible with the DQ Login Redirect handler (redirects wp-login.php to /access)
+- Works with SSL (uses `is_ssl()` for secure cookie handling)
+
+### Styling
+
+The shortcode includes built-in styling matching the dashboard theme:
+
+- Teal gradient header (#0a6b72 to #085f65)
+- Clean form inputs with focus states
+- Gradient submit button matching dashboard buttons
+- Loading spinner during submission
+- Error messages with red styling
+- Success state with teal accents
+
+You can override styles by targeting these CSS classes:
+
+- `.dq-login-wrapper`: Main container
+- `.dq-login-container`: Form card
+- `.dq-login-header`: Header section
+- `.dq-login-form`: Form element
+- `.dq-form-group`: Form field container
+- `.dq-login-button`: Submit button
+- `.dq-login-error`: Error message container
+- `.dq-login-footer`: Footer with forgot password link
+- `.dq-logged-in`: Container when user is already logged in
+
+### Example
+
+**Display login form on /access page:**
+```
+[dq_login]
+```
