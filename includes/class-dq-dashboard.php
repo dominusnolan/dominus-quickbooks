@@ -130,6 +130,10 @@ class DQ_Dashboard
                 'label' => 'Team',
                 'icon' => 'dashicons-groups',
             ],
+            'logout' => [
+                'label' => 'Logout',
+                'icon' => 'dashicons-exit',
+            ],
         ];
 
         $output = '<div class="dqqb-dashboard-sidebar">';
@@ -148,6 +152,8 @@ class DQ_Dashboard
                 $url = admin_url('admin.php?page=dq-financial-reports');
             } elseif ($key === 'workorder_report') {
                 $url = admin_url('admin.php?page=dq-workorder-report');
+            } elseif ($key === 'logout') {
+                $url = wp_logout_url(home_url());
             }
 
             $target = '';
