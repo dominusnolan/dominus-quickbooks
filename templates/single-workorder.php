@@ -249,6 +249,62 @@ $editable_fields = [ 'installed_product_id', 'wo_type_of_work', 'wo_state', 'wo_
     .dqqb-status-error {
         color: #cc3b3b;
     }
+    /* Rich-text editor styles */
+    .dqqb-rich-editor-wrapper {
+        margin-top: 10px;
+    }
+    .dqqb-rich-toolbar {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 6px;
+        padding: 4px;
+        background: #f8f9fa;
+        border: 1px solid #e5e7eb;
+        border-radius: 4px 4px 0 0;
+        border-bottom: none;
+    }
+    .dqqb-rich-toolbar button {
+        background: #fff;
+        border: 1px solid #ddd;
+        border-radius: 3px;
+        padding: 4px 8px;
+        cursor: pointer;
+        font-size: 13px;
+        min-width: 28px;
+        transition: background 0.15s;
+    }
+    .dqqb-rich-toolbar button:hover {
+        background: #e9ecef;
+    }
+    .dqqb-rich-toolbar button:active {
+        background: #dee2e6;
+    }
+    .dqqb-rich-editor {
+        min-height: 100px;
+        max-height: 300px;
+        overflow-y: auto;
+        padding: 10px 12px;
+        border: 1px solid #0073aa;
+        border-radius: 0 0 4px 4px;
+        background: #fff;
+        font-size: 14px;
+        line-height: 1.6;
+        outline: none;
+    }
+    .dqqb-rich-editor:focus {
+        border-color: #005177;
+        box-shadow: 0 0 0 1px #005177;
+    }
+    .dqqb-rich-editor a {
+        color: #0073aa;
+        text-decoration: underline;
+    }
+    .dqqb-private-comments-display {
+        display: block;
+    }
+    .dqqb-private-comments-edit-btn {
+        vertical-align: middle;
+    }
 </style>
 <main id="primary" class="site-main dqqb-single-workorder" style="max-width:95%;margin:0 auto">
     <article id="post-<?php the_ID(); ?>" <?php post_class(); ?>>
@@ -348,17 +404,37 @@ $editable_fields = [ 'installed_product_id', 'wo_type_of_work', 'wo_state', 'wo_
                     }
                     ?>
                 </div>
-                <?php if ( $private_comments && trim((string)$private_comments) !== '' ) : ?>
-                    <div class="wo-private-comments">
-                        <h3>Private Comments</h3>
-                        <div>
+                <div class="wo-private-comments" data-field="private_comments" data-post-id="<?php echo esc_attr( $post_id ); ?>">
+                    <h3>Private Comments<?php if ( $can_edit ) : ?><button type="button" class="dqqb-inline-edit-btn dqqb-private-comments-edit-btn" title="Edit" style="margin-left:8px;">&#9998;</button><?php endif; ?></h3>
+                    <div class="dqqb-inline-display dqqb-private-comments-display">
+                        <?php if ( $private_comments && trim((string)$private_comments) !== '' ) : ?>
                             <?php
-                                // Supports basic line breaks, but escapes HTML
-                                echo nl2br( esc_html( (string)$private_comments ) );
+                                // Display stored HTML content safely using wp_kses_post
+                                echo wp_kses_post( $private_comments );
                             ?>
-                        </div>
+                        <?php else : ?>
+                            <span class="dqqb-inline-value">—</span>
+                        <?php endif; ?>
                     </div>
-                <?php endif; ?>
+                    <?php if ( $can_edit ) : ?>
+                    <div class="dqqb-inline-editor dqqb-rich-editor-wrapper">
+                        <textarea class="dqqb-original-value" style="display:none;"><?php echo esc_textarea( $private_comments ); ?></textarea>
+                        <div class="dqqb-rich-toolbar">
+                            <button type="button" data-command="bold" title="Bold"><b>B</b></button>
+                            <button type="button" data-command="italic" title="Italic"><i>I</i></button>
+                            <button type="button" data-command="underline" title="Underline"><u>U</u></button>
+                            <button type="button" data-command="createLink" title="Link">&#128279;</button>
+                            <button type="button" data-command="removeFormat" title="Clear Formatting">&#10006;</button>
+                        </div>
+                        <div class="dqqb-rich-editor dqqb-inline-input" contenteditable="true"><?php echo wp_kses_post( $private_comments ); ?></div>
+                        <div class="dqqb-inline-actions">
+                            <button type="button" class="dqqb-inline-save">Save</button>
+                            <button type="button" class="dqqb-inline-cancel">Cancel</button>
+                        </div>
+                        <div class="dqqb-inline-status"></div>
+                    </div>
+                    <?php endif; ?>
+                </div>
             </div>
                 
             <div class="flex_column av-4t6g44-f63431ee47f87602bdd4dcb7a3f161e8 av_two_fifth  avia-builder-el-3  el_after_av_three_fifth  avia-builder-el-last  flex_column_div  column-top-margin">
