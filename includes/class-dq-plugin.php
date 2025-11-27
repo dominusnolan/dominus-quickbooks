@@ -98,6 +98,13 @@ class DQ_Plugin {
     const OPTION_KEY = 'dq_settings';
 
     /**
+     * QuickBooks API minor version.
+     *
+     * @var int
+     */
+    const API_MINOR_VERSION = 65;
+
+    /**
      * Singleton instance.
      *
      * @var DQ_Plugin|null
@@ -474,7 +481,7 @@ class DQ_Plugin {
 
         // Add minor version if not already present.
         if ( strpos( $url, 'minorversion' ) === false ) {
-            $url .= ( strpos( $url, '?' ) === false ? '?' : '&' ) . 'minorversion=65';
+            $url .= ( strpos( $url, '?' ) === false ? '?' : '&' ) . 'minorversion=' . self::API_MINOR_VERSION;
         }
 
         $headers = [
@@ -722,7 +729,10 @@ class DQ_Plugin {
      * @return WP_Error
      */
     public static function create_error( $code, $message, $data = null ) {
-        $code = 'dq_' . ltrim( $code, 'dq_' );
+        // Ensure code has 'dq_' prefix.
+        if ( strpos( $code, 'dq_' ) !== 0 ) {
+            $code = 'dq_' . $code;
+        }
         return new WP_Error( $code, $message, $data );
     }
 
