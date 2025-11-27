@@ -60,6 +60,9 @@ require_once DQQB_PATH . 'includes/class-dq-dashboard.php';
 // NEW: Login redirect handler (redirects wp-login.php and wp-admin to /access)
 require_once DQQB_PATH . 'includes/class-dq-login-redirect.php';
 
+// NEW: Login form shortcode for /access page
+require_once DQQB_PATH . 'includes/class-dq-login-form.php';
+
 // -----------------------------------------------------------------------------
 // Initialize Plugin
 // -----------------------------------------------------------------------------
@@ -101,6 +104,7 @@ add_action( 'plugins_loaded', function() {
     
     if ( class_exists( 'DQ_Workorder_Template' ) ) DQ_Workorder_Template::init(); // NEW
     if ( class_exists( 'DQ_Login_Redirect' ) ) DQ_Login_Redirect::init(); // NEW: Login redirect handler
+    if ( class_exists( 'DQ_Login_Form' ) ) DQ_Login_Form::init(); // NEW: Login form shortcode
 });
 
 // -----------------------------------------------------------------------------
