@@ -28,7 +28,7 @@ class DQ_Workorder_Timeline
     {
         add_shortcode('workorder_timeline', [__CLASS__, 'render_shortcode']);
         add_action('wp_ajax_dq_update_timeline_date', [__CLASS__, 'ajax_update_date']);
-        add_action('wp_ajax_dqqb_inline_update', [__CLASS__, 'ajax_inline_update']);
+        add_action('wp_ajax_dqqb_timeline_inline_update', [__CLASS__, 'ajax_inline_update']);
         add_action('wp_enqueue_scripts', [__CLASS__, 'enqueue_edit_scripts']);
     }
 
@@ -54,7 +54,7 @@ class DQ_Workorder_Timeline
         self::enqueue_styles();
         if ($is_editable) {
             wp_enqueue_script('dq-workorder-timeline-edit');
-            wp_enqueue_script('dqqb-inline-edit');
+            wp_enqueue_script('dqqb-inline-edit-timeline');
         }
 
         $timeline_data = self::get_timeline_data($post_id);
@@ -144,20 +144,20 @@ class DQ_Workorder_Timeline
         });
         ');
 
-        // Register inline-edit script for note editing
+        // Register inline-edit script for timeline note/select editing (separate from meta fields)
         wp_register_script(
-            'dqqb-inline-edit',
-            DQQB_URL . 'assets/js/inline-edit-workorder.js',
+            'dqqb-inline-edit-timeline',
+            DQQB_URL . 'assets/js/inline-edit-timeline.js',
             [],
             DQQB_VERSION,
             true
         );
         wp_localize_script(
-            'dqqb-inline-edit',
-            'DQQBInlineEdit',
+            'dqqb-inline-edit-timeline',
+            'DQQBTimelineInlineEdit',
             [
                 'ajax_url' => admin_url('admin-ajax.php'),
-                'nonce'    => wp_create_nonce('dqqb_inline_update'),
+                'nonce'    => wp_create_nonce('dqqb_timeline_inline_update'),
             ]
         );
     }
@@ -572,7 +572,7 @@ class DQ_Workorder_Timeline
     public static function ajax_inline_update()
     {
         // Verify nonce
-        if (!check_ajax_referer('dqqb_inline_update', 'nonce', false)) {
+        if (!check_ajax_referer('dqqb_timeline_inline_update', 'nonce', false)) {
             wp_send_json_error('Invalid security token.');
         }
 
