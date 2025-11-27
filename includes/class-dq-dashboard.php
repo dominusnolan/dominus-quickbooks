@@ -10,6 +10,23 @@ class DQ_Dashboard
 {
     const PER_PAGE = 25;
 
+    /**
+     * Status mappings for normalization
+     */
+    const STATUS_MAPPINGS = [
+        'close' => 'closed',
+    ];
+
+    /**
+     * Valid workorder statuses
+     */
+    const VALID_STATUSES = ['open', 'scheduled', 'close', 'closed'];
+
+    /**
+     * Roles to include in team view (can be filtered)
+     */
+    const TEAM_ROLES = ['engineer', 'staff'];
+
     public static function init()
     {
         add_shortcode('dqqb_dashboard', [__CLASS__, 'render_shortcode']);
@@ -270,8 +287,8 @@ class DQ_Dashboard
         if (!is_wp_error($terms) && !empty($terms) && is_array($terms)) {
             $term = array_shift($terms);
             $slug = !empty($term->slug) ? strtolower($term->slug) : '';
-            if (in_array($slug, ['open', 'scheduled', 'close', 'closed'])) {
-                return ($slug === 'close') ? 'closed' : $slug;
+            if (in_array($slug, self::VALID_STATUSES, true)) {
+                return self::normalize_status($slug);
             }
         }
 
@@ -280,22 +297,41 @@ class DQ_Dashboard
         if (!is_wp_error($cats) && !empty($cats) && is_array($cats)) {
             foreach ($cats as $cat) {
                 $slug = strtolower($cat->slug);
-                if (in_array($slug, ['open', 'scheduled', 'close', 'closed'])) {
-                    return ($slug === 'close') ? 'closed' : $slug;
+                if (in_array($slug, self::VALID_STATUSES, true)) {
+                    return self::normalize_status($slug);
                 }
             }
         }
 
         // Try ACF/meta field
-        $wo_status = function_exists('get_field') ? get_field('wo_status', $post_id) : get_post_meta($post_id, 'wo_status', true);
+        $wo_status = self::get_acf_or_meta($post_id, 'wo_status');
         if ($wo_status) {
             $wo_status = strtolower(trim($wo_status));
-            if (in_array($wo_status, ['open', 'scheduled', 'close', 'closed'])) {
-                return ($wo_status === 'close') ? 'closed' : $wo_status;
+            if (in_array($wo_status, self::VALID_STATUSES, true)) {
+                return self::normalize_status($wo_status);
             }
         }
 
         return 'open'; // Default
+    }
+
+    /**
+     * Normalize status value using mappings
+     */
+    private static function normalize_status($status)
+    {
+        return isset(self::STATUS_MAPPINGS[$status]) ? self::STATUS_MAPPINGS[$status] : $status;
+    }
+
+    /**
+     * Helper to get ACF field or fall back to post meta
+     */
+    private static function get_acf_or_meta($post_id, $field_name)
+    {
+        if (function_exists('get_field')) {
+            return get_field($field_name, $post_id);
+        }
+        return get_post_meta($post_id, $field_name, true);
     }
 
     /**
@@ -345,24 +381,24 @@ class DQ_Dashboard
             $post_id = $workorder->ID;
             $wo_number = get_the_title($post_id);
             
-            // Get ACF fields
-            $wo_location = function_exists('get_field') ? get_field('wo_location', $post_id) : get_post_meta($post_id, 'wo_location', true);
-            $wo_date_received = function_exists('get_field') ? get_field('wo_wo_date_received', $post_id) : get_post_meta($post_id, 'wo_wo_date_received', true);
+            // Get ACF fields using helper
+            $wo_location = self::get_acf_or_meta($post_id, 'wo_location');
+            $wo_date_received = self::get_acf_or_meta($post_id, 'wo_wo_date_received');
             if (!$wo_date_received) {
-                $wo_date_received = function_exists('get_field') ? get_field('wo_date_received', $post_id) : get_post_meta($post_id, 'wo_date_received', true);
+                $wo_date_received = self::get_acf_or_meta($post_id, 'wo_date_received');
             }
-            $wo_state = function_exists('get_field') ? get_field('wo_state', $post_id) : get_post_meta($post_id, 'wo_state', true);
+            $wo_state = self::get_acf_or_meta($post_id, 'wo_state');
 
             // Get author with profile picture
             $author_id = $workorder->post_author;
             $author_html = self::get_author_with_avatar($author_id);
 
-            // Format date
+            // Format date using WordPress date function for proper localization
             $date_display = 'N/A';
             if ($wo_date_received) {
                 $ts = strtotime($wo_date_received);
                 if ($ts) {
-                    $date_display = date('m/d/Y', $ts);
+                    $date_display = date_i18n('m/d/Y', $ts);
                 }
             }
 
@@ -443,7 +479,7 @@ class DQ_Dashboard
         }
 
         for ($i = $start; $i <= $end; $i++) {
-            if ($i == $current_page) {
+            if ($i === $current_page) {
                 $output .= '<span class="current">' . $i . '</span>';
             } else {
                 $output .= '<a href="#" class="dqqb-page-link" data-page="' . $i . '">' . $i . '</a>';
@@ -573,17 +609,24 @@ class DQ_Dashboard
 
     /**
      * Get team members (engineers and staff)
+     * Roles can be filtered using 'dqqb_dashboard_team_roles' filter
      */
     private static function get_team_members()
     {
         $team = [];
 
-        // Get users with 'engineer' or 'staff' roles
+        // Allow filtering of team roles
+        $team_roles = apply_filters('dqqb_dashboard_team_roles', self::TEAM_ROLES);
+
+        // Get users with configured roles
         $users = get_users([
-            'role__in' => ['engineer', 'staff'],
+            'role__in' => $team_roles,
             'orderby' => 'display_name',
             'order' => 'ASC',
         ]);
+
+        // Get WordPress roles for proper display names
+        global $wp_roles;
 
         foreach ($users as $user) {
             $avatar_url = '';
@@ -605,23 +648,33 @@ class DQ_Dashboard
                 $avatar_url = get_avatar_url($user->ID, ['size' => 64]);
             }
 
-            // Get role display name
+            // Get role display name using WordPress translate_user_role
             $role_key = '';
             $role_display = '';
             if (!empty($user->roles)) {
                 $role_key = $user->roles[0];
-                $role_obj = get_role($role_key);
-                if ($role_obj) {
-                    $role_display = ucfirst(str_replace('_', ' ', $role_key));
+                // Get the proper role name from wp_roles
+                if (isset($wp_roles->role_names[$role_key])) {
+                    $role_display = translate_user_role($wp_roles->role_names[$role_key]);
                 } else {
-                    $role_display = ucfirst($role_key);
+                    $role_display = ucfirst(str_replace('_', ' ', $role_key));
                 }
+            }
+
+            // Use display_name as fallback for first/last name if empty
+            $first_name = $user->first_name;
+            $last_name = $user->last_name;
+            if (!$first_name && !$last_name) {
+                // Split display_name as fallback
+                $name_parts = explode(' ', $user->display_name, 2);
+                $first_name = isset($name_parts[0]) ? $name_parts[0] : $user->display_name;
+                $last_name = isset($name_parts[1]) ? $name_parts[1] : '';
             }
 
             $team[] = [
                 'id' => $user->ID,
-                'first_name' => $user->first_name ?: 'N/A',
-                'last_name' => $user->last_name ?: 'N/A',
+                'first_name' => $first_name ?: $user->display_name,
+                'last_name' => $last_name ?: '',
                 'email' => $user->user_email,
                 'avatar' => $avatar_url,
                 'role' => $role_display,
