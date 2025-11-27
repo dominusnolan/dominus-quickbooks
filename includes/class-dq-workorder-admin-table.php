@@ -35,6 +35,12 @@ class DQ_Workorder_Admin_Table {
         // Default sort by post date (latest first)
         add_action( 'pre_get_posts', [ __CLASS__, 'set_default_sort' ] );
 
+        // Field Engineer (author) filter dropdown
+        add_action( 'restrict_manage_posts', [ __CLASS__, 'render_engineer_filter_dropdown' ] );
+
+        // Filter query by selected engineer (author)
+        add_action( 'pre_get_posts', [ __CLASS__, 'filter_by_engineer' ] );
+
         // Enqueue admin assets
         add_action( 'admin_enqueue_scripts', [ __CLASS__, 'enqueue_admin_assets' ] );
 
@@ -377,6 +383,87 @@ class DQ_Workorder_Admin_Table {
         if ( ! isset( $_GET['orderby'] ) ) {
             $query->set( 'orderby', 'date' );
             $query->set( 'order', 'DESC' );
+        }
+    }
+
+    /**
+     * Render Field Engineer filter dropdown
+     *
+     * Adds a dropdown to the workorder admin list table that allows filtering
+     * workorders by the assigned Field Engineer (post author).
+     * Only users with the 'engineer' role are shown in the dropdown.
+     *
+     * @param string $post_type The current post type
+     * @return void
+     */
+    public static function render_engineer_filter_dropdown( $post_type ) {
+        // Only show on workorder admin list
+        if ( $post_type !== 'workorder' ) {
+            return;
+        }
+
+        // Get all users with the 'engineer' role
+        $engineers = get_users( [
+            'role'    => 'engineer',
+            'orderby' => 'display_name',
+            'order'   => 'ASC',
+            'fields'  => [ 'ID', 'display_name' ],
+        ] );
+
+        // Don't show dropdown if no engineers exist
+        if ( empty( $engineers ) ) {
+            return;
+        }
+
+        // Get currently selected engineer from query string
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only filter, no action taken
+        $selected = isset( $_GET['dq_field_engineer'] ) ? absint( $_GET['dq_field_engineer'] ) : 0;
+
+        ?>
+        <select name="dq_field_engineer" id="dq-field-engineer-filter">
+            <option value=""><?php esc_html_e( 'All Field Engineers', 'dqqb' ); ?></option>
+            <?php foreach ( $engineers as $engineer ) : ?>
+                <option value="<?php echo esc_attr( $engineer->ID ); ?>" <?php selected( $selected, $engineer->ID ); ?>>
+                    <?php echo esc_html( $engineer->display_name ); ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+        <?php
+    }
+
+    /**
+     * Filter workorder query by selected Field Engineer
+     *
+     * Modifies the main query to filter workorders by post author
+     * when a Field Engineer is selected in the dropdown filter.
+     *
+     * @param WP_Query $query The query object
+     * @return void
+     */
+    public static function filter_by_engineer( $query ) {
+        // Only apply in admin on main query
+        if ( ! is_admin() || ! $query->is_main_query() ) {
+            return;
+        }
+
+        // Check if we're on the workorder admin list screen
+        $screen = get_current_screen();
+        if ( ! $screen || $screen->id !== 'edit-workorder' ) {
+            return;
+        }
+
+        // Check if an engineer filter is selected
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only filter, no action taken
+        if ( ! isset( $_GET['dq_field_engineer'] ) || empty( $_GET['dq_field_engineer'] ) ) {
+            return;
+        }
+
+        // Sanitize and set the author query
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only filter, no action taken
+        $engineer_id = absint( $_GET['dq_field_engineer'] );
+
+        if ( $engineer_id > 0 ) {
+            $query->set( 'author', $engineer_id );
         }
     }
 
