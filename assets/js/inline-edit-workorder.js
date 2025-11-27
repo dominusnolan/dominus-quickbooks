@@ -3,7 +3,7 @@
  * 
  * Handles inline editing of workorder meta fields on the front-end.
  * Requires DQQBInlineEdit object to be localized with ajax_url and nonce.
- * Supports input, textarea, and select controls.
+ * Supports input, textarea, select controls, and contenteditable rich editor.
  */
 (function() {
     'use strict';
@@ -17,25 +17,43 @@
     var nonce = DQQBInlineEdit.nonce;
 
     /**
-     * Get the input element (input, textarea, or select) from the editor container
+     * Get the input element (input, textarea, select, or contenteditable) from the editor container
      */
     function getInputElement(editorEl) {
-        return editorEl.querySelector('input.dqqb-inline-input, textarea.dqqb-inline-input, select.dqqb-inline-input');
+        // Try standard inputs first
+        var input = editorEl.querySelector('input.dqqb-inline-input, textarea.dqqb-inline-input, select.dqqb-inline-input');
+        if (input) return input;
+        // Fallback to contenteditable rich editor
+        return editorEl.querySelector('.dqqb-rich-editor[contenteditable="true"]');
     }
 
     /**
-     * Get the value from an input element
+     * Check if the element is a contenteditable element
+     */
+    function isContentEditable(el) {
+        return el && el.getAttribute('contenteditable') === 'true';
+    }
+
+    /**
+     * Get the value from an input element (handles contenteditable)
      */
     function getInputValue(inputEl) {
         if (!inputEl) return '';
+        if (isContentEditable(inputEl)) {
+            return inputEl.innerHTML;
+        }
         return inputEl.value;
     }
 
     /**
-     * Set the value on an input element
+     * Set the value on an input element (handles contenteditable)
      */
     function setInputValue(inputEl, value) {
         if (!inputEl) return;
+        if (isContentEditable(inputEl)) {
+            inputEl.innerHTML = value;
+            return;
+        }
         inputEl.value = value;
     }
 
@@ -48,13 +66,20 @@
         return selectedOption ? selectedOption.text : null;
     }
 
+    /**
+     * Find the closest card-like container (supports both .wo-meta-card and .wo-private-comments)
+     */
+    function getCardContainer(el) {
+        return el.closest('.wo-meta-card') || el.closest('.wo-private-comments');
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         var editButtons = document.querySelectorAll('.dqqb-inline-edit-btn');
 
         editButtons.forEach(function(btn) {
             btn.addEventListener('click', function(e) {
                 e.preventDefault();
-                var card = btn.closest('.wo-meta-card');
+                var card = getCardContainer(btn);
                 if (!card) return;
 
                 var displayEl = card.querySelector('.dqqb-inline-display');
@@ -66,8 +91,8 @@
                     var input = getInputElement(editorEl);
                     if (input) {
                         input.focus();
-                        // Select text content for input/textarea, not for select elements
-                        if (input.tagName !== 'SELECT' && typeof input.select === 'function') {
+                        // Select text content for input/textarea, not for select or contenteditable elements
+                        if (input.tagName !== 'SELECT' && !isContentEditable(input) && typeof input.select === 'function') {
                             input.select();
                         }
                     }
@@ -80,7 +105,7 @@
         cancelButtons.forEach(function(btn) {
             btn.addEventListener('click', function(e) {
                 e.preventDefault();
-                var card = btn.closest('.wo-meta-card');
+                var card = getCardContainer(btn);
                 if (!card) return;
 
                 var displayEl = card.querySelector('.dqqb-inline-display');
@@ -95,7 +120,8 @@
 
                 if (displayEl && editorEl) {
                     editorEl.style.display = 'none';
-                    displayEl.style.display = 'flex';
+                    // Use 'block' for private comments display, 'flex' for meta cards
+                    displayEl.style.display = card.classList.contains('wo-private-comments') ? 'block' : 'flex';
                 }
 
                 // Clear any status messages
@@ -112,7 +138,7 @@
         saveButtons.forEach(function(btn) {
             btn.addEventListener('click', function(e) {
                 e.preventDefault();
-                var card = btn.closest('.wo-meta-card');
+                var card = getCardContainer(btn);
                 if (!card) return;
 
                 var editorEl = card.querySelector('.dqqb-inline-editor');
@@ -126,6 +152,7 @@
                 }
 
                 var newValue = getInputValue(input);
+                var isRichEditor = isContentEditable(input);
 
                 // Show saving status
                 if (statusEl) {
@@ -163,6 +190,7 @@
                         var savedValue = data.data && data.data.value !== undefined ? data.data.value : newValue;
                         
                         // For select fields, use label if provided by server, otherwise use option text
+                        // For rich editor (private_comments), use label which contains sanitized HTML
                         var displayText = savedValue;
                         if (data.data && data.data.label) {
                             displayText = data.data.label;
@@ -174,9 +202,18 @@
                         }
 
                         // Update the display value
-                        var valueEl = card.querySelector('.dqqb-inline-value');
-                        if (valueEl) {
-                            valueEl.textContent = displayText || '—';
+                        var displayEl = card.querySelector('.dqqb-inline-display');
+                        if (displayEl) {
+                            if (isRichEditor) {
+                                // For rich editor, set innerHTML with sanitized HTML from server
+                                displayEl.innerHTML = displayText || '<span class="dqqb-inline-value">—</span>';
+                            } else {
+                                // For regular fields, update the text content
+                                var valueEl = card.querySelector('.dqqb-inline-value');
+                                if (valueEl) {
+                                    valueEl.textContent = displayText || '—';
+                                }
+                            }
                         }
 
                         // Update the data-original attribute for future cancels
@@ -194,10 +231,10 @@
                         }
 
                         // Hide editor, show display
-                        var displayEl = card.querySelector('.dqqb-inline-display');
                         if (displayEl && editorEl) {
                             editorEl.style.display = 'none';
-                            displayEl.style.display = 'flex';
+                            // Use 'block' for private comments display, 'flex' for meta cards
+                            displayEl.style.display = card.classList.contains('wo-private-comments') ? 'block' : 'flex';
                         }
 
                         // Clear status after delay
@@ -215,7 +252,7 @@
                         }
                     }
                 })
-                .catch(function(error) {
+                .catch(function() {
                     btn.disabled = false;
                     if (cancelBtn) cancelBtn.disabled = false;
 
@@ -228,14 +265,16 @@
         });
 
         // Allow Enter key to save (for input and select), Escape to cancel
-        // For textarea, only Escape cancels (Enter creates newlines)
+        // For textarea and contenteditable, only Escape cancels (Enter creates newlines)
         var inputs = document.querySelectorAll('.dqqb-inline-input');
         inputs.forEach(function(input) {
             input.addEventListener('keydown', function(e) {
-                var card = input.closest('.wo-meta-card');
+                var card = getCardContainer(input);
                 if (!card) return;
 
-                if (e.key === 'Enter' && input.tagName !== 'TEXTAREA') {
+                // For contenteditable and textarea, don't intercept Enter
+                var isRich = isContentEditable(input);
+                if (e.key === 'Enter' && input.tagName !== 'TEXTAREA' && !isRich) {
                     e.preventDefault();
                     var saveBtn = card.querySelector('.dqqb-inline-save');
                     if (saveBtn) saveBtn.click();
@@ -243,6 +282,36 @@
                     e.preventDefault();
                     var cancelBtn = card.querySelector('.dqqb-inline-cancel');
                     if (cancelBtn) cancelBtn.click();
+                }
+            });
+        });
+
+        // Rich editor toolbar functionality
+        var toolbarButtons = document.querySelectorAll('.dqqb-rich-toolbar button[data-command]');
+        toolbarButtons.forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                var command = btn.getAttribute('data-command');
+                if (!command) return;
+
+                // Find the associated rich editor
+                var wrapper = btn.closest('.dqqb-rich-editor-wrapper');
+                if (!wrapper) return;
+                var editor = wrapper.querySelector('.dqqb-rich-editor');
+                if (!editor) return;
+
+                // Focus the editor before executing command
+                editor.focus();
+
+                if (command === 'createLink') {
+                    // Prompt for URL
+                    var url = prompt('Enter URL:');
+                    if (url) {
+                        document.execCommand('createLink', false, url);
+                    }
+                } else {
+                    // Execute standard command (bold, italic, underline, removeFormat)
+                    document.execCommand(command, false, null);
                 }
             });
         });

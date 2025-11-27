@@ -331,7 +331,9 @@ class DQ_Workorder_Template {
 
         // Get field and value
         $field = isset( $_POST['field'] ) ? sanitize_key( $_POST['field'] ) : '';
-        $value = isset( $_POST['value'] ) ? wp_strip_all_tags( wp_unslash( $_POST['value'] ) ) : '';
+        // For private_comments, allow HTML; others strip tags
+        $raw_value = isset( $_POST['value'] ) ? wp_unslash( $_POST['value'] ) : '';
+        $value = ( $field === 'private_comments' ) ? $raw_value : wp_strip_all_tags( $raw_value );
 
         // Whitelist of allowed editable fields
         $allowed_fields = [
@@ -346,6 +348,7 @@ class DQ_Workorder_Template {
             'wo_service_contact_number',
             'wo_leads',
             'wo_lead_category',
+            'private_comments',
         ];
 
         if ( ! in_array( $field, $allowed_fields, true ) ) {
@@ -394,6 +397,11 @@ class DQ_Workorder_Template {
                     }
                 }
             }
+        } elseif ( $field === 'private_comments' ) {
+            // Allow safe HTML formatting via wp_kses_post
+            $value = wp_kses_post( $value );
+            // Return sanitized HTML as label for display
+            $label = $value;
         } else {
             // General text field sanitization
             $value = sanitize_text_field( $value );
