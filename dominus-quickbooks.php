@@ -36,6 +36,8 @@ require_once DQQB_PATH . 'includes/class-dq-qi-csv-import.php';
 require_once DQQB_PATH . 'includes/class-dq-qi-admin-table.php';
 // Financial Reports
 require_once DQQB_PATH . 'includes/class-dq-financial-report.php';
+// Payroll CPT and Management
+require_once DQQB_PATH . 'includes/class-dq-payroll.php';
 // Work Order Reports
 require_once DQQB_PATH . 'includes/class-dq-workorder-report.php';
 // NEW: Front-end Workorder Timeline
@@ -86,6 +88,7 @@ add_action( 'plugins_loaded', function() {
     if ( class_exists( 'DQ_API' ) ) DQ_API::init();
     if ( class_exists( 'DQ_Metabox' ) ) DQ_Metabox::init();
     if ( class_exists( 'DQ_QI_Metabox' ) ) DQ_QI_Metabox::init();
+    if ( class_exists( 'DQ_Payroll' ) ) DQ_Payroll::init(); // Payroll CPT
     if ( class_exists( 'DQ_Financial_Report' ) ) DQ_Financial_Report::init(); // NEW
     
     if ( class_exists( 'DQ_Workorder_Timeline' ) ) DQ_Workorder_Timeline::init(); // NEW

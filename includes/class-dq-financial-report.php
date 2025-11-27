@@ -139,16 +139,20 @@ class DQ_Financial_Report {
         self::filters_form( $report, $year, $month, $quarter );
         echo '<p><a class="button" href="' . esc_url( $csv_url ) . '">Download CSV</a></p>';
 
-        // NEW: Profitability Pie Chart
+        // NEW: Profitability Pie Chart (now includes payroll deduction)
         self::render_profit_chart( $data, $report, $year, $month, $quarter, $range );
 
         self::render_table( $data, $engineer_filter, $range['start'], $range['end'], $report, $year, $month, $quarter );
+
+        // Payroll Management Section
+        self::render_payroll_section( $report, $year, $month, $quarter, $range );
+
         echo '</div>';
     }
 
     /**
-     * NEW: Renders a profitability pie chart (Direct Labor vs Remaining Billed amount).
-     * Remaining = Total Billed - Direct Labor (or zero if negative).
+     * NEW: Renders a profitability pie chart (Direct Labor + Payroll vs Remaining Billed amount).
+     * Remaining = Total Billed - Direct Labor - Payroll (or zero if negative).
      */
     private static function render_profit_chart( array $data, string $report, int $year, int $month, int $quarter, array $range ) {
         // Aggregate totals
@@ -158,11 +162,19 @@ class DQ_Financial_Report {
             $total_billed += (float)$row['invoice_amount'];
             $direct_labor += (float)$row['direct_labor'];
         }
-        $remaining = $total_billed - $direct_labor;
+
+        // Get payroll total for this period
+        $payroll_total = 0.0;
+        if ( class_exists( 'DQ_Payroll' ) ) {
+            $payroll_total = DQ_Payroll::get_total( $range['start'], $range['end'] );
+        }
+
+        $total_deductions = $direct_labor + $payroll_total;
+        $remaining = $total_billed - $total_deductions;
         $profitable = $remaining >= 0;
 
         // Guard: if both are zero, skip chart (nothing to show)
-        if ( $total_billed <= 0 && $direct_labor <= 0 ) {
+        if ( $total_billed <= 0 && $total_deductions <= 0 ) {
             echo '<p><em>No financial data available for this period.</em></p>';
             return;
         }
@@ -188,14 +200,15 @@ class DQ_Financial_Report {
 
         $status_label = $profitable ? 'Profitable' : 'Loss';
         $status_class = $profitable ? 'dq-fr-metric-positive' : 'dq-fr-metric-negative';
-        $remaining_label = $profitable ? 'Profit (Remaining)' : 'Loss (Overrun)';
+        $remaining_label = $profitable ? 'Net Profit' : 'Net Loss';
         echo '<div class="dq-fr-pie-metric"><strong>Status:</strong> <span class="' . esc_attr($status_class) . '">' . esc_html($status_label) . '</span></div>';
         echo '<div class="dq-fr-pie-legend">
                 <span><strong>Total Billed:</strong> ' . self::money($total_billed) . '</span>
                 <span><strong>Direct Labor:</strong> ' . self::money($direct_labor) . '</span>
+                <span><strong>Payroll:</strong> ' . self::money($payroll_total) . '</span>
                 <span><strong>' . esc_html($remaining_label) . ':</strong> ' . self::money($remaining) . '</span>
               </div>';
-        echo '<noscript><p><em>Pie chart requires JavaScript. Total Billed ' . self::money($total_billed) . ' vs Direct Labor ' . self::money($direct_labor) . '.</em></p></noscript>';
+        echo '<noscript><p><em>Pie chart requires JavaScript. Total Billed ' . self::money($total_billed) . ' vs Direct Labor ' . self::money($direct_labor) . ' + Payroll ' . self::money($payroll_total) . '.</em></p></noscript>';
         echo '</div>';
 
         // Load Chart.js once (simple guard)
@@ -214,10 +227,11 @@ class DQ_Financial_Report {
       var ctx = document.getElementById("' . esc_js($canvas_id) . '");
       if(!ctx) return;
       var directLabor = ' . json_encode(round($direct_labor,2)) . ';
+      var payroll = ' . json_encode(round($payroll_total,2)) . ';
       var remaining = ' . json_encode(round(max($remaining,0),2)) . ';
       var loss = ' . json_encode($remaining < 0 ? round(abs($remaining),2) : 0) . ';
-      var dataLabels = remaining > 0 ? ["Direct Labor","Remaining (Profit)"] : ["Direct Labor","Loss (Overrun)"];
-      var dataValues = remaining > 0 ? [directLabor, remaining] : [directLabor, loss];
+      var dataLabels = remaining >= 0 ? ["Direct Labor","Payroll","Net Profit"] : ["Direct Labor","Payroll","Net Loss"];
+      var dataValues = remaining >= 0 ? [directLabor, payroll, remaining] : [directLabor, payroll, loss];
       new Chart(ctx, {
         type: "pie",
         data: {
@@ -226,7 +240,8 @@ class DQ_Financial_Report {
             data: dataValues,
             backgroundColor: [
               "#ff6f3c",   // Direct Labor slice
-              remaining > 0 ? "#2e8b57" : "#c40000" // Profit or Loss slice
+              "#3498db",   // Payroll slice
+              remaining >= 0 ? "#2e8b57" : "#c40000" // Profit or Loss slice
             ],
             borderColor: "#ffffff",
             borderWidth: 2
@@ -654,6 +669,26 @@ echo '<td>' . self::money( $totals['tolls_meals'] ) . '</td>';
 echo '<td><span class="' . $profit_class_total . '">' . self::money( $totals['profit'] ) . '</span></td>';
 echo '</tr>';
 
+// Payroll deduction row
+$payroll_total = 0.0;
+if ( class_exists( 'DQ_Payroll' ) ) {
+    $payroll_total = DQ_Payroll::get_total( $start, $end );
+}
+if ( $payroll_total > 0 ) {
+    echo '<tr class="dq-fr-totals-row" style="background:#fff3cd;">';
+    echo '<td colspan="7" style="text-align:right;"><strong>Less: Payroll</strong></td>';
+    echo '<td><span style="color:#856404;">-' . self::money( $payroll_total ) . '</span></td>';
+    echo '</tr>';
+
+    // Net profit row (after payroll)
+    $net_profit = $totals['profit'] - $payroll_total;
+    $net_profit_class = $net_profit >= 0 ? 'dq-fr-profit-pos' : 'dq-fr-profit-neg';
+    echo '<tr class="dq-fr-totals-row" style="background:#d4edda;">';
+    echo '<td colspan="7" style="text-align:right;"><strong>Net Profit (After Payroll)</strong></td>';
+    echo '<td><span class="' . $net_profit_class . '">' . self::money( $net_profit ) . '</span></td>';
+    echo '</tr>';
+}
+
 echo '</tbody></table>';
 
 // Print all modals once; add a single ESC/overlay-click closer
@@ -752,7 +787,51 @@ echo '<script>
             number_format($totals['profit'],2,'.',''),
         ] );
 
+        // Add payroll deduction section
+        $payroll_total = 0.0;
+        if ( class_exists( 'DQ_Payroll' ) ) {
+            $payroll_total = DQ_Payroll::get_total( $range['start'], $range['end'] );
+            $payroll_records = DQ_Payroll::get_records( $range['start'], $range['end'] );
+
+            // Empty row separator
+            fputcsv( $out, [] );
+            fputcsv( $out, ['--- Payroll Deductions ---'] );
+            fputcsv( $out, ['Date', 'Amount'] );
+
+            foreach ( $payroll_records as $record ) {
+                fputcsv( $out, [
+                    $record['date'],
+                    number_format($record['amount'],2,'.',''),
+                ] );
+            }
+
+            fputcsv( $out, ['Total Payroll', number_format($payroll_total,2,'.','') ] );
+        }
+
+        // Add net profit after payroll
+        fputcsv( $out, [] );
+        $net_profit = $totals['profit'] - $payroll_total;
+        fputcsv( $out, ['Net Profit (After Payroll)', number_format($net_profit,2,'.','') ] );
+
         fclose($out);
         exit;
+    }
+
+    /**
+     * Render payroll management section (form + records table).
+     */
+    private static function render_payroll_section( $report, $year, $month, $quarter, $range ) {
+        echo '<div class="dq-payroll-section" style="margin-top:30px;">';
+        echo '<h2>Payroll Management</h2>';
+
+        // Render add form (admin only - handled inside the method)
+        if ( class_exists( 'DQ_Payroll' ) ) {
+            DQ_Payroll::render_add_form( $report, $year, $month, $quarter );
+            DQ_Payroll::render_records_table( $range['start'], $range['end'] );
+        } else {
+            echo '<p><em>Payroll module not available.</em></p>';
+        }
+
+        echo '</div>';
     }
 }
