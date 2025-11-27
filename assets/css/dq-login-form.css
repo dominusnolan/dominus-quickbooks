@@ -209,6 +209,26 @@
     font-size: 18px;
 }
 
+/* Success message */
+.dq-login-success {
+    padding: 12px 16px;
+    background: #f0fdf4;
+    border: 1px solid #86efac;
+    border-radius: 8px;
+    color: #166534;
+    font-size: 14px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.dq-login-success::before {
+    content: "\f147";
+    font-family: dashicons;
+    font-size: 18px;
+}
+
 /* Footer section */
 .dq-login-footer {
     padding: 0 30px 25px;
