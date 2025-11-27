@@ -11,6 +11,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  * - Custom columns with relevant ACF field data
  * - Sortable columns for dates and Work Order ID
  * - Field Engineer column with profile picture from ACF user field
+ * - Field Engineer filter dropdown for filtering workorders by author
  * - Status column from taxonomy
  * - AJAX-powered expand/collapse for detailed information
  *
