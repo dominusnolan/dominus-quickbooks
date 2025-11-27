@@ -253,9 +253,19 @@ class DQ_Plugin {
             return (string) $settings['realm_id'];
         }
 
-        // Check DQ_Auth class.
-        if ( class_exists( 'DQ_Auth' ) && method_exists( 'DQ_Auth', 'realm_id' ) ) {
-            return DQ_Auth::realm_id();
+        // Check legacy option keys used by various QuickBooks integrations.
+        $legacy_option_keys = [
+            'woqb_realm_id',
+            'dq_realm_id',
+            'dq_company_id',
+            'qb_company_id',
+            'qbo_company_id',
+        ];
+        foreach ( $legacy_option_keys as $opt ) {
+            $rid = get_option( $opt );
+            if ( ! empty( $rid ) ) {
+                return (string) $rid;
+            }
         }
 
         /**
@@ -415,23 +425,34 @@ class DQ_Plugin {
     /**
      * Make a request to the QuickBooks API.
      *
-     * @param string $method  The HTTP method (GET, POST, PUT, DELETE).
+     * @param string $method  The HTTP method (GET, POST).
      * @param string $path    The API endpoint path.
-     * @param array  $data    The request data (for POST/PUT).
+     * @param array  $data    The request data (for POST).
      * @param array  $options Additional request options.
      * @return array|WP_Error The response data or WP_Error on failure.
      */
     public static function api_request( $method, $path, $data = [], $options = [] ) {
+        $method = strtoupper( $method );
+
+        // Validate supported HTTP methods.
+        $supported_methods = [ 'GET', 'POST' ];
+        if ( ! in_array( $method, $supported_methods, true ) ) {
+            return new WP_Error(
+                'dq_unsupported_method',
+                sprintf(
+                    /* translators: %s: HTTP method */
+                    __( 'HTTP method "%s" is not supported. Use GET or POST.', 'dominus-quickbooks' ),
+                    $method
+                )
+            );
+        }
+
         // Use existing DQ_API class if available.
         if ( class_exists( 'DQ_API' ) ) {
-            switch ( strtoupper( $method ) ) {
-                case 'GET':
-                    return DQ_API::get( $path, $options['context'] ?? '' );
-                case 'POST':
-                    return DQ_API::post( $path, $data, $options['context'] ?? '' );
-                default:
-                    return DQ_API::post( $path, $data, $options['context'] ?? '' );
+            if ( $method === 'GET' ) {
+                return DQ_API::get( $path, $options['context'] ?? '' );
             }
+            return DQ_API::post( $path, $data, $options['context'] ?? '' );
         }
 
         // Fallback implementation.
@@ -466,11 +487,10 @@ class DQ_Plugin {
             'timeout' => isset( $options['timeout'] ) ? $options['timeout'] : 30,
         ];
 
-        if ( strtoupper( $method ) === 'POST' || strtoupper( $method ) === 'PUT' ) {
+        if ( $method === 'POST' ) {
             $headers['Content-Type'] = 'application/json';
             $args['headers']         = $headers;
             $args['body']            = wp_json_encode( $data );
-            $args['method']          = strtoupper( $method );
             $response                = wp_remote_post( $url, $args );
         } else {
             $response = wp_remote_get( $url, $args );
