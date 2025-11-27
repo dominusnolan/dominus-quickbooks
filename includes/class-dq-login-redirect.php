@@ -24,6 +24,65 @@ class DQ_Login_Redirect {
     public static function init() {
         // Hook early on 'init' to intercept requests before WordPress processes them
         add_action( 'init', [ __CLASS__, 'maybe_redirect_login_admin' ], 1 );
+        // Handle custom logout endpoint at /access?action=logout
+        add_action( 'init', [ __CLASS__, 'maybe_handle_custom_logout' ], 1 );
+    }
+
+    /**
+     * Handle custom logout requests at /access?action=logout.
+     * This allows users to log out without being redirected away from /access.
+     */
+    public static function maybe_handle_custom_logout() {
+        // Get the current request URI
+        $request_uri = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
+
+        // Parse the path from the request URI
+        $path = wp_parse_url( $request_uri, PHP_URL_PATH );
+        if ( ! $path ) {
+            return;
+        }
+
+        // Normalize the path
+        $path = rtrim( $path, '/' );
+
+        // Check if this is a request to /access
+        if ( ! preg_match( '#' . preg_quote( self::REDIRECT_PATH, '#' ) . '$#i', $path ) ) {
+            return;
+        }
+
+        // Check for action=logout in query string
+        $action = isset( $_GET['action'] ) ? sanitize_text_field( wp_unslash( $_GET['action'] ) ) : '';
+        if ( 'logout' !== $action ) {
+            return;
+        }
+
+        // Verify nonce for CSRF protection
+        $nonce = isset( $_GET['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ) : '';
+        if ( ! wp_verify_nonce( $nonce, 'dq_logout_action' ) ) {
+            // Invalid or missing nonce - redirect to access page without logging out
+            wp_safe_redirect( home_url( self::REDIRECT_PATH ), 302 );
+            exit;
+        }
+
+        // Perform logout if user is logged in
+        if ( is_user_logged_in() ) {
+            wp_logout();
+        }
+
+        // Redirect to /access with logged_out=1 to show confirmation message
+        $redirect_url = add_query_arg( 'logged_out', '1', home_url( self::REDIRECT_PATH ) );
+        wp_safe_redirect( $redirect_url, 302 );
+        exit;
+    }
+
+    /**
+     * Get the custom logout URL with nonce.
+     *
+     * @return string The logout URL with nonce parameter.
+     */
+    public static function get_logout_url() {
+        $logout_url = home_url( self::REDIRECT_PATH . '?action=logout' );
+        return wp_nonce_url( $logout_url, 'dq_logout_action' );
     }
 
     /**
