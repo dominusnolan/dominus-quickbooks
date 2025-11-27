@@ -1123,8 +1123,9 @@ private static function render_kpi_table($workorders)
                             const uid = (data.uids && typeof data.uids[idx] !== 'undefined') ? data.uids[idx] : null;
                             if (!uid) return;
                             const selYear = form ? form.querySelector('[name="fse_year"]').value : '<?php echo intval($year); ?>';
+                            const selQuarter = form ? form.querySelector('[name="fse_quarter"]').value : '0';
                             if (typeof window.dqOpenModalWithFilters === 'function') {
-                                window.dqOpenModalWithFilters({ filter_type: 'engineer', engineer: uid, year: selYear }, 'Work Orders by Engineer (' + selYear + ')');
+                                window.dqOpenModalWithFilters({ filter_type: 'engineer', engineer: uid, year: selYear, fse_quarter: selQuarter }, 'Work Orders by Engineer (' + selYear + ')');
                             } else {
                                 // Fallback: try to simulate click on a link if available (not likely)
                                 console.warn('dqOpenModalWithFilters not available');
@@ -1176,8 +1177,9 @@ private static function render_kpi_table($workorders)
                                 a.addEventListener('click', function(ev){
                                     ev.preventDefault();
                                     var selYear = document.getElementById('dq-fse-filter-form') ? document.getElementById('dq-fse-filter-form').querySelector('[name=\"fse_year\"]').value : '<?php echo intval($year); ?>';
+                                    var selQuarter = document.getElementById('dq-fse-filter-form') ? document.getElementById('dq-fse-filter-form').querySelector('[name=\"fse_quarter\"]').value : '0';
                                     if (typeof window.dqOpenModalWithFilters === 'function') {
-                                        window.dqOpenModalWithFilters({ filter_type: 'ids', wo_ids: idsCopy, year: selYear }, 'Skipped Work Orders for ' + nameCopy);
+                                        window.dqOpenModalWithFilters({ filter_type: 'ids', wo_ids: idsCopy, year: selYear, fse_quarter: selQuarter }, 'Skipped Work Orders for ' + nameCopy);
                                     } else {
                                         alert('Open modal not available');
                                     }
@@ -1206,6 +1208,7 @@ private static function render_kpi_table($workorders)
                 if (!data.uids || !data.labels) return;
                 
                 const selYear = form ? form.querySelector('[name="fse_year"]').value : '<?php echo intval($year); ?>';
+                const selQuarter = form ? form.querySelector('[name="fse_quarter"]').value : '0';
                 let infoHtml = '';
                 
                 // Helper function to escape HTML special characters for XSS prevention
@@ -1226,9 +1229,10 @@ private static function render_kpi_table($workorders)
                         const woIdsList = skippedIds.filter(id => Number.isInteger(id) && id > 0).join(',');
                         const safeLabel = escapeHtml(label);
                         const safeYear = escapeHtml(String(selYear));
+                        const safeQuarter = escapeHtml(String(selQuarter));
                         infoHtml += '<div style="margin-bottom:4px;">';
                         infoHtml += '<span style="color:#666;">Skipped <strong>' + parseInt(skippedCount, 10) + '</strong> WO' + (skippedCount > 1 ? 's' : '') + ' for <strong>' + safeLabel + '</strong></span>';
-                        infoHtml += ' &mdash; <a href="#" class="dq-inspect-skipped-link" data-wo-ids="' + woIdsList + '" data-year="' + safeYear + '" data-engineer="' + safeLabel + '" style="color:#0996a0; text-decoration:underline; cursor:pointer;">Inspect</a>';
+                        infoHtml += ' &mdash; <a href="#" class="dq-inspect-skipped-link" data-wo-ids="' + woIdsList + '" data-year="' + safeYear + '" data-fse-quarter="' + safeQuarter + '" data-engineer="' + safeLabel + '" style="color:#0996a0; text-decoration:underline; cursor:pointer;">Inspect</a>';
                         infoHtml += '</div>';
                     }
                 }
@@ -1247,9 +1251,10 @@ private static function render_kpi_table($workorders)
                     e.preventDefault();
                     const woIds = link.dataset.woIds;
                     const year = link.dataset.year;
+                    const fseQuarter = link.dataset.fseQuarter;
                     const engineer = link.dataset.engineer;
                     if (typeof window.dqOpenModalWithFilters === 'function') {
-                        window.dqOpenModalWithFilters({ filter_type: 'ids', wo_ids: woIds, year: year }, 'Skipped Work Orders for ' + engineer);
+                        window.dqOpenModalWithFilters({ filter_type: 'ids', wo_ids: woIds, year: year, fse_quarter: fseQuarter }, 'Skipped Work Orders for ' + engineer);
                     } else {
                         console.warn('dqOpenModalWithFilters not available');
                     }
@@ -2087,30 +2092,7 @@ public static function ajax_workorder_modal()
         $page = isset($_POST['page']) ? max(1, intval($_POST['page'])) : 1;
         $per_page = self::MODAL_PER_PAGE;
 
-        // Check for direct wo_ids filter (bypasses other filters)
-        $wo_ids_raw = isset($_POST['wo_ids']) ? sanitize_text_field($_POST['wo_ids']) : '';
-        if ($filter_type === 'ids' && !empty($wo_ids_raw)) {
-            // Parse comma-separated IDs into array of integers
-            $filtered_ids = array_filter(array_map('intval', explode(',', $wo_ids_raw)), function($id) {
-                return $id > 0;
-            });
-            $filtered_ids = array_values($filtered_ids);
-        } else {
-            // Get base workorders for the year
-            $workorders = self::get_workorders_in_year($year);
-
-            // Apply filters based on filter_type
-            $filtered_ids = self::filter_workorders($workorders, $filter_type, [
-                'year' => $year,
-                'month' => $month,
-                'state' => $state,
-                'engineer' => $engineer,
-                'lead_category' => $lead_category,
-                'reschedule_reason' => $reschedule_reason,
-            ]);
-        }
-
-        $total = count($filtered_ids);
+        $total = count($ids);
         $max_pages = ceil($total / $per_page);
         $offset = ($page - 1) * $per_page;
         $paged_ids = array_slice($ids, $offset, $per_page);
@@ -2136,11 +2118,34 @@ public static function ajax_workorder_modal()
     $engineer = isset($_POST['engineer']) ? intval($_POST['engineer']) : 0;
     $lead_category = isset($_POST['lead_category']) ? sanitize_text_field($_POST['lead_category']) : '';
     $reschedule_reason = isset($_POST['reschedule_reason']) ? sanitize_text_field($_POST['reschedule_reason']) : '';
+    $fse_quarter = isset($_POST['fse_quarter']) ? intval($_POST['fse_quarter']) : 0;
     $page = isset($_POST['page']) ? max(1, intval($_POST['page'])) : 1;
     $per_page = self::MODAL_PER_PAGE;
 
-    // Get base workorders for the year
-    $workorders = self::get_workorders_in_year($year);
+    // Get base workorders for the year (or quarter if fse_quarter is provided)
+    if ($fse_quarter >= 1 && $fse_quarter <= 4) {
+        // Compute start and end dates for the quarter
+        $start_month = (($fse_quarter - 1) * 3) + 1;
+        $end_month = $start_month + 2;
+        $start = "{$year}-" . str_pad($start_month, 2, '0', STR_PAD_LEFT) . "-01";
+        $end = date('Y-m-t', mktime(0, 0, 0, $end_month, 1, $year));
+
+        // Query workorders for the quarter
+        $engineer_ids = get_users(['role' => 'engineer', 'fields' => 'ID']);
+        $query = [
+            'post_type'      => 'workorder',
+            'post_status'    => ['publish', 'draft', 'pending', 'private'],
+            'posts_per_page' => -1,
+            'fields'         => 'ids',
+            'date_query'     => [
+                ['after' => $start, 'before' => $end, 'inclusive' => true]
+            ],
+            'author__in'     => $engineer_ids,
+        ];
+        $workorders = get_posts($query);
+    } else {
+        $workorders = self::get_workorders_in_year($year);
+    }
 
     // Apply filters based on filter_type
     $filtered_ids = self::filter_workorders($workorders, $filter_type, [
