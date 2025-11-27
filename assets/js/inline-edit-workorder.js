@@ -66,7 +66,8 @@
                     var input = getInputElement(editorEl);
                     if (input) {
                         input.focus();
-                        if (input.select) {
+                        // Select text content for input/textarea, not for select elements
+                        if (input.tagName !== 'SELECT' && typeof input.select === 'function') {
                             input.select();
                         }
                     }
