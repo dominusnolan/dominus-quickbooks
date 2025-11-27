@@ -52,6 +52,9 @@ require_once DQQB_PATH . 'includes/class-dq-invoice-list.php';
 // NEW: Workorder table shortcode with AJAX pagination
 require_once DQQB_PATH . 'includes/class-dq-workorder-table.php';
 
+// NEW: Front-end admin dashboard
+require_once DQQB_PATH . 'includes/class-dq-dashboard.php';
+
 // -----------------------------------------------------------------------------
 // Initialize Plugin
 // -----------------------------------------------------------------------------
@@ -88,6 +91,7 @@ add_action( 'plugins_loaded', function() {
     if ( class_exists( 'DQ_Workorder_Timeline' ) ) DQ_Workorder_Timeline::init(); // NEW
     if ( class_exists( 'DQ_Invoice_List' ) ) DQ_Invoice_List::init(); // NEW
     if ( class_exists( 'DQ_Workorder_Table' ) ) DQ_Workorder_Table::init(); // NEW
+    if ( class_exists( 'DQ_Dashboard' ) ) DQ_Dashboard::init(); // NEW: Front-end dashboard
     
     if ( class_exists( 'DQ_Workorder_Template' ) ) DQ_Workorder_Template::init(); // NEW
 });
