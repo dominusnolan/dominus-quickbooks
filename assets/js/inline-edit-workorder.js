@@ -122,22 +122,35 @@
                     if (cancelBtn) cancelBtn.disabled = false;
 
                     if (data.success) {
-                        // Update the display value
+                        // Use server-returned sanitized value
+                        var savedValue = data.data && data.data.value !== undefined ? data.data.value : newValue;
+
+                        // Update the display value with server-returned value
                         var valueEl = card.querySelector('.dqqb-inline-value');
                         if (valueEl) {
-                            valueEl.textContent = newValue || '—';
+                            valueEl.textContent = savedValue || '—';
                         }
 
                         // Update the data-original attribute for future cancels
                         var editorEl = card.querySelector('.dqqb-inline-editor');
                         if (editorEl) {
-                            editorEl.setAttribute('data-original', newValue);
+                            editorEl.setAttribute('data-original', savedValue);
                         }
 
-                        // Show success status
+                        // Also update the input value to match server-returned value
+                        if (input) {
+                            input.value = savedValue;
+                        }
+
+                        // Show success status (with optional warning)
                         if (statusEl) {
-                            statusEl.textContent = 'Saved!';
-                            statusEl.className = 'dqqb-inline-status dqqb-status-success';
+                            if (data.data && data.data.warning) {
+                                statusEl.textContent = data.data.warning;
+                                statusEl.className = 'dqqb-inline-status dqqb-status-error';
+                            } else {
+                                statusEl.textContent = 'Saved!';
+                                statusEl.className = 'dqqb-inline-status dqqb-status-success';
+                            }
                         }
 
                         // Hide editor, show display

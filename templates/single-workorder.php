@@ -68,8 +68,9 @@ $always_show_fields = [
     'wo_type_of_work'      => 'Type of Work',
     'wo_state'             => 'State',
     'wo_city'              => 'City',
+    'wo_location'          => 'Location',
 ];
-$editable_fields = [ 'installed_product_id', 'wo_type_of_work', 'wo_state', 'wo_city' ];
+$editable_fields = [ 'installed_product_id', 'wo_type_of_work', 'wo_state', 'wo_city', 'wo_location' ];
 ?>
 
 <style>
@@ -267,7 +268,7 @@ $editable_fields = [ 'installed_product_id', 'wo_type_of_work', 'wo_state', 'wo_
                         'wo_type_of_work'      => [ 'label' => 'Type of Work', 'value' => $val('wo_type_of_work') ],
                         'wo_state'             => [ 'label' => 'State', 'value' => $val('wo_state') ],
                         'wo_city'              => [ 'label' => 'City', 'value' => $val('wo_city') ],
-                        'wo_location'          => [ 'label' => 'Account', 'value' => $val('wo_location') ],
+                        'wo_location'          => [ 'label' => 'Location', 'value' => $val('wo_location') ],
                     ];
 
                     foreach ( $meta_fields as $field_key => $field_data ) {
@@ -375,17 +376,49 @@ $editable_fields = [ 'installed_product_id', 'wo_type_of_work', 'wo_state', 'wo_
                 <div class="wo-meta-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
                     
                     <?php
-                    $pairs = [
-                        'Name'             => $val('wo_contact_name'),
-                        'Address'           => $val('wo_contact_address'),
-                        'Email'             => $val('wo_contact_email'),
-                        'Number'           => $val('wo_service_contact_number'),
+                    // Customer detail fields - always shown, editable when user can edit
+                    $customer_fields = [
+                        'wo_contact_name'           => [ 'label' => 'Name', 'value' => $val('wo_contact_name') ],
+                        'wo_contact_address'        => [ 'label' => 'Address', 'value' => $val('wo_contact_address') ],
+                        'wo_contact_email'          => [ 'label' => 'Email', 'value' => $val('wo_contact_email') ],
+                        'wo_service_contact_number' => [ 'label' => 'Number', 'value' => $val('wo_service_contact_number') ],
                     ];
-                    foreach ( $pairs as $label => $value ) {
-                        if ( $value === '' ) continue;
-                        echo '<div class="wo-meta-card" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;">';
+
+                    foreach ( $customer_fields as $field_key => $field_data ) {
+                        $label = $field_data['label'];
+                        $value = $field_data['value'];
+                        $display_value = $value !== '' ? esc_html( (string)$value ) : '—';
+
+                        // Add data attributes for editable fields when user can edit
+                        $card_attrs = '';
+                        if ( $can_edit ) {
+                            $card_attrs = ' data-field="' . esc_attr( $field_key ) . '" data-post-id="' . esc_attr( $post_id ) . '"';
+                        }
+
+                        echo '<div class="wo-meta-card" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;"' . $card_attrs . '>';
                         echo '<div style="font-weight:600;color:#222;margin-bottom:4px;">' . esc_html( $label ) . '</div>';
-                        echo '<div style="color:#333;">' . esc_html( is_numeric($value) ? number_format( (float)$value, 2 ) : (string)$value ) . '</div>';
+
+                        if ( $can_edit ) {
+                            // Display with edit button
+                            echo '<div class="dqqb-inline-display">';
+                            echo '<span class="dqqb-inline-value">' . $display_value . '</span>';
+                            echo '<button type="button" class="dqqb-inline-edit-btn" title="Edit">&#9998;</button>';
+                            echo '</div>';
+
+                            // Hidden editor with data-original to preserve raw value
+                            echo '<div class="dqqb-inline-editor" data-original="' . esc_attr( $value ) . '">';
+                            echo '<input type="text" class="dqqb-inline-input" value="' . esc_attr( $value ) . '" />';
+                            echo '<div class="dqqb-inline-actions">';
+                            echo '<button type="button" class="dqqb-inline-save">Save</button>';
+                            echo '<button type="button" class="dqqb-inline-cancel">Cancel</button>';
+                            echo '</div>';
+                            echo '<div class="dqqb-inline-status"></div>';
+                            echo '</div>';
+                        } else {
+                            // Just display the value
+                            echo '<div style="color:#333;">' . $display_value . '</div>';
+                        }
+
                         echo '</div>';
                     }
                     ?>
