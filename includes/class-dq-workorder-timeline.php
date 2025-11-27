@@ -135,6 +135,7 @@ class DQ_Workorder_Timeline
                 'help' => 'The date the workorder was received by the FSC.',
                 'color' => '#b9c658',
                 'emoji' => '📥',
+                'note_key' => 'date_received_note',
             ],
             [
                 'label' => 'FSC Contact Date',
@@ -142,6 +143,7 @@ class DQ_Workorder_Timeline
                 'help' => 'The date the FSC contacted the customer to schedule service.',
                 'color' => '#144477',
                 'emoji' => '☎️',
+                'note_key' => 'fsc_contact_date_note',
             ],
             [
                 'label' => 'Scheduled Service',
@@ -149,6 +151,7 @@ class DQ_Workorder_Timeline
                 'help' => 'The date the service was scheduled with the customer.',
                 'color' => '#2f9fa1',
                 'emoji' => '📅',
+                'note_key' => 'scheduled_service_note',
             ]
         ];
         // Conditionally add Re-Scheduled Service
@@ -169,6 +172,8 @@ class DQ_Workorder_Timeline
                 'help' => 'The date the service was re-scheduled with the customer.',
                 'color' => '#aa6e0b',
                 'emoji' => '📅',
+                'note_key' => 're_schedule_note',
+                'rescheduled_reason_field' => 'rescheduled_reason',
             ];
         }
 
@@ -179,6 +184,7 @@ class DQ_Workorder_Timeline
                 'help' => 'The date service was completed by the engineer.',
                 'color' => '#8c3fed',
                 'emoji' => '🛠️',
+                'note_key' => 'date_service_completed_by_fse_note',
             ],
             [
                 'label' => 'Date Field Service Report Closed in SMAX',
@@ -186,6 +192,7 @@ class DQ_Workorder_Timeline
                 'help' => 'Date the workorder was closed/completed.',
                 'color' => '#36a829',
                 'emoji' => '✅',
+                'note_key' => 'closed_in_note',
             ],
             [
                 'label' => 'Date FSR and DIA Reports Sent to Customer',
@@ -193,9 +200,29 @@ class DQ_Workorder_Timeline
                 'help' => 'FSR and DIA reports sent to customer.',
                 'color' => '#567da1',
                 'emoji' => '📧',
+                'note_key' => 'date_fsr_and_dia_reports_sent_to_customer_note',
             ],
         ]);
         return $fields;
+    }
+
+    /**
+     * Get field value from ACF first, fallback to post meta.
+     *
+     * @param string $field_key The field key to retrieve.
+     * @param int    $post_id   The post ID.
+     * @return mixed The field value.
+     */
+    private static function get_field_value($field_key, $post_id)
+    {
+        $value = '';
+        if (function_exists('get_field')) {
+            $value = get_field($field_key, $post_id);
+        }
+        if (empty($value)) {
+            $value = get_post_meta($post_id, $field_key, true);
+        }
+        return $value;
     }
 
     private static function get_timeline_data($post_id)
@@ -203,12 +230,18 @@ class DQ_Workorder_Timeline
         $field_map = self::get_field_map($post_id);
         $timeline_data = [];
         foreach ($field_map as $field) {
-            $raw_value = function_exists('get_field')
-                ? get_field($field['key'], $post_id)
-                : get_post_meta($post_id, $field['key'], true);
+            $raw_value = self::get_field_value($field['key'], $post_id);
 
             $normalized_date = self::normalize_date($raw_value);
-            $timeline_data[] = [
+
+            // Load note value for this step
+            $note_value = '';
+            if (!empty($field['note_key'])) {
+                $note_value = self::get_field_value($field['note_key'], $post_id);
+            }
+
+            // Build step data
+            $step_data = [
                 'label' => $field['label'],
                 'key' => $field['key'],
                 'help' => $field['help'],
@@ -218,7 +251,26 @@ class DQ_Workorder_Timeline
                 'normalized' => $normalized_date,
                 'display_date' => $normalized_date ? $normalized_date : '',
                 'has_date' => !empty($normalized_date),
+                'note_key' => isset($field['note_key']) ? $field['note_key'] : '',
+                'note_value' => $note_value,
             ];
+
+            // For rescheduled step, load the ACF select field object for 'rescheduled_reason'
+            if (!empty($field['rescheduled_reason_field'])) {
+                $step_data['rescheduled_reason_field'] = $field['rescheduled_reason_field'];
+                $step_data['rescheduled_reason_value'] = self::get_field_value($field['rescheduled_reason_field'], $post_id);
+                $step_data['rescheduled_reason_choices'] = [];
+
+                // Get ACF field object to retrieve choices
+                if (function_exists('get_field_object')) {
+                    $field_obj = get_field_object($field['rescheduled_reason_field'], $post_id);
+                    if ($field_obj && !empty($field_obj['choices'])) {
+                        $step_data['rescheduled_reason_choices'] = $field_obj['choices'];
+                    }
+                }
+            }
+
+            $timeline_data[] = $step_data;
         }
         return $timeline_data;
     }
