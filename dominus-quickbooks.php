@@ -57,6 +57,9 @@ require_once DQQB_PATH . 'includes/class-dq-workorder-table.php';
 // NEW: Front-end admin dashboard
 require_once DQQB_PATH . 'includes/class-dq-dashboard.php';
 
+// NEW: Login redirect handler (redirects wp-login.php and wp-admin to /access)
+require_once DQQB_PATH . 'includes/class-dq-login-redirect.php';
+
 // -----------------------------------------------------------------------------
 // Initialize Plugin
 // -----------------------------------------------------------------------------
@@ -97,6 +100,7 @@ add_action( 'plugins_loaded', function() {
     if ( class_exists( 'DQ_Dashboard' ) ) DQ_Dashboard::init(); // NEW: Front-end dashboard
     
     if ( class_exists( 'DQ_Workorder_Template' ) ) DQ_Workorder_Template::init(); // NEW
+    if ( class_exists( 'DQ_Login_Redirect' ) ) DQ_Login_Redirect::init(); // NEW: Login redirect handler
 });
 
 // -----------------------------------------------------------------------------
