@@ -153,7 +153,7 @@ class DQ_Dashboard
             } elseif ($key === 'workorder_report') {
                 $url = admin_url('admin.php?page=dq-workorder-report');
             } elseif ($key === 'logout') {
-                $url = wp_logout_url(home_url());
+                $url = DQ_Login_Redirect::get_logout_url();
             }
 
             $target = '';

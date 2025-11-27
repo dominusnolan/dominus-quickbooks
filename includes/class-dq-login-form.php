@@ -72,7 +72,13 @@ class DQ_Login_Form {
             'redirectUrl' => home_url( self::REDIRECT_PATH ),
         ] );
 
-        return self::render_login_form();
+        // Check if user was just logged out
+        $logged_out_message = '';
+        if ( isset( $_GET['logged_out'] ) && '1' === sanitize_text_field( wp_unslash( $_GET['logged_out'] ) ) ) {
+            $logged_out_message = self::render_logged_out_message();
+        }
+
+        return $logged_out_message . self::render_login_form();
     }
 
     /**
@@ -151,6 +157,7 @@ class DQ_Login_Form {
         $current_user = wp_get_current_user();
         $display_name = esc_html( $current_user->display_name );
         $redirect_url = esc_url( home_url( self::REDIRECT_PATH ) );
+        $logout_url   = esc_url( DQ_Login_Redirect::get_logout_url() );
 
         $output = '<div class="dq-login-wrapper">';
         $output .= '<div class="dq-login-container dq-logged-in">';
@@ -163,8 +170,24 @@ class DQ_Login_Form {
         $output .= '</div>';
         $output .= '<div class="dq-login-actions">';
         $output .= '<a href="' . $redirect_url . '" class="dq-login-button">Go to Account Page</a>';
-        $output .= '<a href="' . esc_url( wp_logout_url( home_url() ) ) . '" class="dq-logout-link">Sign out</a>';
+        $output .= '<a href="' . $logout_url . '" class="dq-logout-link">Sign out</a>';
         $output .= '</div>';
+        $output .= '</div>';
+        $output .= '</div>';
+
+        return $output;
+    }
+
+    /**
+     * Render the logout confirmation message.
+     *
+     * @return string HTML output.
+     */
+    private static function render_logged_out_message() {
+        $output = '<div class="dq-login-wrapper">';
+        $output .= '<div class="dq-logout-message">';
+        $output .= '<span class="dashicons dashicons-yes-alt dq-success-icon"></span>';
+        $output .= '<p>You have been logged out successfully.</p>';
         $output .= '</div>';
         $output .= '</div>';
 

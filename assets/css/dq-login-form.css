@@ -283,6 +283,37 @@
     text-decoration: underline;
 }
 
+/* Logout confirmation message */
+.dq-logout-message {
+    width: 100%;
+    max-width: 420px;
+    background: #f0fdf4;
+    border: 1px solid #86efac;
+    border-radius: 12px;
+    padding: 20px 30px;
+    margin-bottom: 20px;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+}
+
+.dq-logout-message .dq-success-icon {
+    font-size: 24px;
+    width: 24px;
+    height: 24px;
+    color: #166534;
+    margin: 0;
+}
+
+.dq-logout-message p {
+    margin: 0;
+    font-size: 15px;
+    color: #166534;
+    font-weight: 500;
+}
+
 /* Dashicons */
 .dashicons {
     font-family: dashicons;
