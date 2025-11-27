@@ -373,6 +373,7 @@ class DQ_Workorder_Admin_Table {
         }
 
         // Only apply default sort if no orderby is explicitly set
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only check, no action taken
         if ( ! isset( $_GET['orderby'] ) ) {
             $query->set( 'orderby', 'date' );
             $query->set( 'order', 'DESC' );
@@ -409,7 +410,9 @@ class DQ_Workorder_Admin_Table {
 
         if ( isset( $meta_key_map[ $orderby ] ) ) {
             $query->set( 'meta_key', $meta_key_map[ $orderby ] );
+            // Use meta_value for date sorting - dates are stored in sortable format
             $query->set( 'orderby', 'meta_value' );
+            $query->set( 'meta_type', 'DATE' );
         }
     }
 
@@ -633,7 +636,8 @@ class DQ_Workorder_Admin_Table {
         }
 
         // Get and validate post ID
-        $post_id = isset( $_POST['post_id'] ) ? intval( $_POST['post_id'] ) : 0;
+        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- intval() provides sanitization
+        $post_id = isset( $_POST['post_id'] ) ? absint( wp_unslash( $_POST['post_id'] ) ) : 0;
         if ( $post_id <= 0 ) {
             wp_send_json_error( [ 'message' => 'Invalid post ID.' ] );
         }
@@ -787,7 +791,7 @@ class DQ_Workorder_Admin_Table {
         // Try to parse the date
         $timestamp = strtotime( $date_value );
         if ( $timestamp !== false ) {
-            return esc_html( date( 'm/d/Y', $timestamp ) );
+            return esc_html( wp_date( 'm/d/Y', $timestamp ) );
         }
 
         // Return as-is if parsing fails
