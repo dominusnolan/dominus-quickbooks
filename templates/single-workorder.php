@@ -417,7 +417,8 @@ $editable_fields = [ 'installed_product_id', 'wo_type_of_work', 'wo_state', 'wo_
                         <?php endif; ?>
                     </div>
                     <?php if ( $can_edit ) : ?>
-                    <div class="dqqb-inline-editor dqqb-rich-editor-wrapper" data-original="<?php echo esc_attr( $private_comments ); ?>">
+                    <div class="dqqb-inline-editor dqqb-rich-editor-wrapper">
+                        <textarea class="dqqb-original-value" style="display:none;"><?php echo esc_textarea( $private_comments ); ?></textarea>
                         <div class="dqqb-rich-toolbar">
                             <button type="button" data-command="bold" title="Bold"><b>B</b></button>
                             <button type="button" data-command="italic" title="Italic"><i>I</i></button>

@@ -112,9 +112,17 @@
                 var editorEl = card.querySelector('.dqqb-inline-editor');
                 var input = getInputElement(editorEl);
 
-                // Reset input to original value from data attribute
+                // Reset input to original value
                 if (input && editorEl) {
-                    var originalValue = editorEl.getAttribute('data-original') || '';
+                    var originalValue;
+                    // For rich editor, use hidden textarea to store original value
+                    var originalTextarea = editorEl.querySelector('.dqqb-original-value');
+                    if (originalTextarea) {
+                        originalValue = originalTextarea.value || '';
+                    } else {
+                        // For other fields, use data-original attribute
+                        originalValue = editorEl.getAttribute('data-original') || '';
+                    }
                     setInputValue(input, originalValue);
                 }
 
@@ -216,9 +224,14 @@
                             }
                         }
 
-                        // Update the data-original attribute for future cancels
+                        // Update the data-original attribute or hidden textarea for future cancels
                         if (editorEl) {
-                            editorEl.setAttribute('data-original', savedValue);
+                            var originalTextarea = editorEl.querySelector('.dqqb-original-value');
+                            if (originalTextarea) {
+                                originalTextarea.value = savedValue;
+                            } else {
+                                editorEl.setAttribute('data-original', savedValue);
+                            }
                         }
 
                         // Also update the input value to match server-returned value
