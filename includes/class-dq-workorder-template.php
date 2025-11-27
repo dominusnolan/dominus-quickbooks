@@ -21,6 +21,12 @@ class DQ_Workorder_Template {
 
         // Force plugin template for single workorder pages (front-end only)
         add_filter( 'template_include', [ __CLASS__, 'force_plugin_template' ], 5 );
+
+        // Enqueue inline edit assets on front-end single workorder pages
+        add_action( 'wp_enqueue_scripts', [ __CLASS__, 'maybe_enqueue_assets' ] );
+
+        // AJAX handler for inline field updates (logged-in users only)
+        add_action( 'wp_ajax_dqqb_inline_update', [ __CLASS__, 'handle_inline_update' ] );
     }
 
     /**
@@ -183,5 +189,111 @@ class DQ_Workorder_Template {
             wp_safe_redirect(add_query_arg('dqqb_quote_error', rawurlencode('Failed to send email.'), $referer));
             exit;
         }
+    }
+
+    /**
+     * Enqueue inline edit assets on front-end single workorder pages
+     */
+    public static function maybe_enqueue_assets() {
+        // Only on front-end single workorder pages
+        if ( is_admin() || ! is_singular( 'workorder' ) ) {
+            return;
+        }
+
+        // Only enqueue if user is logged in and can edit the post
+        if ( ! is_user_logged_in() ) {
+            return;
+        }
+
+        global $post;
+        if ( ! $post || ! current_user_can( 'edit_post', $post->ID ) ) {
+            return;
+        }
+
+        $js_path = defined( 'DQQB_PATH' ) ? DQQB_PATH : plugin_dir_path( dirname( __FILE__ ) );
+        $js_url  = defined( 'DQQB_URL' )  ? DQQB_URL  : plugin_dir_url( dirname( __FILE__ ) );
+
+        $js_file = $js_path . 'assets/js/inline-edit-workorder.js';
+        $js_file_url = $js_url . 'assets/js/inline-edit-workorder.js';
+
+        if ( file_exists( $js_file ) ) {
+            wp_enqueue_script(
+                'dqqb-inline-edit-workorder',
+                $js_file_url,
+                [],
+                filemtime( $js_file ),
+                true
+            );
+
+            wp_localize_script(
+                'dqqb-inline-edit-workorder',
+                'DQQBInlineEdit',
+                [
+                    'ajax_url' => admin_url( 'admin-ajax.php' ),
+                    'nonce'    => wp_create_nonce( 'dqqb-inline-edit' ),
+                ]
+            );
+        }
+    }
+
+    /**
+     * AJAX handler for inline field updates
+     * Validates nonce and permissions, then updates field via ACF or post_meta
+     */
+    public static function handle_inline_update() {
+        // Verify nonce
+        if ( ! check_ajax_referer( 'dqqb-inline-edit', 'nonce', false ) ) {
+            wp_send_json_error( 'Invalid security token.' );
+        }
+
+        // Ensure user is logged in
+        if ( ! is_user_logged_in() ) {
+            wp_send_json_error( 'You must be logged in.' );
+        }
+
+        // Get and validate post_id
+        $post_id = isset( $_POST['post_id'] ) ? intval( $_POST['post_id'] ) : 0;
+        if ( $post_id <= 0 ) {
+            wp_send_json_error( 'Invalid post ID.' );
+        }
+
+        // Verify the post exists and is a workorder
+        $post = get_post( $post_id );
+        if ( ! $post || $post->post_type !== 'workorder' ) {
+            wp_send_json_error( 'Invalid workorder.' );
+        }
+
+        // Check user capability
+        if ( ! current_user_can( 'edit_post', $post_id ) ) {
+            wp_send_json_error( 'You do not have permission to edit this post.' );
+        }
+
+        // Get field and value
+        $field = isset( $_POST['field'] ) ? sanitize_key( $_POST['field'] ) : '';
+        $value = isset( $_POST['value'] ) ? wp_strip_all_tags( wp_unslash( $_POST['value'] ) ) : '';
+
+        // Whitelist of allowed editable fields
+        $allowed_fields = [
+            'installed_product_id',
+            'wo_type_of_work',
+            'wo_state',
+            'wo_city',
+        ];
+
+        if ( ! in_array( $field, $allowed_fields, true ) ) {
+            wp_send_json_error( 'Field not allowed.' );
+        }
+
+        // Sanitize value (already stripped tags above)
+        $value = sanitize_text_field( $value );
+
+        // Update via ACF if available, otherwise use post_meta
+        if ( function_exists( 'update_field' ) ) {
+            update_field( $field, $value, $post_id );
+        } else {
+            update_post_meta( $post_id, $field, $value );
+        }
+
+        wp_send_json_success( [ 'value' => $value ] );
     }
 }
