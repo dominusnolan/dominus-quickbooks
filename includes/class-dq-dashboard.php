@@ -73,7 +73,7 @@ class DQ_Dashboard
 
         // Get current menu from URL param
         $current_menu = isset($_GET['dqqb_menu']) ? sanitize_key($_GET['dqqb_menu']) : 'dashboard';
-        $valid_menus = ['dashboard', 'workorders', 'invoices', 'invoices_balance', 'financial_report', 'workorder_report', 'team'];
+        $valid_menus = ['dashboard', 'workorders', 'invoices', 'invoices_balance', 'financial_report', 'workorder_report', 'team', 'logout'];
         if (!in_array($current_menu, $valid_menus, true)) {
             $current_menu = 'dashboard';
         }
