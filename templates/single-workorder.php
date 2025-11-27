@@ -186,6 +186,15 @@ $editable_fields = [ 'installed_product_id', 'wo_type_of_work', 'wo_state', 'wo_
         margin-bottom: 6px;
         box-sizing: border-box;
     }
+    textarea.dqqb-inline-input {
+        min-height: 60px;
+        resize: vertical;
+        font-family: inherit;
+    }
+    select.dqqb-inline-input {
+        background: #fff;
+        cursor: pointer;
+    }
     .dqqb-inline-input:focus {
         outline: none;
         border-color: #005177;
@@ -356,16 +365,73 @@ $editable_fields = [ 'installed_product_id', 'wo_type_of_work', 'wo_state', 'wo_
                 <div class="wo-meta-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
                     
                     <?php
-                    // A few handy bits users often want under the timeline; adjust/extend as needed.
-                    $pairs = [
-                        'Leads'             => $val('wo_leads'),
-                        'Category'           => $val('wo_lead_category'),
+                    // Lead detail fields - always shown, editable with dropdown when user can edit
+                    $lead_fields = [
+                        'wo_leads'         => [ 'label' => 'Leads', 'value' => $val('wo_leads') ],
+                        'wo_lead_category' => [ 'label' => 'Category', 'value' => $val('wo_lead_category') ],
                     ];
-                    foreach ( $pairs as $label => $value ) {
-                        if ( $value === '' ) continue;
-                        echo '<div class="wo-meta-card" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;">';
+
+                    foreach ( $lead_fields as $field_key => $field_data ) {
+                        $label = $field_data['label'];
+                        $value = $field_data['value'];
+
+                        // Get ACF field choices if available
+                        $choices = [];
+                        if ( function_exists( 'get_field_object' ) ) {
+                            $field_object = get_field_object( $field_key, $post_id );
+                            if ( $field_object && ! empty( $field_object['choices'] ) ) {
+                                $choices = $field_object['choices'];
+                            }
+                        }
+
+                        // Display label (from ACF choices) or raw value
+                        $display_value = $value;
+                        if ( $value !== '' && ! empty( $choices ) && isset( $choices[ $value ] ) ) {
+                            $display_value = $choices[ $value ];
+                        }
+                        $display_value = $display_value !== '' ? esc_html( (string) $display_value ) : '—';
+
+                        // Add data attributes for editable fields when user can edit
+                        $card_attrs = '';
+                        if ( $can_edit ) {
+                            $card_attrs = ' data-field="' . esc_attr( $field_key ) . '" data-post-id="' . esc_attr( $post_id ) . '"';
+                        }
+
+                        echo '<div class="wo-meta-card" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;"' . $card_attrs . '>';
                         echo '<div style="font-weight:600;color:#222;margin-bottom:4px;">' . esc_html( $label ) . '</div>';
-                        echo '<div style="color:#333;">' . esc_html( is_numeric($value) ? number_format( (float)$value, 2 ) : (string)$value ) . '</div>';
+
+                        if ( $can_edit ) {
+                            // Display with edit button
+                            echo '<div class="dqqb-inline-display">';
+                            echo '<span class="dqqb-inline-value">' . $display_value . '</span>';
+                            echo '<button type="button" class="dqqb-inline-edit-btn" title="Edit">&#9998;</button>';
+                            echo '</div>';
+
+                            // Hidden editor with select dropdown
+                            echo '<div class="dqqb-inline-editor" data-original="' . esc_attr( $value ) . '">';
+                            if ( ! empty( $choices ) ) {
+                                echo '<select class="dqqb-inline-input">';
+                                echo '<option value="">— Select —</option>';
+                                foreach ( $choices as $choice_key => $choice_label ) {
+                                    $selected = ( $value === $choice_key ) ? ' selected' : '';
+                                    echo '<option value="' . esc_attr( $choice_key ) . '"' . $selected . '>' . esc_html( $choice_label ) . '</option>';
+                                }
+                                echo '</select>';
+                            } else {
+                                // Fallback to text input if no choices available
+                                echo '<input type="text" class="dqqb-inline-input" value="' . esc_attr( $value ) . '" />';
+                            }
+                            echo '<div class="dqqb-inline-actions">';
+                            echo '<button type="button" class="dqqb-inline-save">Save</button>';
+                            echo '<button type="button" class="dqqb-inline-cancel">Cancel</button>';
+                            echo '</div>';
+                            echo '<div class="dqqb-inline-status"></div>';
+                            echo '</div>';
+                        } else {
+                            // Just display the value
+                            echo '<div style="color:#333;">' . $display_value . '</div>';
+                        }
+
                         echo '</div>';
                     }
                     ?>
@@ -377,16 +443,18 @@ $editable_fields = [ 'installed_product_id', 'wo_type_of_work', 'wo_state', 'wo_
                     
                     <?php
                     // Customer detail fields - always shown, editable when user can edit
+                    // Define input types for each field
                     $customer_fields = [
-                        'wo_contact_name'           => [ 'label' => 'Name', 'value' => $val('wo_contact_name') ],
-                        'wo_contact_address'        => [ 'label' => 'Address', 'value' => $val('wo_contact_address') ],
-                        'wo_contact_email'          => [ 'label' => 'Email', 'value' => $val('wo_contact_email') ],
-                        'wo_service_contact_number' => [ 'label' => 'Number', 'value' => $val('wo_service_contact_number') ],
+                        'wo_contact_name'           => [ 'label' => 'Name', 'value' => $val('wo_contact_name'), 'type' => 'text' ],
+                        'wo_contact_address'        => [ 'label' => 'Address', 'value' => $val('wo_contact_address'), 'type' => 'textarea' ],
+                        'wo_contact_email'          => [ 'label' => 'Email', 'value' => $val('wo_contact_email'), 'type' => 'email' ],
+                        'wo_service_contact_number' => [ 'label' => 'Number', 'value' => $val('wo_service_contact_number'), 'type' => 'tel' ],
                     ];
 
                     foreach ( $customer_fields as $field_key => $field_data ) {
                         $label = $field_data['label'];
                         $value = $field_data['value'];
+                        $input_type = $field_data['type'];
                         $display_value = $value !== '' ? esc_html( (string)$value ) : '—';
 
                         // Add data attributes for editable fields when user can edit
@@ -405,9 +473,13 @@ $editable_fields = [ 'installed_product_id', 'wo_type_of_work', 'wo_state', 'wo_
                             echo '<button type="button" class="dqqb-inline-edit-btn" title="Edit">&#9998;</button>';
                             echo '</div>';
 
-                            // Hidden editor with data-original to preserve raw value
+                            // Hidden editor with appropriate input type
                             echo '<div class="dqqb-inline-editor" data-original="' . esc_attr( $value ) . '">';
-                            echo '<input type="text" class="dqqb-inline-input" value="' . esc_attr( $value ) . '" />';
+                            if ( $input_type === 'textarea' ) {
+                                echo '<textarea class="dqqb-inline-input">' . esc_textarea( $value ) . '</textarea>';
+                            } else {
+                                echo '<input type="' . esc_attr( $input_type ) . '" class="dqqb-inline-input" value="' . esc_attr( $value ) . '" />';
+                            }
                             echo '<div class="dqqb-inline-actions">';
                             echo '<button type="button" class="dqqb-inline-save">Save</button>';
                             echo '<button type="button" class="dqqb-inline-cancel">Cancel</button>';

@@ -283,23 +283,43 @@ class DQ_Workorder_Template {
             'wo_contact_address',
             'wo_contact_email',
             'wo_service_contact_number',
+            'wo_leads',
+            'wo_lead_category',
         ];
 
         if ( ! in_array( $field, $allowed_fields, true ) ) {
             wp_send_json_error( 'Field not allowed.' );
         }
 
+        // Fields that use ACF choices (selects)
+        $choice_fields = [ 'wo_leads', 'wo_lead_category' ];
+        $label = null;
+
         // Sanitize value based on field type
-        $warning = '';
         if ( $field === 'wo_contact_email' ) {
             // Email-specific sanitization and validation
             $sanitized_email = sanitize_email( $value );
             if ( $value !== '' && ! is_email( $sanitized_email ) ) {
-                // Invalid email: save as sanitized text but return warning
-                $value = sanitize_text_field( $value );
-                $warning = 'Value saved, but it is not a valid email address.';
-            } else {
-                $value = $sanitized_email;
+                // Invalid email: reject and do not save
+                wp_send_json_error( 'Invalid email address.' );
+            }
+            $value = $sanitized_email;
+        } elseif ( in_array( $field, $choice_fields, true ) ) {
+            // For choice fields, validate against ACF choices if available
+            $value = sanitize_text_field( $value );
+            if ( function_exists( 'get_field_object' ) ) {
+                $field_object = get_field_object( $field, $post_id );
+                if ( $field_object && ! empty( $field_object['choices'] ) ) {
+                    $choices = $field_object['choices'];
+                    // Allow empty value to clear the field
+                    if ( $value !== '' && ! array_key_exists( $value, $choices ) ) {
+                        wp_send_json_error( 'Invalid choice for this field.' );
+                    }
+                    // Get the human-readable label for the choice
+                    if ( $value !== '' && isset( $choices[ $value ] ) ) {
+                        $label = $choices[ $value ];
+                    }
+                }
             }
         } else {
             // General text field sanitization
@@ -313,9 +333,12 @@ class DQ_Workorder_Template {
             update_post_meta( $post_id, $field, $value );
         }
 
-        $response = [ 'value' => $value ];
-        if ( $warning !== '' ) {
-            $response['warning'] = $warning;
+        $response = [
+            'field' => $field,
+            'value' => $value,
+        ];
+        if ( $label !== null ) {
+            $response['label'] = $label;
         }
 
         wp_send_json_success( $response );
