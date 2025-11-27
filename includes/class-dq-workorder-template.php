@@ -348,8 +348,22 @@ class DQ_Workorder_Template {
             wp_send_json_error( 'You do not have permission to edit this post.' );
         }
 
-        // Get field and value
-        $field = isset( $_POST['field'] ) ? sanitize_key( $_POST['field'] ) : '';
+        // Get raw field value for debug logging
+        $raw_field = isset( $_POST['field'] ) ? wp_unslash( $_POST['field'] ) : '';
+
+        // Trim whitespace and sanitize field name (sanitize_key lowercases and removes non-alphanumeric chars except dashes/underscores)
+        $field = sanitize_key( trim( $raw_field ) );
+
+        // Debug logging for troubleshooting field matching issues
+        if ( defined( 'WP_DEBUG' ) && WP_DEBUG && defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+            error_log( sprintf(
+                '[DQQB Inline Edit] Raw field: "%s", Sanitized field: "%s", Post ID: %d',
+                $raw_field,
+                $field,
+                $post_id
+            ) );
+        }
+
         // For private_comments, allow HTML; others strip tags
         $raw_value = isset( $_POST['value'] ) ? wp_unslash( $_POST['value'] ) : '';
         $value = ( $field === 'private_comments' ) ? $raw_value : wp_strip_all_tags( $raw_value );
@@ -371,7 +385,13 @@ class DQ_Workorder_Template {
         ];
 
         if ( ! in_array( $field, $allowed_fields, true ) ) {
-            wp_send_json_error( 'Field not allowed.' );
+            // Provide detailed error message including raw and sanitized field values for debugging
+            wp_send_json_error( sprintf(
+                'Field not allowed. Raw field: "%s", Sanitized field: "%s". Allowed fields: %s',
+                esc_html( $raw_field ),
+                esc_html( $field ),
+                implode( ', ', $allowed_fields )
+            ) );
         }
 
         // Fields that use ACF choices (selects)
