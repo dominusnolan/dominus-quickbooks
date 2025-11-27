@@ -96,11 +96,16 @@ class DQ_Payroll {
         }
 
         // Validate amount
-        $amount_clean = preg_replace( '/[^0-9.\-]/', '', $amount );
+        $amount_clean = preg_replace( '/[^0-9.]/', '', $amount );
         if ( $amount_clean === '' || ! is_numeric( $amount_clean ) ) {
             wp_die( 'Invalid amount.' );
         }
         $amount_value = floatval( $amount_clean );
+
+        // Ensure amount is positive
+        if ( $amount_value < 0 ) {
+            wp_die( 'Amount must be a positive number.' );
+        }
 
         // Create payroll post
         $post_id = wp_insert_post( [
@@ -242,8 +247,8 @@ class DQ_Payroll {
             return (float) $amount;
         }
 
-        $clean = preg_replace( '/[^0-9.\-]/', '', (string) $amount );
-        return ( $clean === '' || ! is_numeric( $clean ) ) ? 0.0 : (float) $clean;
+        $clean = preg_replace( '/[^0-9.]/', '', (string) $amount );
+        return ( $clean === '' || ! is_numeric( $clean ) ) ? 0.0 : max( 0.0, (float) $clean );
     }
 
     /**
@@ -267,8 +272,8 @@ class DQ_Payroll {
         $hidden_fields .= '<input type="hidden" name="month" value="' . esc_attr( $month ) . '">';
         $hidden_fields .= '<input type="hidden" name="quarter" value="' . esc_attr( $quarter ) . '">';
 
-        // Default date to today
-        $default_date = date( 'Y-m-d' );
+        // Default date to today (using WordPress timezone)
+        $default_date = wp_date( 'Y-m-d' );
 
         echo '<div class="dq-payroll-add-form" style="background:#fff;padding:16px;border:1px solid #e1e4e8;border-radius:6px;margin:15px 0 25px;max-width:600px;">';
         echo '<h3 style="margin-top:0;">Add Payroll Record</h3>';
@@ -329,7 +334,7 @@ class DQ_Payroll {
         $total = 0.0;
         foreach ( $records as $record ) {
             $total += (float) $record['amount'];
-            $date_display = date( 'M j, Y', strtotime( $record['date'] ) );
+            $date_display = wp_date( 'M j, Y', strtotime( $record['date'] ) );
 
             echo '<tr>';
             echo '<td>' . esc_html( $date_display ) . '</td>';
