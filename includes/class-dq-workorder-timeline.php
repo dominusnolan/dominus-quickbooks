@@ -9,6 +9,21 @@ if (!defined('ABSPATH')) exit;
  */
 class DQ_Workorder_Timeline
 {
+    /**
+     * Allowed note and select fields for inline editing in timeline.
+     * This is used for security validation in AJAX handler.
+     */
+    private static $allowed_inline_fields = [
+        'date_received_note',
+        'fsc_contact_date_note',
+        'scheduled_service_note',
+        're_schedule_note',
+        'rescheduled_reason',
+        'date_service_completed_by_fse_note',
+        'closed_in_note',
+        'date_fsr_and_dia_reports_sent_to_customer_note',
+    ];
+
     public static function init()
     {
         add_shortcode('workorder_timeline', [__CLASS__, 'render_shortcode']);
@@ -579,19 +594,8 @@ class DQ_Workorder_Timeline
         $field = isset($_POST['field']) ? sanitize_key($_POST['field']) : '';
         $raw_value = isset($_POST['value']) ? wp_unslash($_POST['value']) : '';
 
-        // Whitelist of allowed note and select fields for timeline
-        $allowed_fields = [
-            'date_received_note',
-            'fsc_contact_date_note',
-            'scheduled_service_note',
-            're_schedule_note',
-            'rescheduled_reason',
-            'date_service_completed_by_fse_note',
-            'closed_in_note',
-            'date_fsr_and_dia_reports_sent_to_customer_note',
-        ];
-
-        if (!in_array($field, $allowed_fields, true)) {
+        // Use class constant for allowed fields
+        if (!in_array($field, self::$allowed_inline_fields, true)) {
             wp_send_json_error('Field not allowed.');
         }
 
