@@ -206,7 +206,17 @@ class DQ_Workorder_Template {
         }
 
         global $post;
-        if ( ! $post || ! current_user_can( 'edit_post', $post->ID ) ) {
+        if ( ! $post ) {
+            return;
+        }
+
+        // Check multiple possible edit capabilities for workorder CPT
+        // This ensures assets load for all users with valid edit permission
+        $can_edit = current_user_can( 'edit_post', $post->ID )
+            || current_user_can( 'edit_workorder', $post->ID )
+            || current_user_can( 'edit_workorders' );
+
+        if ( ! $can_edit ) {
             return;
         }
 
@@ -324,8 +334,12 @@ class DQ_Workorder_Template {
             wp_send_json_error( 'Invalid workorder.' );
         }
 
-        // Check user capability
-        if ( ! current_user_can( 'edit_post', $post_id ) ) {
+        // Check user capability - check multiple possible edit capabilities for workorder CPT
+        $can_edit = current_user_can( 'edit_post', $post_id )
+            || current_user_can( 'edit_workorder', $post_id )
+            || current_user_can( 'edit_workorders' );
+
+        if ( ! $can_edit ) {
             wp_send_json_error( 'You do not have permission to edit this post.' );
         }
 
