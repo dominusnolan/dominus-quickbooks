@@ -418,6 +418,7 @@ class DQ_Plugin {
     /**
      * Check if the plugin is configured with required credentials.
      *
+     * @since 0.3.0
      * @return bool True if client ID and secret are set.
      */
     public static function is_configured() {
@@ -507,12 +508,26 @@ class DQ_Plugin {
     }
 
     /**
-     * Execute a QuickBooks query (SQL-like).
+     * Execute a QuickBooks query (SQL-like syntax).
      *
-     * @param string $sql The query string.
+     * Note: This method sends queries to the QuickBooks API, not to a database.
+     * The caller is responsible for sanitizing any user-provided values before
+     * including them in the query string. Use single quotes for string values
+     * and escape any user input appropriately.
+     *
+     * @since 0.3.0
+     * @param string $sql The query string in QuickBooks query language.
      * @return array|WP_Error The query response or WP_Error on failure.
      */
     public static function query( $sql ) {
+        // Validate that sql is a non-empty string.
+        if ( ! is_string( $sql ) || trim( $sql ) === '' ) {
+            return new WP_Error(
+                'dq_invalid_query',
+                __( 'Query must be a non-empty string.', 'dominus-quickbooks' )
+            );
+        }
+
         if ( class_exists( 'DQ_API' ) && method_exists( 'DQ_API', 'query' ) ) {
             return DQ_API::query( $sql );
         }
