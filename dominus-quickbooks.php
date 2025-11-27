@@ -23,6 +23,7 @@ define( 'DQQB_URL', plugin_dir_url( __FILE__ ) );
 // -----------------------------------------------------------------------------
 require_once DQQB_PATH . 'includes/helpers.php';
 require_once DQQB_PATH . 'includes/class-dq-logger.php';
+require_once DQQB_PATH . 'includes/class-dq-plugin.php';
 require_once DQQB_PATH . 'includes/class-dq-settings.php';
 require_once DQQB_PATH . 'includes/class-dq-auth.php';
 require_once DQQB_PATH . 'includes/class-dq-api.php';
@@ -89,6 +90,7 @@ add_action( 'plugins_loaded', function() {
         }
     });
 
+    if ( class_exists( 'DQ_Plugin' ) ) DQ_Plugin::init(); // Core plugin class
     if ( class_exists( 'DQ_Settings' ) ) DQ_Settings::init();
     if ( class_exists( 'DQ_Auth' ) ) DQ_Auth::init();
     if ( class_exists( 'DQ_API' ) ) DQ_API::init();
