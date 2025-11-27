@@ -162,15 +162,14 @@ class DQ_Login_Form {
         $output = '<div class="dq-login-wrapper">';
         $output .= '<div class="dq-login-container dq-logged-in">';
         $output .= '<div class="dq-login-header">';
-        $output .= '<span class="dashicons dashicons-yes-alt dq-success-icon"></span>';
         $output .= '<h2>Already Signed In</h2>';
         $output .= '</div>';
         $output .= '<div class="dq-login-info">';
         $output .= '<p>You are currently logged in as <strong>' . $display_name . '</strong>.</p>';
         $output .= '</div>';
         $output .= '<div class="dq-login-actions">';
-        $output .= '<a href="' . $redirect_url . '" class="dq-login-button">Go to Account Page</a>';
-        $output .= '<a href="' . $logout_url . '" class="dq-logout-link">Sign out</a>';
+        $output .= '<a style="font-weight: bold;" href="' . $redirect_url . '" class="dq-login-button">Go to Account Page</a>';
+        $output .= '<a style="font-weight: bold;margin-left:50px" href="' . $logout_url . '" class="dq-logout-link">Sign out</a>';
         $output .= '</div>';
         $output .= '</div>';
         $output .= '</div>';
