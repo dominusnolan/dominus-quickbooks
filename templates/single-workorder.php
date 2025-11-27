@@ -296,9 +296,9 @@ $editable_fields = [ 'installed_product_id', 'wo_type_of_work', 'wo_state', 'wo_
 
                         // For state field, display full state name; otherwise show raw value
                         if ( $field_key === 'wo_state' && $value !== '' && isset( $us_states[ strtoupper( $value ) ] ) ) {
-                            $display_value = esc_html( $us_states[ strtoupper( $value ) ] );
+                            $display_value = $us_states[ strtoupper( $value ) ];
                         } else {
-                            $display_value = $value !== '' ? esc_html( (string)$value ) : '—';
+                            $display_value = $value !== '' ? (string)$value : '';
                         }
 
                         // Add data attributes for editable fields
@@ -313,7 +313,7 @@ $editable_fields = [ 'installed_product_id', 'wo_type_of_work', 'wo_state', 'wo_
                         if ( $is_editable && $can_edit ) {
                             // Display with edit button
                             echo '<div class="dqqb-inline-display">';
-                            echo '<span class="dqqb-inline-value">' . $display_value . '</span>';
+                            echo '<span class="dqqb-inline-value">' . ( $display_value !== '' ? esc_html( $display_value ) : '—' ) . '</span>';
                             echo '<button type="button" class="dqqb-inline-edit-btn" title="Edit">&#9998;</button>';
                             echo '</div>';
 
@@ -341,7 +341,7 @@ $editable_fields = [ 'installed_product_id', 'wo_type_of_work', 'wo_state', 'wo_
                             echo '</div>';
                         } else {
                             // Just display the value
-                            echo '<div style="color:#333;">' . $display_value . '</div>';
+                            echo '<div style="color:#333;">' . ( $display_value !== '' ? esc_html( $display_value ) : '—' ) . '</div>';
                         }
 
                         echo '</div>';
