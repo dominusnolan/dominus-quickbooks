@@ -326,6 +326,16 @@ class DQ_Workorder_Timeline
     }
 
     /**
+     * Get the SVG pencil icon markup for edit buttons.
+     *
+     * @return string SVG markup for pencil icon.
+     */
+    private static function get_pencil_icon_svg()
+    {
+        return '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>';
+    }
+
+    /**
      * Render the inline note editor UI for a timeline step.
      *
      * @param array  $step      The step data from get_timeline_data().
@@ -356,9 +366,8 @@ class DQ_Workorder_Timeline
             // Display with edit button (pencil icon)
             $output .= '<div class="dqqb-inline-display">';
             $output .= '<span class="dqqb-inline-value">' . ($display_value !== '' ? $display_value : '<em class="dq-vtl-note-placeholder">Add note...</em>') . '</span>';
-            // SVG pencil icon for accessibility
             $output .= '<button type="button" class="dqqb-inline-edit-btn dq-vtl-pencil" title="Edit note">';
-            $output .= '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>';
+            $output .= self::get_pencil_icon_svg();
             $output .= '</button>';
             $output .= '</div>';
 
@@ -425,9 +434,8 @@ class DQ_Workorder_Timeline
             // Display with edit button
             $output .= '<div class="dqqb-inline-display">';
             $output .= '<span class="dqqb-inline-value">' . ($display_label !== '' ? $display_label : '<em class="dq-vtl-note-placeholder">Select reason...</em>') . '</span>';
-            // SVG pencil icon
             $output .= '<button type="button" class="dqqb-inline-edit-btn dq-vtl-pencil" title="Edit reason">';
-            $output .= '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>';
+            $output .= self::get_pencil_icon_svg();
             $output .= '</button>';
             $output .= '</div>';
 
