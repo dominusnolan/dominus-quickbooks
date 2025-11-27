@@ -162,6 +162,9 @@
                 var newValue = getInputValue(input);
                 var isRichEditor = isContentEditable(input);
 
+                // Trim and normalize field name to prevent whitespace/casing mismatches
+                field = (field || '').trim().toLowerCase();
+
                 // Show saving status
                 if (statusEl) {
                     statusEl.textContent = 'Saving...';
@@ -181,6 +184,9 @@
                 formData.append('field', field);
                 formData.append('value', newValue);
 
+                // Debug logging for troubleshooting
+                console.log('[DQQB Inline Edit] Sending request:', { field: field, postId: postId, value: newValue.substring(0, 100) });
+
                 fetch(ajaxUrl, {
                     method: 'POST',
                     credentials: 'same-origin',
@@ -190,6 +196,9 @@
                     return response.json();
                 })
                 .then(function(data) {
+                    // Debug logging for AJAX response
+                    console.log('[DQQB Inline Edit] Response:', data);
+
                     btn.disabled = false;
                     if (cancelBtn) cancelBtn.disabled = false;
 
