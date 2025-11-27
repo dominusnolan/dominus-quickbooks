@@ -237,6 +237,67 @@ class DQ_Workorder_Template {
     }
 
     /**
+     * Get array of US states with two-letter codes as keys and full names as values
+     *
+     * @return array
+     */
+    public static function get_us_states() {
+        return [
+            'AL' => 'Alabama',
+            'AK' => 'Alaska',
+            'AZ' => 'Arizona',
+            'AR' => 'Arkansas',
+            'CA' => 'California',
+            'CO' => 'Colorado',
+            'CT' => 'Connecticut',
+            'DE' => 'Delaware',
+            'DC' => 'District of Columbia',
+            'FL' => 'Florida',
+            'GA' => 'Georgia',
+            'HI' => 'Hawaii',
+            'ID' => 'Idaho',
+            'IL' => 'Illinois',
+            'IN' => 'Indiana',
+            'IA' => 'Iowa',
+            'KS' => 'Kansas',
+            'KY' => 'Kentucky',
+            'LA' => 'Louisiana',
+            'ME' => 'Maine',
+            'MD' => 'Maryland',
+            'MA' => 'Massachusetts',
+            'MI' => 'Michigan',
+            'MN' => 'Minnesota',
+            'MS' => 'Mississippi',
+            'MO' => 'Missouri',
+            'MT' => 'Montana',
+            'NE' => 'Nebraska',
+            'NV' => 'Nevada',
+            'NH' => 'New Hampshire',
+            'NJ' => 'New Jersey',
+            'NM' => 'New Mexico',
+            'NY' => 'New York',
+            'NC' => 'North Carolina',
+            'ND' => 'North Dakota',
+            'OH' => 'Ohio',
+            'OK' => 'Oklahoma',
+            'OR' => 'Oregon',
+            'PA' => 'Pennsylvania',
+            'RI' => 'Rhode Island',
+            'SC' => 'South Carolina',
+            'SD' => 'South Dakota',
+            'TN' => 'Tennessee',
+            'TX' => 'Texas',
+            'UT' => 'Utah',
+            'VT' => 'Vermont',
+            'VA' => 'Virginia',
+            'WA' => 'Washington',
+            'WV' => 'West Virginia',
+            'WI' => 'Wisconsin',
+            'WY' => 'Wyoming',
+        ];
+    }
+
+    /**
      * AJAX handler for inline field updates
      * Validates nonce and permissions, then updates field via ACF or post_meta
      */
@@ -304,6 +365,18 @@ class DQ_Workorder_Template {
                 wp_send_json_error( 'Invalid email address.' );
             }
             $value = $sanitized_email;
+        } elseif ( $field === 'wo_state' ) {
+            // State: validate against US states list, store uppercase code, return full name as label
+            $value = strtoupper( sanitize_text_field( $value ) );
+            $us_states = self::get_us_states();
+            // Allow empty value to clear the field
+            if ( $value !== '' && ! array_key_exists( $value, $us_states ) ) {
+                wp_send_json_error( 'Invalid US state code.' );
+            }
+            // Set label to full state name
+            if ( $value !== '' && isset( $us_states[ $value ] ) ) {
+                $label = $us_states[ $value ];
+            }
         } elseif ( in_array( $field, $choice_fields, true ) ) {
             // For choice fields, validate against ACF choices if available
             $value = sanitize_text_field( $value );

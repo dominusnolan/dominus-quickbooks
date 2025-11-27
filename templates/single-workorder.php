@@ -270,6 +270,9 @@ $editable_fields = [ 'installed_product_id', 'wo_type_of_work', 'wo_state', 'wo_
                 </div>
                 <div class="wo-meta-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
                     <?php
+                    // Get US states from the template class for state dropdown
+                    $us_states = class_exists( 'DQ_Workorder_Template' ) ? DQ_Workorder_Template::get_us_states() : [];
+
                     // Build the meta fields array with field keys for inline editing
                     $meta_fields = [
                         'installed_product_id' => [ 'label' => 'Product ID', 'value' => $val('installed_product_id') ],
@@ -291,7 +294,12 @@ $editable_fields = [ 'installed_product_id', 'wo_type_of_work', 'wo_state', 'wo_
                             continue;
                         }
 
-                        $display_value = $value !== '' ? esc_html( (string)$value ) : '—';
+                        // For state field, display full state name; otherwise show raw value
+                        if ( $field_key === 'wo_state' && $value !== '' && isset( $us_states[ strtoupper( $value ) ] ) ) {
+                            $display_value = $us_states[ strtoupper( $value ) ];
+                        } else {
+                            $display_value = $value !== '' ? (string)$value : '';
+                        }
 
                         // Add data attributes for editable fields
                         $card_attrs = '';
@@ -305,13 +313,26 @@ $editable_fields = [ 'installed_product_id', 'wo_type_of_work', 'wo_state', 'wo_
                         if ( $is_editable && $can_edit ) {
                             // Display with edit button
                             echo '<div class="dqqb-inline-display">';
-                            echo '<span class="dqqb-inline-value">' . esc_html( $display_value ) . '</span>';
+                            echo '<span class="dqqb-inline-value">' . ( $display_value !== '' ? esc_html( $display_value ) : '—' ) . '</span>';
                             echo '<button type="button" class="dqqb-inline-edit-btn" title="Edit">&#9998;</button>';
                             echo '</div>';
 
                             // Hidden editor with data-original to preserve raw value
                             echo '<div class="dqqb-inline-editor" data-original="' . esc_attr( $value ) . '">';
-                            echo '<input type="text" class="dqqb-inline-input" value="' . esc_attr( $value ) . '" />';
+
+                            // Use select dropdown for state field
+                            if ( $field_key === 'wo_state' && ! empty( $us_states ) ) {
+                                echo '<select class="dqqb-inline-input">';
+                                echo '<option value="">— Select —</option>';
+                                foreach ( $us_states as $state_code => $state_name ) {
+                                    $selected = ( strtoupper( $value ) === $state_code ) ? ' selected' : '';
+                                    echo '<option value="' . esc_attr( $state_code ) . '"' . $selected . '>' . esc_html( $state_name ) . '</option>';
+                                }
+                                echo '</select>';
+                            } else {
+                                echo '<input type="text" class="dqqb-inline-input" value="' . esc_attr( $value ) . '" />';
+                            }
+
                             echo '<div class="dqqb-inline-actions">';
                             echo '<button type="button" class="dqqb-inline-save">Save</button>';
                             echo '<button type="button" class="dqqb-inline-cancel">Cancel</button>';
@@ -320,7 +341,7 @@ $editable_fields = [ 'installed_product_id', 'wo_type_of_work', 'wo_state', 'wo_
                             echo '</div>';
                         } else {
                             // Just display the value
-                            echo '<div style="color:#333;">' . esc_html( $display_value ) . '</div>';
+                            echo '<div style="color:#333;">' . ( $display_value !== '' ? esc_html( $display_value ) : '—' ) . '</div>';
                         }
 
                         echo '</div>';
