@@ -137,6 +137,33 @@ register_activation_hook( __FILE__, function() {
     if ( $eng && ! $eng->has_cap( 'view_financial_reports' ) ) {
         $eng->add_cap( 'view_financial_reports' );
     }
+
+    // Add workorder CPT capabilities to manager role
+    // This ensures managers can edit workorders and use inline editing on single workorder pages
+    $manager = get_role( 'manager' );
+    if ( $manager ) {
+        // Standard CPT capabilities mapped to workorder
+        $workorder_caps = [
+            'edit_workorder',
+            'read_workorder',
+            'delete_workorder',
+            'edit_workorders',
+            'edit_others_workorders',
+            'publish_workorders',
+            'read_private_workorders',
+            'delete_workorders',
+            'delete_private_workorders',
+            'delete_published_workorders',
+            'delete_others_workorders',
+            'edit_private_workorders',
+            'edit_published_workorders',
+        ];
+        foreach ( $workorder_caps as $cap ) {
+            if ( ! $manager->has_cap( $cap ) ) {
+                $manager->add_cap( $cap );
+            }
+        }
+    }
 });
 
 register_deactivation_hook( __FILE__, function() {

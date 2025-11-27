@@ -105,6 +105,20 @@ class DQ_Workorder_Template {
         return $template;
     }
 
+    /**
+     * Check if the current user can edit a workorder post
+     *
+     * Checks multiple possible edit capabilities for workorder CPT to ensure
+     * all users with valid edit permission are supported.
+     *
+     * @param int $post_id The workorder post ID
+     * @return bool True if user can edit, false otherwise
+     */
+    private static function can_edit_workorder( $post_id ) {
+        return current_user_can( 'edit_post', $post_id )
+            || current_user_can( 'edit_workorder', $post_id )
+            || current_user_can( 'edit_workorders' );
+    }
 
 
      public static function handle_post_quotation() {
@@ -206,7 +220,12 @@ class DQ_Workorder_Template {
         }
 
         global $post;
-        if ( ! $post || ! current_user_can( 'edit_post', $post->ID ) ) {
+        if ( ! $post ) {
+            return;
+        }
+
+        // Check if user can edit this workorder
+        if ( ! self::can_edit_workorder( $post->ID ) ) {
             return;
         }
 
@@ -324,8 +343,8 @@ class DQ_Workorder_Template {
             wp_send_json_error( 'Invalid workorder.' );
         }
 
-        // Check user capability
-        if ( ! current_user_can( 'edit_post', $post_id ) ) {
+        // Check if user can edit this workorder
+        if ( ! self::can_edit_workorder( $post_id ) ) {
             wp_send_json_error( 'You do not have permission to edit this post.' );
         }
 
