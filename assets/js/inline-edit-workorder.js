@@ -3,6 +3,7 @@
  * 
  * Handles inline editing of workorder meta fields on the front-end.
  * Requires DQQBInlineEdit object to be localized with ajax_url and nonce.
+ * Supports input, textarea, and select controls.
  */
 (function() {
     'use strict';
@@ -14,6 +15,38 @@
 
     var ajaxUrl = DQQBInlineEdit.ajax_url;
     var nonce = DQQBInlineEdit.nonce;
+
+    /**
+     * Get the input element (input, textarea, or select) from the editor container
+     */
+    function getInputElement(editorEl) {
+        return editorEl.querySelector('input.dqqb-inline-input, textarea.dqqb-inline-input, select.dqqb-inline-input');
+    }
+
+    /**
+     * Get the value from an input element
+     */
+    function getInputValue(inputEl) {
+        if (!inputEl) return '';
+        return inputEl.value;
+    }
+
+    /**
+     * Set the value on an input element
+     */
+    function setInputValue(inputEl, value) {
+        if (!inputEl) return;
+        inputEl.value = value;
+    }
+
+    /**
+     * Get the display text for a select element (the selected option's text)
+     */
+    function getSelectDisplayText(selectEl) {
+        if (!selectEl || selectEl.tagName !== 'SELECT') return null;
+        var selectedOption = selectEl.options[selectEl.selectedIndex];
+        return selectedOption ? selectedOption.text : null;
+    }
 
     document.addEventListener('DOMContentLoaded', function() {
         var editButtons = document.querySelectorAll('.dqqb-inline-edit-btn');
@@ -30,10 +63,13 @@
                 if (displayEl && editorEl) {
                     displayEl.style.display = 'none';
                     editorEl.style.display = 'block';
-                    var input = editorEl.querySelector('.dqqb-inline-input');
+                    var input = getInputElement(editorEl);
                     if (input) {
                         input.focus();
-                        input.select();
+                        // Select text content for input/textarea, not for select elements
+                        if (input.tagName !== 'SELECT' && typeof input.select === 'function') {
+                            input.select();
+                        }
                     }
                 }
             });
@@ -49,12 +85,12 @@
 
                 var displayEl = card.querySelector('.dqqb-inline-display');
                 var editorEl = card.querySelector('.dqqb-inline-editor');
-                var input = editorEl.querySelector('.dqqb-inline-input');
+                var input = getInputElement(editorEl);
 
                 // Reset input to original value from data attribute
                 if (input && editorEl) {
                     var originalValue = editorEl.getAttribute('data-original') || '';
-                    input.value = originalValue;
+                    setInputValue(input, originalValue);
                 }
 
                 if (displayEl && editorEl) {
@@ -79,7 +115,8 @@
                 var card = btn.closest('.wo-meta-card');
                 if (!card) return;
 
-                var input = card.querySelector('.dqqb-inline-input');
+                var editorEl = card.querySelector('.dqqb-inline-editor');
+                var input = getInputElement(editorEl);
                 var statusEl = card.querySelector('.dqqb-inline-status');
                 var field = card.getAttribute('data-field');
                 var postId = card.getAttribute('data-post-id');
@@ -88,7 +125,7 @@
                     return;
                 }
 
-                var newValue = input.value;
+                var newValue = getInputValue(input);
 
                 // Show saving status
                 if (statusEl) {
@@ -124,33 +161,36 @@
                     if (data.success) {
                         // Use server-returned sanitized value
                         var savedValue = data.data && data.data.value !== undefined ? data.data.value : newValue;
+                        
+                        // For select fields, use label if provided by server, otherwise use option text
+                        var displayText = savedValue;
+                        if (data.data && data.data.label) {
+                            displayText = data.data.label;
+                        } else if (input.tagName === 'SELECT') {
+                            var optionText = getSelectDisplayText(input);
+                            if (optionText && optionText !== '— Select —') {
+                                displayText = optionText;
+                            }
+                        }
 
-                        // Update the display value with server-returned value
+                        // Update the display value
                         var valueEl = card.querySelector('.dqqb-inline-value');
                         if (valueEl) {
-                            valueEl.textContent = savedValue || '—';
+                            valueEl.textContent = displayText || '—';
                         }
 
                         // Update the data-original attribute for future cancels
-                        var editorEl = card.querySelector('.dqqb-inline-editor');
                         if (editorEl) {
                             editorEl.setAttribute('data-original', savedValue);
                         }
 
                         // Also update the input value to match server-returned value
-                        if (input) {
-                            input.value = savedValue;
-                        }
+                        setInputValue(input, savedValue);
 
-                        // Show success status (with optional warning)
+                        // Show success status
                         if (statusEl) {
-                            if (data.data && data.data.warning) {
-                                statusEl.textContent = data.data.warning;
-                                statusEl.className = 'dqqb-inline-status dqqb-status-error';
-                            } else {
-                                statusEl.textContent = 'Saved!';
-                                statusEl.className = 'dqqb-inline-status dqqb-status-success';
-                            }
+                            statusEl.textContent = 'Saved!';
+                            statusEl.className = 'dqqb-inline-status dqqb-status-success';
                         }
 
                         // Hide editor, show display
@@ -187,14 +227,15 @@
             });
         });
 
-        // Allow Enter key to save, Escape to cancel
+        // Allow Enter key to save (for input and select), Escape to cancel
+        // For textarea, only Escape cancels (Enter creates newlines)
         var inputs = document.querySelectorAll('.dqqb-inline-input');
         inputs.forEach(function(input) {
             input.addEventListener('keydown', function(e) {
                 var card = input.closest('.wo-meta-card');
                 if (!card) return;
 
-                if (e.key === 'Enter') {
+                if (e.key === 'Enter' && input.tagName !== 'TEXTAREA') {
                     e.preventDefault();
                     var saveBtn = card.querySelector('.dqqb-inline-save');
                     if (saveBtn) saveBtn.click();
