@@ -283,3 +283,193 @@
   transform: translateX(-50%);
   z-index: 2;
 }
+
+/* Inline Edit UI for Notes and Rescheduled Reason */
+.dq-vtl-note-area,
+.dq-vtl-reason-area {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.dq-vtl-note-card,
+.dq-vtl-reason-card {
+  background: transparent;
+  padding: 0;
+  border: none;
+}
+
+.dq-vtl-note-card .dqqb-inline-display,
+.dq-vtl-reason-card .dqqb-inline-display {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.dq-vtl-note-card .dqqb-inline-value,
+.dq-vtl-reason-card .dqqb-inline-value {
+  flex: 1;
+  font-size: 12px;
+  color: #555;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.dq-vtl-note-placeholder {
+  color: #999;
+  font-style: italic;
+}
+
+.dq-vtl-reason-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #666;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+/* Pencil button styling */
+.dq-vtl-pencil {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  color: #888;
+  opacity: 0.6;
+  transition: opacity 0.2s, color 0.2s;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dq-vtl-pencil:hover {
+  opacity: 1;
+  color: #0073aa;
+}
+
+.dq-vtl-pencil svg {
+  display: block;
+}
+
+/* Inline editor container */
+.dq-vtl-note-card .dqqb-inline-editor,
+.dq-vtl-reason-card .dqqb-inline-editor {
+  display: none;
+  margin-top: 6px;
+}
+
+.dq-vtl-note-card .dqqb-inline-input,
+.dq-vtl-reason-card .dqqb-inline-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #0073aa;
+  border-radius: 4px;
+  font-size: 12px;
+  margin-bottom: 6px;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.dq-vtl-note-card textarea.dqqb-inline-input {
+  min-height: 50px;
+  resize: vertical;
+}
+
+.dq-vtl-reason-card select.dqqb-inline-input {
+  background: #fff;
+  cursor: pointer;
+}
+
+.dq-vtl-note-card .dqqb-inline-input:focus,
+.dq-vtl-reason-card .dqqb-inline-input:focus {
+  outline: none;
+  border-color: #005177;
+  box-shadow: 0 0 0 1px #005177;
+}
+
+/* Action buttons */
+.dq-vtl-note-card .dqqb-inline-actions,
+.dq-vtl-reason-card .dqqb-inline-actions {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.dq-vtl-note-card .dqqb-inline-save,
+.dq-vtl-note-card .dqqb-inline-cancel,
+.dq-vtl-reason-card .dqqb-inline-save,
+.dq-vtl-reason-card .dqqb-inline-cancel {
+  padding: 4px 8px;
+  font-size: 11px;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.dq-vtl-note-card .dqqb-inline-save,
+.dq-vtl-reason-card .dqqb-inline-save {
+  background: #0073aa;
+  color: #fff;
+}
+
+.dq-vtl-note-card .dqqb-inline-save:hover,
+.dq-vtl-reason-card .dqqb-inline-save:hover {
+  background: #005177;
+}
+
+.dq-vtl-note-card .dqqb-inline-save:disabled,
+.dq-vtl-reason-card .dqqb-inline-save:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.dq-vtl-note-card .dqqb-inline-cancel,
+.dq-vtl-reason-card .dqqb-inline-cancel {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.dq-vtl-note-card .dqqb-inline-cancel:hover,
+.dq-vtl-reason-card .dqqb-inline-cancel:hover {
+  background: #ddd;
+}
+
+.dq-vtl-note-card .dqqb-inline-cancel:disabled,
+.dq-vtl-reason-card .dqqb-inline-cancel:disabled {
+  background: #eee;
+  color: #999;
+  cursor: not-allowed;
+}
+
+/* Status message */
+.dq-vtl-note-card .dqqb-inline-status,
+.dq-vtl-reason-card .dqqb-inline-status {
+  font-size: 11px;
+  min-height: 14px;
+}
+
+.dqqb-status-saving {
+  color: #666;
+}
+
+.dqqb-status-success {
+  color: #46b450;
+}
+
+.dqqb-status-error {
+  color: #cc3b3b;
+}
+
+/* Read-only note display */
+.dq-vtl-note-display,
+.dq-vtl-reason-display {
+  font-size: 12px;
+  color: #555;
+  line-height: 1.4;
+}
+
+.dq-vtl-reason-display strong {
+  color: #444;
+}
