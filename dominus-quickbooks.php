@@ -44,6 +44,8 @@ require_once DQQB_PATH . 'includes/class-dq-workorder-report.php';
 require_once DQQB_PATH . 'includes/class-dq-workorder-timeline.php';
 // NEW: Workorder single template fallback (adds single-workorder.php front-end)
 require_once DQQB_PATH . 'includes/class-dq-workorder-template.php';
+// NEW: Workorder CPT admin list table customization
+require_once DQQB_PATH . 'includes/class-dq-workorder-admin-table.php';
 
 // NEW: Workorder single template fallback (adds single-invoice.php front-end)
 require_once DQQB_PATH . 'includes/class-qi-invoice-template.php';
