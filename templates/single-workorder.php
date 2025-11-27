@@ -57,6 +57,19 @@ if ($private_comments === '' || $private_comments === null) {
 if (is_string($private_comments) && $private_comments !== '') {
     $private_comments = str_replace('_x000D_', ' ', $private_comments);
 }
+
+// Check if user can edit this post (for inline editing)
+$can_edit = is_user_logged_in() && current_user_can( 'edit_post', $post_id );
+
+// Fields that should always be displayed (even when empty) and which are editable
+$always_show_fields = [
+    'installed_product_id' => 'Product ID',
+    'work_order_number'    => 'Work Order ID',
+    'wo_type_of_work'      => 'Type of Work',
+    'wo_state'             => 'State',
+    'wo_city'              => 'City',
+];
+$editable_fields = [ 'installed_product_id', 'wo_type_of_work', 'wo_state', 'wo_city' ];
 ?>
 
 <style>
@@ -136,6 +149,96 @@ if (is_string($private_comments) && $private_comments !== '') {
         border-radius: 4px;
         color: #7a1f1f;
     }
+    /* Inline edit controls */
+    .dqqb-inline-display {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .dqqb-inline-value {
+        color: #333;
+        flex: 1;
+    }
+    .dqqb-inline-edit-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 2px 6px;
+        color: #666;
+        font-size: 14px;
+        opacity: 0.7;
+        transition: opacity 0.2s;
+    }
+    .dqqb-inline-edit-btn:hover {
+        opacity: 1;
+        color: #0073aa;
+    }
+    .dqqb-inline-editor {
+        display: none;
+    }
+    .dqqb-inline-input {
+        width: 100%;
+        padding: 6px 8px;
+        border: 1px solid #0073aa;
+        border-radius: 4px;
+        font-size: 14px;
+        margin-bottom: 6px;
+        box-sizing: border-box;
+    }
+    .dqqb-inline-input:focus {
+        outline: none;
+        border-color: #005177;
+        box-shadow: 0 0 0 1px #005177;
+    }
+    .dqqb-inline-actions {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 4px;
+    }
+    .dqqb-inline-save,
+    .dqqb-inline-cancel {
+        padding: 4px 10px;
+        font-size: 12px;
+        border: none;
+        border-radius: 3px;
+        cursor: pointer;
+    }
+    .dqqb-inline-save {
+        background: #0073aa;
+        color: #fff;
+    }
+    .dqqb-inline-save:hover {
+        background: #005177;
+    }
+    .dqqb-inline-save:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+    }
+    .dqqb-inline-cancel {
+        background: #f0f0f0;
+        color: #333;
+    }
+    .dqqb-inline-cancel:hover {
+        background: #ddd;
+    }
+    .dqqb-inline-cancel:disabled {
+        background: #eee;
+        color: #999;
+        cursor: not-allowed;
+    }
+    .dqqb-inline-status {
+        font-size: 12px;
+        min-height: 16px;
+    }
+    .dqqb-status-saving {
+        color: #666;
+    }
+    .dqqb-status-success {
+        color: #46b450;
+    }
+    .dqqb-status-error {
+        color: #cc3b3b;
+    }
 </style>
 <main id="primary" class="site-main dqqb-single-workorder" style="max-width:95%;margin:0 auto">
     <article id="post-<?php the_ID(); ?>" <?php post_class(); ?>>
@@ -157,20 +260,59 @@ if (is_string($private_comments) && $private_comments !== '') {
                 </div>
                 <div class="wo-meta-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
                     <?php
-                    // A few handy bits users often want under the timeline; adjust/extend as needed.
-                    $pairs = [
-                        'Product ID'             => $val('installed_product_id'),
-                        'Work Order ID'          => $val('work_order_number'),
-                        'State'                  => $val('wo_state'),
-                        'City'                   => $val('wo_city'),
-                        'Account'               => $val('wo_location'),
-
+                    // Build the meta fields array with field keys for inline editing
+                    $meta_fields = [
+                        'installed_product_id' => [ 'label' => 'Product ID', 'value' => $val('installed_product_id') ],
+                        'work_order_number'    => [ 'label' => 'Work Order ID', 'value' => $val('work_order_number') ],
+                        'wo_type_of_work'      => [ 'label' => 'Type of Work', 'value' => $val('wo_type_of_work') ],
+                        'wo_state'             => [ 'label' => 'State', 'value' => $val('wo_state') ],
+                        'wo_city'              => [ 'label' => 'City', 'value' => $val('wo_city') ],
+                        'wo_location'          => [ 'label' => 'Account', 'value' => $val('wo_location') ],
                     ];
-                    foreach ( $pairs as $label => $value ) {
-                        if ( $value === '' ) continue;
-                        echo '<div class="wo-meta-card" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;">';
+
+                    foreach ( $meta_fields as $field_key => $field_data ) {
+                        $label = $field_data['label'];
+                        $value = $field_data['value'];
+                        $is_always_show = array_key_exists( $field_key, $always_show_fields );
+                        $is_editable = in_array( $field_key, $editable_fields, true );
+
+                        // Skip if value is empty and not in the always-show list
+                        if ( $value === '' && ! $is_always_show ) {
+                            continue;
+                        }
+
+                        $display_value = $value !== '' ? ( is_numeric($value) ? number_format( (float)$value, 2 ) : (string)$value ) : '—';
+
+                        // Add data attributes for editable fields
+                        $card_attrs = '';
+                        if ( $is_editable && $can_edit ) {
+                            $card_attrs = ' data-field="' . esc_attr( $field_key ) . '" data-post-id="' . esc_attr( $post_id ) . '"';
+                        }
+
+                        echo '<div class="wo-meta-card" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;"' . $card_attrs . '>';
                         echo '<div style="font-weight:600;color:#222;margin-bottom:4px;">' . esc_html( $label ) . '</div>';
-                        echo '<div style="color:#333;">' . esc_html( is_numeric($value) ? number_format( (float)$value, 2 ) : (string)$value ) . '</div>';
+
+                        if ( $is_editable && $can_edit ) {
+                            // Display with edit button
+                            echo '<div class="dqqb-inline-display">';
+                            echo '<span class="dqqb-inline-value">' . esc_html( $display_value ) . '</span>';
+                            echo '<button type="button" class="dqqb-inline-edit-btn" title="Edit">&#9998;</button>';
+                            echo '</div>';
+
+                            // Hidden editor
+                            echo '<div class="dqqb-inline-editor">';
+                            echo '<input type="text" class="dqqb-inline-input" value="' . esc_attr( $value ) . '" />';
+                            echo '<div class="dqqb-inline-actions">';
+                            echo '<button type="button" class="dqqb-inline-save">Save</button>';
+                            echo '<button type="button" class="dqqb-inline-cancel">Cancel</button>';
+                            echo '</div>';
+                            echo '<div class="dqqb-inline-status"></div>';
+                            echo '</div>';
+                        } else {
+                            // Just display the value
+                            echo '<div style="color:#333;">' . esc_html( $display_value ) . '</div>';
+                        }
+
                         echo '</div>';
                     }
                     ?>
