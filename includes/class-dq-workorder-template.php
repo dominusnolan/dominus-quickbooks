@@ -289,15 +289,11 @@ class DQ_Workorder_Template {
 
         // Update via ACF if available, otherwise use post_meta
         if ( function_exists( 'update_field' ) ) {
-            $result = update_field( $field, $value, $post_id );
+            update_field( $field, $value, $post_id );
         } else {
-            $result = update_post_meta( $post_id, $field, $value );
+            update_post_meta( $post_id, $field, $value );
         }
 
-        if ( $result !== false ) {
-            wp_send_json_success( [ 'value' => $value ] );
-        } else {
-            wp_send_json_error( 'Failed to update field.' );
-        }
+        wp_send_json_success( [ 'value' => $value ] );
     }
 }

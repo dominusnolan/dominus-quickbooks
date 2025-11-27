@@ -50,14 +50,10 @@
                 var displayEl = card.querySelector('.dqqb-inline-display');
                 var editorEl = card.querySelector('.dqqb-inline-editor');
                 var input = editorEl.querySelector('.dqqb-inline-input');
-                var valueEl = card.querySelector('.dqqb-inline-value');
 
-                // Reset input to original value
-                if (input && valueEl) {
-                    var originalValue = valueEl.textContent.trim();
-                    if (originalValue === '—') {
-                        originalValue = '';
-                    }
+                // Reset input to original value from data attribute
+                if (input && editorEl) {
+                    var originalValue = editorEl.getAttribute('data-original') || '';
                     input.value = originalValue;
                 }
 
@@ -132,6 +128,12 @@
                             valueEl.textContent = newValue || '—';
                         }
 
+                        // Update the data-original attribute for future cancels
+                        var editorEl = card.querySelector('.dqqb-inline-editor');
+                        if (editorEl) {
+                            editorEl.setAttribute('data-original', newValue);
+                        }
+
                         // Show success status
                         if (statusEl) {
                             statusEl.textContent = 'Saved!';
@@ -140,7 +142,6 @@
 
                         // Hide editor, show display
                         var displayEl = card.querySelector('.dqqb-inline-display');
-                        var editorEl = card.querySelector('.dqqb-inline-editor');
                         if (displayEl && editorEl) {
                             editorEl.style.display = 'none';
                             displayEl.style.display = 'flex';

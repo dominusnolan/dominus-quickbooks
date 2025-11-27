@@ -281,7 +281,7 @@ $editable_fields = [ 'installed_product_id', 'wo_type_of_work', 'wo_state', 'wo_
                             continue;
                         }
 
-                        $display_value = $value !== '' ? ( is_numeric($value) ? number_format( (float)$value, 2 ) : (string)$value ) : '—';
+                        $display_value = $value !== '' ? esc_html( (string)$value ) : '—';
 
                         // Add data attributes for editable fields
                         $card_attrs = '';
@@ -299,8 +299,8 @@ $editable_fields = [ 'installed_product_id', 'wo_type_of_work', 'wo_state', 'wo_
                             echo '<button type="button" class="dqqb-inline-edit-btn" title="Edit">&#9998;</button>';
                             echo '</div>';
 
-                            // Hidden editor
-                            echo '<div class="dqqb-inline-editor">';
+                            // Hidden editor with data-original to preserve raw value
+                            echo '<div class="dqqb-inline-editor" data-original="' . esc_attr( $value ) . '">';
                             echo '<input type="text" class="dqqb-inline-input" value="' . esc_attr( $value ) . '" />';
                             echo '<div class="dqqb-inline-actions">';
                             echo '<button type="button" class="dqqb-inline-save">Save</button>';
