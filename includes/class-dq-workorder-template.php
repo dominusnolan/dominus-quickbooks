@@ -278,14 +278,33 @@ class DQ_Workorder_Template {
             'wo_type_of_work',
             'wo_state',
             'wo_city',
+            'wo_location',
+            'wo_contact_name',
+            'wo_contact_address',
+            'wo_contact_email',
+            'wo_service_contact_number',
         ];
 
         if ( ! in_array( $field, $allowed_fields, true ) ) {
             wp_send_json_error( 'Field not allowed.' );
         }
 
-        // Sanitize value (already stripped tags above)
-        $value = sanitize_text_field( $value );
+        // Sanitize value based on field type
+        $warning = '';
+        if ( $field === 'wo_contact_email' ) {
+            // Email-specific sanitization and validation
+            $sanitized_email = sanitize_email( $value );
+            if ( $value !== '' && ! is_email( $sanitized_email ) ) {
+                // Invalid email: save as sanitized text but return warning
+                $value = sanitize_text_field( $value );
+                $warning = 'Value saved, but it is not a valid email address.';
+            } else {
+                $value = $sanitized_email;
+            }
+        } else {
+            // General text field sanitization
+            $value = sanitize_text_field( $value );
+        }
 
         // Update via ACF if available, otherwise use post_meta
         if ( function_exists( 'update_field' ) ) {
@@ -294,6 +313,11 @@ class DQ_Workorder_Template {
             update_post_meta( $post_id, $field, $value );
         }
 
-        wp_send_json_success( [ 'value' => $value ] );
+        $response = [ 'value' => $value ];
+        if ( $warning !== '' ) {
+            $response['warning'] = $warning;
+        }
+
+        wp_send_json_success( $response );
     }
 }
