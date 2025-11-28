@@ -10,6 +10,8 @@ class DQ_Financial_Report {
 
     // Field name constants (adjust if they differ)
     const FIELD_DATE           = 'qi_invoice_date';
+    const FIELD_DUE_DATE       = 'qi_due_date';
+    const FIELD_INVOICE_NO     = 'qi_invoice_no';
     const FIELD_TOTAL_BILLED   = 'qi_total_billed';
     const FIELD_BALANCE_DUE    = 'qi_balance_due';
     const FIELD_LINES_REPEATER = 'qi_invoice';
@@ -155,6 +157,7 @@ class DQ_Financial_Report {
      * NEW: Renders a profitability pie chart (Direct Labor + Payroll vs Remaining Billed amount).
      * Remaining = Total Billed - Direct Labor - Payroll (or zero if negative).
      * Also shows unpaid invoices as a separate red slice.
+     * Clicking the unpaid invoices slice opens a modal with all unpaid invoices for the period.
      */
     private static function render_profit_chart( array $data, string $report, int $year, int $month, int $quarter, array $range ) {
         // Aggregate totals
@@ -183,9 +186,13 @@ class DQ_Financial_Report {
             return;
         }
 
+        // Collect unpaid invoices for modal
+        $unpaid_invoices = self::get_unpaid_invoices( $range['start'], $range['end'] );
+
         // Unique DOM IDs to avoid collisions if multiple charts were ever rendered
         $canvas_id = 'dq-fr-profit-chart';
         $wrapper_id = 'dq-fr-profit-chart-wrapper';
+        $unpaid_modal_id = 'dq-fr-unpaid-invoices-modal';
 
         // Basic styles + container
         echo '<style>
@@ -197,6 +204,19 @@ class DQ_Financial_Report {
 .dq-fr-metric-positive {color:#098400;font-weight:600;}
 .dq-fr-metric-negative {color:#c40000;font-weight:600;}
 .dq-fr-metric-unpaid {color:#c40000;font-weight:600;}
+/* Unpaid Invoices Modal Styles */
+.dq-fr-unpaid-modal-overlay {position:fixed;inset:0;width:100vw;height:100vh;background:rgba(0,0,0,0.5);z-index:100000;display:none;overflow-y:auto;}
+.dq-fr-unpaid-modal-window {background:#fff;max-width:1000px;margin:40px auto;padding:24px 20px 20px;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.15);position:relative;}
+.dq-fr-unpaid-modal-close {position:absolute;right:16px;top:12px;font-size:32px;background:transparent;border:none;color:#333;cursor:pointer;line-height:1;}
+.dq-fr-unpaid-modal-close:hover {color:#c40000;}
+.dq-fr-unpaid-modal-close:focus {outline:2px solid #0073aa;outline-offset:2px;}
+.dq-fr-unpaid-table {width:100%;border-collapse:collapse;margin-top:16px;}
+.dq-fr-unpaid-table th {background:#dc3545;color:#fff;padding:10px 12px;font-weight:600;text-align:left;font-size:14px;}
+.dq-fr-unpaid-table td {border-bottom:1px solid #eee;padding:8px 12px;font-size:13px;vertical-align:middle;}
+.dq-fr-unpaid-table tr:last-child td {border-bottom:none;}
+.dq-fr-unpaid-table tr:hover td {background:#fff8f8;}
+.dq-fr-days-overdue {color:#c40000;font-weight:600;}
+.dq-fr-days-remaining {color:#098400;font-weight:600;}
 </style>';
 
         echo '<div id="' . esc_attr($wrapper_id) . '">';
@@ -217,9 +237,15 @@ class DQ_Financial_Report {
         echo '<noscript><p><em>Pie chart requires JavaScript. Total Billed ' . self::money($total_billed) . ' vs Direct Labor ' . self::money($direct_labor) . ' + Payroll ' . self::money($payroll_total) . '. Unpaid: ' . self::money($unpaid_total) . '.</em></p></noscript>';
         echo '</div>';
 
+        // Render unpaid invoices modal
+        self::render_unpaid_invoices_modal( $unpaid_invoices, $unpaid_modal_id, $report, $year, $month, $quarter );
+
         // Load Chart.js once (simple guard)
         echo '<script>
 (function(){
+  var unpaidModalId = "' . esc_js($unpaid_modal_id) . '";
+  var dqProfitChart = null;
+
   if (!window.Chart) {
     var s = document.createElement("script");
     s.src = "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js";
@@ -228,6 +254,38 @@ class DQ_Financial_Report {
   } else {
     renderDQProfitChart();
   }
+
+  function openUnpaidModal() {
+    var modal = document.getElementById(unpaidModalId);
+    if (modal) {
+      modal.style.display = "block";
+      // Set focus to close button for accessibility
+      var closeBtn = modal.querySelector(".dq-fr-unpaid-modal-close");
+      if (closeBtn) closeBtn.focus();
+    }
+  }
+
+  function closeUnpaidModal() {
+    var modal = document.getElementById(unpaidModalId);
+    if (modal) modal.style.display = "none";
+  }
+
+  // Close modal on ESC key
+  document.addEventListener("keydown", function(e) {
+    if (e.key === "Escape") closeUnpaidModal();
+  });
+
+  // Close modal on overlay click
+  var modalOverlay = document.getElementById(unpaidModalId);
+  if (modalOverlay) {
+    modalOverlay.addEventListener("click", function(ev) {
+      if (ev.target === modalOverlay) closeUnpaidModal();
+    });
+  }
+
+  // Make close function globally accessible for the close button
+  window.dqCloseUnpaidModal = closeUnpaidModal;
+
   function renderDQProfitChart(){
     try {
       var ctx = document.getElementById("' . esc_js($canvas_id) . '");
@@ -239,7 +297,8 @@ class DQ_Financial_Report {
       var unpaid = ' . json_encode(round($unpaid_total,2)) . ';
       var dataLabels = remaining >= 0 ? ["Direct Labor","Payroll","Net Profit","Unpaid Invoices"] : ["Direct Labor","Payroll","Net Loss","Unpaid Invoices"];
       var dataValues = remaining >= 0 ? [directLabor, payroll, remaining, unpaid] : [directLabor, payroll, loss, unpaid];
-      new Chart(ctx, {
+
+      dqProfitChart = new Chart(ctx, {
         type: "pie",
         data: {
           labels: dataLabels,
@@ -257,6 +316,15 @@ class DQ_Financial_Report {
         },
         options: {
           responsive: true,
+          onClick: function(evt, elements) {
+            if (elements.length > 0) {
+              var index = elements[0].index;
+              var label = dataLabels[index];
+              if (label === "Unpaid Invoices") {
+                openUnpaidModal();
+              }
+            }
+          },
           plugins: {
             legend: {
               position: "bottom"
@@ -265,7 +333,11 @@ class DQ_Financial_Report {
               callbacks: {
                 label: function(ctx){
                   var v = ctx.parsed;
-                  return ctx.label + ": $" + v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+                  var label = ctx.label + ": $" + v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+                  if (ctx.label === "Unpaid Invoices") {
+                    label += " (click to view details)";
+                  }
+                  return label;
                 }
               }
             },
@@ -275,12 +347,148 @@ class DQ_Financial_Report {
           }
         }
       });
+
+      // Change cursor to pointer when hovering over Unpaid Invoices slice
+      ctx.addEventListener("mousemove", function(e) {
+        var points = dqProfitChart.getElementsAtEventForMode(e, "nearest", {intersect: true}, false);
+        if (points.length > 0) {
+          var index = points[0].index;
+          if (dataLabels[index] === "Unpaid Invoices") {
+            ctx.style.cursor = "pointer";
+          } else {
+            ctx.style.cursor = "default";
+          }
+        } else {
+          ctx.style.cursor = "default";
+        }
+      });
+
     } catch(e){
       console.warn("DQ Financial Report chart error:", e);
     }
   }
 })();
 </script>';
+    }
+
+    /**
+     * Get all unpaid invoices for the given date range.
+     * Returns array of invoice data sorted by due date ascending.
+     */
+    private static function get_unpaid_invoices( string $start, string $end ) : array {
+        $unpaid = [];
+
+        $invoices = get_posts([
+            'post_type'      => 'quickbooks_invoice',
+            'post_status'    => ['publish','draft','pending','private'],
+            'posts_per_page' => -1,
+            'fields'         => 'ids',
+            'meta_key'       => self::FIELD_DATE,
+        ]);
+
+        foreach ( $invoices as $pid ) {
+            $date_raw = function_exists('get_field') ? get_field( self::FIELD_DATE, $pid ) : get_post_meta( $pid, self::FIELD_DATE, true );
+            $date_norm = self::normalize_date( $date_raw );
+            if ( ! $date_norm ) continue;
+            if ( $date_norm < $start || $date_norm > $end ) continue;
+
+            $balance_due = self::num( function_exists('get_field') ? get_field( self::FIELD_BALANCE_DUE, $pid ) : get_post_meta( $pid, self::FIELD_BALANCE_DUE, true ) );
+
+            // Only include invoices with balance due > 0
+            if ( $balance_due <= 0 ) continue;
+
+            $invoice_no = function_exists('get_field') ? get_field( self::FIELD_INVOICE_NO, $pid ) : get_post_meta( $pid, self::FIELD_INVOICE_NO, true );
+            $total_billed = self::num( function_exists('get_field') ? get_field( self::FIELD_TOTAL_BILLED, $pid ) : get_post_meta( $pid, self::FIELD_TOTAL_BILLED, true ) );
+            $invoice_date = function_exists('get_field') ? get_field( self::FIELD_DATE, $pid ) : get_post_meta( $pid, self::FIELD_DATE, true );
+            $due_date_raw = function_exists('get_field') ? get_field( self::FIELD_DUE_DATE, $pid ) : get_post_meta( $pid, self::FIELD_DUE_DATE, true );
+            $due_date = self::normalize_date( $due_date_raw );
+
+            $unpaid[] = [
+                'post_id'      => $pid,
+                'invoice_no'   => $invoice_no ?: ('Post #' . $pid),
+                'total_billed' => $total_billed,
+                'balance_due'  => $balance_due,
+                'invoice_date' => $invoice_date,
+                'due_date'     => $due_date,
+                'due_date_raw' => $due_date_raw,
+            ];
+        }
+
+        // Sort by due date ascending (soonest first)
+        usort( $unpaid, function( $a, $b ) {
+            $date_a = $a['due_date'] ?: '9999-99-99';
+            $date_b = $b['due_date'] ?: '9999-99-99';
+            return strcmp( $date_a, $date_b );
+        });
+
+        return $unpaid;
+    }
+
+    /**
+     * Render the unpaid invoices modal HTML.
+     */
+    private static function render_unpaid_invoices_modal( array $unpaid_invoices, string $modal_id, string $report, int $year, int $month, int $quarter ) {
+        $period_label = self::human_date_label( $report, $year, $month, $quarter );
+        $today = date('Y-m-d');
+
+        echo '<div id="' . esc_attr($modal_id) . '" class="dq-fr-unpaid-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="' . esc_attr($modal_id) . '-title">';
+        echo '  <div class="dq-fr-unpaid-modal-window">';
+        echo '    <button class="dq-fr-unpaid-modal-close" onclick="window.dqCloseUnpaidModal();event.preventDefault();" aria-label="Close modal">&times;</button>';
+        echo '    <h2 id="' . esc_attr($modal_id) . '-title">Unpaid Invoices — ' . esc_html($period_label) . '</h2>';
+
+        if ( empty( $unpaid_invoices ) ) {
+            echo '    <p><em>No unpaid invoices found for this period.</em></p>';
+        } else {
+            echo '    <table class="dq-fr-unpaid-table">';
+            echo '      <thead><tr>';
+            echo '        <th>Invoice #</th>';
+            echo '        <th>Amount</th>';
+            echo '        <th>Balance</th>';
+            echo '        <th>Invoice Date</th>';
+            echo '        <th>Due Date</th>';
+            echo '        <th>Remaining Days</th>';
+            echo '      </tr></thead><tbody>';
+
+            foreach ( $unpaid_invoices as $inv ) {
+                $inv_link = get_edit_post_link( $inv['post_id'] );
+
+                // Calculate remaining days
+                $remaining_days = '';
+                $remaining_class = '';
+                if ( $inv['due_date'] ) {
+                    $due_ts = strtotime( $inv['due_date'] );
+                    $today_ts = strtotime( $today );
+                    $diff_days = (int) round( ( $due_ts - $today_ts ) / 86400 );
+
+                    if ( $diff_days < 0 ) {
+                        $remaining_days = abs($diff_days) . ' days overdue';
+                        $remaining_class = 'dq-fr-days-overdue';
+                    } elseif ( $diff_days === 0 ) {
+                        $remaining_days = 'Due today';
+                        $remaining_class = 'dq-fr-days-overdue';
+                    } else {
+                        $remaining_days = $diff_days . ' days';
+                        $remaining_class = 'dq-fr-days-remaining';
+                    }
+                } else {
+                    $remaining_days = 'N/A';
+                }
+
+                echo '<tr>';
+                echo '<td><a href="' . esc_url($inv_link) . '" target="_blank">' . esc_html($inv['invoice_no']) . '</a></td>';
+                echo '<td>' . self::money($inv['total_billed']) . '</td>';
+                echo '<td><span class="dq-fr-metric-unpaid">' . self::money($inv['balance_due']) . '</span></td>';
+                echo '<td>' . esc_html($inv['invoice_date']) . '</td>';
+                echo '<td>' . esc_html($inv['due_date_raw'] ?: 'N/A') . '</td>';
+                echo '<td><span class="' . esc_attr($remaining_class) . '">' . esc_html($remaining_days) . '</span></td>';
+                echo '</tr>';
+            }
+
+            echo '      </tbody></table>';
+        }
+
+        echo '  </div>';
+        echo '</div>';
     }
 
     private static function filters_form( $report, $year, $month, $quarter ) {
