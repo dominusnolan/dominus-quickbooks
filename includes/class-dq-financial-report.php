@@ -270,9 +270,14 @@ class DQ_Financial_Report {
     if (modal) modal.style.display = "none";
   }
 
-  // Close modal on ESC key
+  // Close modal on ESC key - only if modal is visible
   document.addEventListener("keydown", function(e) {
-    if (e.key === "Escape") closeUnpaidModal();
+    if (e.key === "Escape") {
+      var modal = document.getElementById(unpaidModalId);
+      if (modal && modal.style.display === "block") {
+        closeUnpaidModal();
+      }
+    }
   });
 
   // Close modal on overlay click
@@ -344,22 +349,20 @@ class DQ_Financial_Report {
             title: {
               display: false
             }
+          },
+          onHover: function(evt, elements) {
+            // Change cursor to pointer when hovering over Unpaid Invoices slice
+            if (elements.length > 0) {
+              var index = elements[0].index;
+              if (dataLabels[index] === "Unpaid Invoices") {
+                ctx.style.cursor = "pointer";
+              } else {
+                ctx.style.cursor = "default";
+              }
+            } else {
+              ctx.style.cursor = "default";
+            }
           }
-        }
-      });
-
-      // Change cursor to pointer when hovering over Unpaid Invoices slice
-      ctx.addEventListener("mousemove", function(e) {
-        var points = dqProfitChart.getElementsAtEventForMode(e, "nearest", {intersect: true}, false);
-        if (points.length > 0) {
-          var index = points[0].index;
-          if (dataLabels[index] === "Unpaid Invoices") {
-            ctx.style.cursor = "pointer";
-          } else {
-            ctx.style.cursor = "default";
-          }
-        } else {
-          ctx.style.cursor = "default";
         }
       });
 
@@ -415,10 +418,13 @@ class DQ_Financial_Report {
         }
 
         // Sort by due date ascending (soonest first)
+        // Invoices without due dates are sorted to the end
         usort( $unpaid, function( $a, $b ) {
-            $date_a = $a['due_date'] ?: '9999-99-99';
-            $date_b = $b['due_date'] ?: '9999-99-99';
-            return strcmp( $date_a, $date_b );
+            // Handle cases where due_date is missing - put them at the end
+            if ( empty( $a['due_date'] ) && empty( $b['due_date'] ) ) return 0;
+            if ( empty( $a['due_date'] ) ) return 1;  // $a goes after $b
+            if ( empty( $b['due_date'] ) ) return -1; // $b goes after $a
+            return strcmp( $a['due_date'], $b['due_date'] );
         });
 
         return $unpaid;
@@ -456,9 +462,14 @@ class DQ_Financial_Report {
                 $remaining_days = '';
                 $remaining_class = '';
                 if ( $inv['due_date'] ) {
-                    $due_ts = strtotime( $inv['due_date'] );
-                    $today_ts = strtotime( $today );
-                    $diff_days = (int) round( ( $due_ts - $today_ts ) / 86400 );
+                    $due_date_obj = new DateTime( $inv['due_date'] );
+                    $today_obj = new DateTime( $today );
+                    $interval = $today_obj->diff( $due_date_obj );
+                    $diff_days = (int) $interval->days;
+                    // If due date is in the past, invert should be 0 (due_date < today)
+                    if ( $interval->invert === 1 ) {
+                        $diff_days = -$diff_days;
+                    }
 
                     if ( $diff_days < 0 ) {
                         $remaining_days = abs($diff_days) . ' days overdue';
