@@ -73,7 +73,7 @@ class DQ_Dashboard
 
         // Get current menu from URL param
         $current_menu = isset($_GET['dqqb_menu']) ? sanitize_key($_GET['dqqb_menu']) : 'dashboard';
-        $valid_menus = ['dashboard', 'workorders', 'invoices', 'invoices_balance', 'financial_report', 'workorder_report', 'team'];
+        $valid_menus = ['dashboard', 'workorders', 'invoices', 'invoices_balance', 'financial_report', 'workorder_report', 'team', 'documentation'];
         if (!in_array($current_menu, $valid_menus, true)) {
             $current_menu = 'dashboard';
         }
@@ -138,6 +138,10 @@ class DQ_Dashboard
                 'label' => 'Team',
                 'icon' => 'dashicons-groups',
             ],
+            'documentation' => [
+                'label' => 'Documentation',
+                'icon' => 'dashicons-book-alt',
+            ],
             'logout' => [
                 'label' => 'Logout',
                 'icon' => 'dashicons-exit',
@@ -152,6 +156,11 @@ class DQ_Dashboard
         $output .= '<ul>';
 
         foreach ($menu_items as $key => $item) {
+            // Hide Financial Report menu item unless user has administrator privileges
+            if ($key === 'financial_report' && !current_user_can('manage_options')) {
+                continue;
+            }
+
             $active_class = ($current_menu === $key) ? 'active' : '';
             $url = add_query_arg('dqqb_menu', $key, $base_url);
             
@@ -202,6 +211,8 @@ class DQ_Dashboard
                 return self::render_workorder_report_view($report_tab);
             case 'team':
                 return self::render_team_view();
+            case 'documentation':
+                return self::render_documentation_view();
             default:
                 return self::render_dashboard_view();
         }
@@ -671,6 +682,60 @@ class DQ_Dashboard
         }
 
         $output .= '</div>';
+        return $output;
+    }
+
+    /**
+     * Render Documentation view with links to documentation pages
+     */
+    private static function render_documentation_view()
+    {
+        $documentation_links = [
+            [
+                'label' => 'Account Login',
+                'url' => '/documentation/account-login-documentation/',
+                'icon' => 'dashicons-admin-users',
+            ],
+            [
+                'label' => 'Content Management',
+                'url' => '/documentation/content-management/',
+                'icon' => 'dashicons-admin-page',
+            ],
+            [
+                'label' => 'Invoice Management',
+                'url' => '/documentation/invoice-management/',
+                'icon' => 'dashicons-media-text',
+            ],
+            [
+                'label' => 'Work Order Management',
+                'url' => '/documentation/work-order-management/',
+                'icon' => 'dashicons-clipboard',
+            ],
+            [
+                'label' => 'Reporting Management',
+                'url' => '/documentation/reporting-documentation/',
+                'icon' => 'dashicons-chart-bar',
+            ],
+        ];
+
+        $output = '<div class="dqqb-dashboard-main">';
+        $output .= '<h1>Documentation</h1>';
+        $output .= '<div class="dqqb-documentation-list">';
+        $output .= '<ul class="dqqb-doc-links">';
+
+        foreach ($documentation_links as $link) {
+            $output .= '<li>';
+            $output .= '<a href="' . esc_url($link['url']) . '">';
+            $output .= '<span class="dashicons ' . esc_attr($link['icon']) . '"></span>';
+            $output .= '<span class="doc-label">' . esc_html($link['label']) . '</span>';
+            $output .= '</a>';
+            $output .= '</li>';
+        }
+
+        $output .= '</ul>';
+        $output .= '</div>';
+        $output .= '</div>';
+
         return $output;
     }
 
