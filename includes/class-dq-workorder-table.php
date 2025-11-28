@@ -663,4 +663,5 @@ class DQ_Workorder_Table
         ]);
     }
 }
+
 ?>
