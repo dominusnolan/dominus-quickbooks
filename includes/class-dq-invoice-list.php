@@ -303,6 +303,8 @@ class DQ_Invoice_List
 .dq-invoice-list-customer { font-size: 13px; line-height: 1.6; }
 .dq-invoice-list-filter select, .dq-invoice-list-filter input[type="date"], .dq-invoice-list-filter input[type="text"] { font-size:13px; padding:6px; }
 .dq-invoice-list-filter select{margin: 0 !important}
+.dq-invoice-view-btn { display: inline-block; background: #006d7b; color: #fff !important; padding: 6px 16px; border-radius: 5px; text-decoration: none; font-size: 14px; }
+.dq-invoice-view-btn:hover { background: #005a66; }
 </style>';
     }
 
@@ -335,6 +337,7 @@ class DQ_Invoice_List
         $output .= $render_sortable_th('qi_invoice_date', 'Invoice Date');
         $output .= $render_sortable_th('qi_due_date', 'Due Date');
         $output .= $render_sortable_th('days_remaining', 'Days Remaining');
+        $output .= '<th>Action</th>';
         $output .= '</tr></thead>';
         $output .= '<tbody>';
 
@@ -416,6 +419,7 @@ class DQ_Invoice_List
             $output .= '<td>' . esc_html($due_date ? date('m/d/Y', strtotime($due_date)) : 'N/A') . '</td>';
             // Only display Days Remaining when unpaid; show dash otherwise
             $output .= '<td>' . ($payment_status !== 'PAID' ? esc_html($days_remaining ?: 'N/A') : '-') . '</td>';
+            $output .= '<td><a href="' . esc_url($permalink) . '" class="dq-invoice-view-btn" target="_blank" rel="noopener noreferrer" aria-label="View invoice ' . esc_attr($invoice_no ?: $invoice->ID) . ' (opens in new tab)">View</a></td>';
             $output .= '</tr>';
         }
 
