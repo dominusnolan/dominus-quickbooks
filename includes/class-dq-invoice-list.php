@@ -52,6 +52,9 @@ class DQ_Invoice_List
             'date_to' => '',
             'unpaid_only' => '', // When 'true', only show invoices with qi_balance_due > 0
             'per_page' => '', // Optional: override default per_page
+            'invoice_no' => '', // Search by invoice number
+            'sort_column' => '', // Column to sort by
+            'sort_direction' => '', // Sort direction (ASC/DESC)
         ], $atts, 'dqqb_invoice_list');
 
         // Enqueue scripts
@@ -107,10 +110,6 @@ class DQ_Invoice_List
             $args['meta_key'] = $meta_key;
             $args['orderby'] = 'meta_value';
             $args['order'] = $sort_direction;
-            // Use numeric type for invoice number if it's numeric
-            if ($sort_column === 'qi_invoice_no') {
-                $args['orderby'] = 'meta_value_num';
-            }
         }
 
         // Meta query for filters
