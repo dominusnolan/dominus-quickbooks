@@ -431,75 +431,438 @@ class DQ_Financial_Report {
     }
 
     /**
-     * Render the unpaid invoices modal HTML.
+     * Render the advanced unpaid invoices modal HTML with pagination, sorting, filtering, and CSV export.
      */
     private static function render_unpaid_invoices_modal( array $unpaid_invoices, string $modal_id, string $report, int $year, int $month, int $quarter ) {
         $period_label = self::human_date_label( $report, $year, $month, $quarter );
         $today = date('Y-m-d');
+
+        // Pre-calculate remaining days and categorize invoices
+        $processed_invoices = [];
+        $total_overdue = 0.0;
+        $total_incoming = 0.0;
+
+        foreach ( $unpaid_invoices as $inv ) {
+            $remaining_days_num = null;
+            $remaining_days_text = 'N/A';
+            $remaining_class = '';
+            $is_overdue = false;
+
+            if ( $inv['due_date'] ) {
+                $due_date_obj = new DateTime( $inv['due_date'] );
+                $today_obj = new DateTime( $today );
+                $interval = $today_obj->diff( $due_date_obj );
+                $diff_days = (int) $interval->days;
+                if ( $interval->invert === 1 ) {
+                    $diff_days = -$diff_days;
+                }
+                $remaining_days_num = $diff_days;
+
+                if ( $diff_days < 0 ) {
+                    $remaining_days_text = abs($diff_days) . ' days overdue';
+                    $remaining_class = 'dq-fr-days-overdue';
+                    $is_overdue = true;
+                    $total_overdue += (float) $inv['balance_due'];
+                } elseif ( $diff_days === 0 ) {
+                    $remaining_days_text = 'Due today';
+                    $remaining_class = 'dq-fr-days-overdue';
+                    $is_overdue = true;
+                    $total_overdue += (float) $inv['balance_due'];
+                } else {
+                    $remaining_days_text = $diff_days . ' days';
+                    $remaining_class = 'dq-fr-days-remaining';
+                    $total_incoming += (float) $inv['balance_due'];
+                }
+            } else {
+                // No due date - consider as incoming (unknown)
+                $total_incoming += (float) $inv['balance_due'];
+            }
+
+            $processed_invoices[] = [
+                'post_id'             => $inv['post_id'],
+                'invoice_no'          => $inv['invoice_no'],
+                'total_billed'        => $inv['total_billed'],
+                'balance_due'         => $inv['balance_due'],
+                'invoice_date'        => $inv['invoice_date'],
+                'invoice_date_sort'   => self::normalize_date($inv['invoice_date']),
+                'due_date'            => $inv['due_date_raw'] ?: 'N/A',
+                'due_date_sort'       => $inv['due_date'] ?: '9999-12-31',
+                'remaining_days_num'  => $remaining_days_num,
+                'remaining_days_text' => $remaining_days_text,
+                'remaining_class'     => $remaining_class,
+                'is_overdue'          => $is_overdue,
+                'edit_link'           => get_edit_post_link( $inv['post_id'] ),
+            ];
+        }
+
+        // Additional modal styles
+        echo '<style>
+.dq-fr-unpaid-modal-controls {display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #eee;}
+.dq-fr-unpaid-summary {display:flex;gap:24px;flex-wrap:wrap;}
+.dq-fr-unpaid-summary-item {padding:10px 16px;border-radius:6px;font-size:14px;}
+.dq-fr-unpaid-summary-item.overdue {background:#fee2e2;color:#991b1b;}
+.dq-fr-unpaid-summary-item.incoming {background:#d1fae5;color:#065f46;}
+.dq-fr-unpaid-summary-item strong {display:block;font-size:18px;margin-top:4px;}
+.dq-fr-unpaid-filters {display:flex;gap:8px;align-items:center;}
+.dq-fr-unpaid-filters label {font-weight:600;margin-right:8px;}
+.dq-fr-unpaid-filters button {padding:6px 14px;border:1px solid #d1d5db;background:#fff;border-radius:4px;cursor:pointer;font-size:13px;transition:all 0.15s;}
+.dq-fr-unpaid-filters button:hover {background:#f3f4f6;}
+.dq-fr-unpaid-filters button.active {background:#dc3545;color:#fff;border-color:#dc3545;}
+.dq-fr-unpaid-csv-btn {padding:8px 16px;background:#28a745;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;margin-left:auto;}
+.dq-fr-unpaid-csv-btn:hover {background:#218838;}
+.dq-fr-unpaid-table th.sortable {cursor:pointer;user-select:none;position:relative;padding-right:20px;}
+.dq-fr-unpaid-table th.sortable:hover {background:#b82d3c;}
+.dq-fr-unpaid-table th.sortable::after {content:"⇅";position:absolute;right:6px;top:50%;transform:translateY(-50%);opacity:0.5;font-size:12px;}
+.dq-fr-unpaid-table th.sortable.asc::after {content:"↑";opacity:1;}
+.dq-fr-unpaid-table th.sortable.desc::after {content:"↓";opacity:1;}
+.dq-fr-unpaid-pagination {display:flex;justify-content:space-between;align-items:center;margin-top:16px;padding-top:12px;border-top:1px solid #eee;}
+.dq-fr-unpaid-pagination-info {font-size:13px;color:#666;}
+.dq-fr-unpaid-pagination-controls {display:flex;gap:8px;}
+.dq-fr-unpaid-pagination-controls button {padding:6px 12px;border:1px solid #d1d5db;background:#fff;border-radius:4px;cursor:pointer;font-size:13px;}
+.dq-fr-unpaid-pagination-controls button:hover:not(:disabled) {background:#f3f4f6;}
+.dq-fr-unpaid-pagination-controls button:disabled {opacity:0.5;cursor:not-allowed;}
+.dq-fr-unpaid-pagination-controls .page-numbers {display:flex;gap:4px;}
+.dq-fr-unpaid-pagination-controls .page-num {padding:6px 10px;border:1px solid #d1d5db;background:#fff;border-radius:4px;cursor:pointer;font-size:13px;min-width:36px;text-align:center;}
+.dq-fr-unpaid-pagination-controls .page-num:hover {background:#f3f4f6;}
+.dq-fr-unpaid-pagination-controls .page-num.active {background:#dc3545;color:#fff;border-color:#dc3545;}
+.dq-fr-unpaid-no-results {text-align:center;padding:40px 20px;color:#666;font-style:italic;}
+</style>';
 
         echo '<div id="' . esc_attr($modal_id) . '" class="dq-fr-unpaid-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="' . esc_attr($modal_id) . '-title">';
         echo '  <div class="dq-fr-unpaid-modal-window">';
         echo '    <button class="dq-fr-unpaid-modal-close" onclick="window.dqCloseUnpaidModal();event.preventDefault();" aria-label="Close modal">&times;</button>';
         echo '    <h2 id="' . esc_attr($modal_id) . '-title">Unpaid Invoices — ' . esc_html($period_label) . '</h2>';
 
-        if ( empty( $unpaid_invoices ) ) {
+        if ( empty( $processed_invoices ) ) {
             echo '    <p><em>No unpaid invoices found for this period.</em></p>';
         } else {
-            echo '    <table class="dq-fr-unpaid-table">';
-            echo '      <thead><tr>';
-            echo '        <th>Invoice #</th>';
-            echo '        <th>Amount</th>';
-            echo '        <th>Balance</th>';
-            echo '        <th>Invoice Date</th>';
-            echo '        <th>Due Date</th>';
-            echo '        <th>Remaining Days</th>';
-            echo '      </tr></thead><tbody>';
+            // Controls: Summary stats, filters, CSV button
+            echo '<div class="dq-fr-unpaid-modal-controls">';
+            echo '  <div class="dq-fr-unpaid-summary">';
+            echo '    <div class="dq-fr-unpaid-summary-item overdue">Total Overdue<strong id="dq-unpaid-overdue-total">' . self::money($total_overdue) . '</strong></div>';
+            echo '    <div class="dq-fr-unpaid-summary-item incoming">Total Incoming<strong id="dq-unpaid-incoming-total">' . self::money($total_incoming) . '</strong></div>';
+            echo '  </div>';
+            echo '  <div class="dq-fr-unpaid-filters">';
+            echo '    <label>Filter:</label>';
+            echo '    <button type="button" class="active" data-filter="all">Show All</button>';
+            echo '    <button type="button" data-filter="overdue">Overdue</button>';
+            echo '    <button type="button" data-filter="incoming">Incoming</button>';
+            echo '  </div>';
+            echo '  <button type="button" class="dq-fr-unpaid-csv-btn" id="dq-unpaid-csv-btn">Download CSV</button>';
+            echo '</div>';
 
-            foreach ( $unpaid_invoices as $inv ) {
-                $inv_link = get_edit_post_link( $inv['post_id'] );
+            // Table with sortable headers
+            echo '<table class="dq-fr-unpaid-table" id="dq-unpaid-table">';
+            echo '  <thead><tr>';
+            echo '    <th>Invoice #</th>';
+            echo '    <th>Amount</th>';
+            echo '    <th>Balance</th>';
+            echo '    <th class="sortable" data-sort="invoice_date">Invoice Date</th>';
+            echo '    <th class="sortable desc" data-sort="due_date">Due Date</th>';
+            echo '    <th class="sortable" data-sort="remaining_days">Remaining Days</th>';
+            echo '  </tr></thead>';
+            echo '  <tbody id="dq-unpaid-tbody">';
+            // Rows will be rendered by JavaScript for proper pagination/sorting/filtering
+            echo '  </tbody>';
+            echo '</table>';
+            echo '<div class="dq-fr-unpaid-no-results" id="dq-unpaid-no-results" style="display:none;">No invoices match the current filter.</div>';
 
-                // Calculate remaining days
-                $remaining_days = '';
-                $remaining_class = '';
-                if ( $inv['due_date'] ) {
-                    $due_date_obj = new DateTime( $inv['due_date'] );
-                    $today_obj = new DateTime( $today );
-                    $interval = $today_obj->diff( $due_date_obj );
-                    $diff_days = (int) $interval->days;
-                    // If due date is in the past, invert should be 0 (due_date < today)
-                    if ( $interval->invert === 1 ) {
-                        $diff_days = -$diff_days;
-                    }
+            // Pagination controls
+            echo '<div class="dq-fr-unpaid-pagination">';
+            echo '  <div class="dq-fr-unpaid-pagination-info" id="dq-unpaid-pagination-info">Showing 1-50 of ' . count($processed_invoices) . ' invoices</div>';
+            echo '  <div class="dq-fr-unpaid-pagination-controls">';
+            echo '    <button type="button" id="dq-unpaid-prev-btn" disabled>&laquo; Previous</button>';
+            echo '    <div class="page-numbers" id="dq-unpaid-page-numbers"></div>';
+            echo '    <button type="button" id="dq-unpaid-next-btn">Next &raquo;</button>';
+            echo '  </div>';
+            echo '</div>';
 
-                    if ( $diff_days < 0 ) {
-                        $remaining_days = abs($diff_days) . ' days overdue';
-                        $remaining_class = 'dq-fr-days-overdue';
-                    } elseif ( $diff_days === 0 ) {
-                        $remaining_days = 'Due today';
-                        $remaining_class = 'dq-fr-days-overdue';
-                    } else {
-                        $remaining_days = $diff_days . ' days';
-                        $remaining_class = 'dq-fr-days-remaining';
-                    }
-                } else {
-                    $remaining_days = 'N/A';
-                }
-
-                echo '<tr>';
-                echo '<td><a href="' . esc_url($inv_link) . '" target="_blank">' . esc_html($inv['invoice_no']) . '</a></td>';
-                echo '<td>' . self::money($inv['total_billed']) . '</td>';
-                echo '<td><span class="dq-fr-metric-unpaid">' . self::money($inv['balance_due']) . '</span></td>';
-                echo '<td>' . esc_html($inv['invoice_date']) . '</td>';
-                echo '<td>' . esc_html($inv['due_date_raw'] ?: 'N/A') . '</td>';
-                echo '<td><span class="' . esc_attr($remaining_class) . '">' . esc_html($remaining_days) . '</span></td>';
-                echo '</tr>';
-            }
-
-            echo '      </tbody></table>';
+            // Embed invoice data as JSON for JavaScript
+            echo '<script type="application/json" id="dq-unpaid-invoices-data">' . wp_json_encode($processed_invoices) . '</script>';
         }
 
         echo '  </div>';
         echo '</div>';
+
+        // JavaScript for sorting, filtering, pagination, and CSV export
+        self::render_unpaid_modal_javascript();
+    }
+
+    /**
+     * Render JavaScript for the advanced unpaid invoices modal functionality.
+     */
+    private static function render_unpaid_modal_javascript() {
+        ?>
+<script>
+(function() {
+    var dataEl = document.getElementById('dq-unpaid-invoices-data');
+    if (!dataEl) return;
+
+    var allInvoices = [];
+    try {
+        allInvoices = JSON.parse(dataEl.textContent);
+    } catch(e) {
+        console.error('Failed to parse unpaid invoices data:', e);
+        return;
+    }
+
+    var ITEMS_PER_PAGE = 50;
+    var currentPage = 1;
+    var currentFilter = 'all';
+    var currentSort = 'due_date';
+    var currentSortDir = 'asc';
+    var filteredInvoices = [];
+
+    var tbody = document.getElementById('dq-unpaid-tbody');
+    var paginationInfo = document.getElementById('dq-unpaid-pagination-info');
+    var pageNumbers = document.getElementById('dq-unpaid-page-numbers');
+    var prevBtn = document.getElementById('dq-unpaid-prev-btn');
+    var nextBtn = document.getElementById('dq-unpaid-next-btn');
+    var noResults = document.getElementById('dq-unpaid-no-results');
+    var table = document.getElementById('dq-unpaid-table');
+    var filterBtns = document.querySelectorAll('.dq-fr-unpaid-filters button');
+    var sortableHeaders = document.querySelectorAll('.dq-fr-unpaid-table th.sortable');
+    var csvBtn = document.getElementById('dq-unpaid-csv-btn');
+
+    function formatMoney(val) {
+        var num = parseFloat(val) || 0;
+        return '$' + num.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    }
+
+    function applyFilter() {
+        if (currentFilter === 'all') {
+            filteredInvoices = allInvoices.slice();
+        } else if (currentFilter === 'overdue') {
+            filteredInvoices = allInvoices.filter(function(inv) { return inv.is_overdue === true; });
+        } else if (currentFilter === 'incoming') {
+            filteredInvoices = allInvoices.filter(function(inv) { return inv.is_overdue === false; });
+        }
+    }
+
+    function applySort() {
+        filteredInvoices.sort(function(a, b) {
+            var aVal, bVal;
+            if (currentSort === 'invoice_date') {
+                aVal = a.invoice_date_sort || '';
+                bVal = b.invoice_date_sort || '';
+            } else if (currentSort === 'due_date') {
+                aVal = a.due_date_sort || '9999-12-31';
+                bVal = b.due_date_sort || '9999-12-31';
+            } else if (currentSort === 'remaining_days') {
+                aVal = a.remaining_days_num !== null ? a.remaining_days_num : 999999;
+                bVal = b.remaining_days_num !== null ? b.remaining_days_num : 999999;
+            }
+            var cmp = 0;
+            if (typeof aVal === 'number' && typeof bVal === 'number') {
+                cmp = aVal - bVal;
+            } else {
+                cmp = String(aVal).localeCompare(String(bVal));
+            }
+            return currentSortDir === 'asc' ? cmp : -cmp;
+        });
+    }
+
+    function renderTable() {
+        applyFilter();
+        applySort();
+
+        var totalPages = Math.ceil(filteredInvoices.length / ITEMS_PER_PAGE) || 1;
+        if (currentPage > totalPages) currentPage = totalPages;
+        if (currentPage < 1) currentPage = 1;
+
+        var start = (currentPage - 1) * ITEMS_PER_PAGE;
+        var end = Math.min(start + ITEMS_PER_PAGE, filteredInvoices.length);
+        var pageInvoices = filteredInvoices.slice(start, end);
+
+        // Clear tbody
+        tbody.innerHTML = '';
+
+        if (pageInvoices.length === 0) {
+            noResults.style.display = 'block';
+            table.style.display = 'none';
+        } else {
+            noResults.style.display = 'none';
+            table.style.display = '';
+            pageInvoices.forEach(function(inv) {
+                var tr = document.createElement('tr');
+                tr.innerHTML =
+                    '<td><a href="' + escapeHtml(inv.edit_link) + '" target="_blank">' + escapeHtml(inv.invoice_no) + '</a></td>' +
+                    '<td>' + formatMoney(inv.total_billed) + '</td>' +
+                    '<td><span class="dq-fr-metric-unpaid">' + formatMoney(inv.balance_due) + '</span></td>' +
+                    '<td>' + escapeHtml(inv.invoice_date || 'N/A') + '</td>' +
+                    '<td>' + escapeHtml(inv.due_date) + '</td>' +
+                    '<td><span class="' + escapeHtml(inv.remaining_class) + '">' + escapeHtml(inv.remaining_days_text) + '</span></td>';
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Update pagination info
+        if (filteredInvoices.length === 0) {
+            paginationInfo.textContent = 'No invoices to display';
+        } else {
+            paginationInfo.textContent = 'Showing ' + (start + 1) + '-' + end + ' of ' + filteredInvoices.length + ' invoices';
+        }
+
+        // Update page numbers
+        renderPageNumbers(totalPages);
+
+        // Update prev/next buttons
+        prevBtn.disabled = currentPage <= 1;
+        nextBtn.disabled = currentPage >= totalPages;
+    }
+
+    function renderPageNumbers(totalPages) {
+        pageNumbers.innerHTML = '';
+        var maxVisible = 5;
+        var startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+        var endPage = Math.min(totalPages, startPage + maxVisible - 1);
+        if (endPage - startPage + 1 < maxVisible) {
+            startPage = Math.max(1, endPage - maxVisible + 1);
+        }
+
+        if (startPage > 1) {
+            var firstBtn = document.createElement('button');
+            firstBtn.className = 'page-num';
+            firstBtn.textContent = '1';
+            firstBtn.onclick = function() { currentPage = 1; renderTable(); };
+            pageNumbers.appendChild(firstBtn);
+            if (startPage > 2) {
+                var dots = document.createElement('span');
+                dots.textContent = '...';
+                dots.style.padding = '6px 4px';
+                pageNumbers.appendChild(dots);
+            }
+        }
+
+        for (var i = startPage; i <= endPage; i++) {
+            var btn = document.createElement('button');
+            btn.className = 'page-num' + (i === currentPage ? ' active' : '');
+            btn.textContent = i;
+            btn.onclick = (function(page) {
+                return function() { currentPage = page; renderTable(); };
+            })(i);
+            pageNumbers.appendChild(btn);
+        }
+
+        if (endPage < totalPages) {
+            if (endPage < totalPages - 1) {
+                var dots = document.createElement('span');
+                dots.textContent = '...';
+                dots.style.padding = '6px 4px';
+                pageNumbers.appendChild(dots);
+            }
+            var lastBtn = document.createElement('button');
+            lastBtn.className = 'page-num';
+            lastBtn.textContent = totalPages;
+            lastBtn.onclick = function() { currentPage = totalPages; renderTable(); };
+            pageNumbers.appendChild(lastBtn);
+        }
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        var div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    // Filter button handlers
+    filterBtns.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            filterBtns.forEach(function(b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+            currentFilter = btn.getAttribute('data-filter');
+            currentPage = 1;
+            renderTable();
+        });
+    });
+
+    // Sort header handlers
+    sortableHeaders.forEach(function(th) {
+        th.addEventListener('click', function() {
+            var sortKey = th.getAttribute('data-sort');
+            if (currentSort === sortKey) {
+                currentSortDir = currentSortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort = sortKey;
+                currentSortDir = 'asc';
+            }
+            // Update header classes
+            sortableHeaders.forEach(function(h) {
+                h.classList.remove('asc', 'desc');
+            });
+            th.classList.add(currentSortDir);
+            currentPage = 1;
+            renderTable();
+        });
+    });
+
+    // Pagination button handlers
+    prevBtn.addEventListener('click', function() {
+        if (currentPage > 1) {
+            currentPage--;
+            renderTable();
+        }
+    });
+
+    nextBtn.addEventListener('click', function() {
+        var totalPages = Math.ceil(filteredInvoices.length / ITEMS_PER_PAGE) || 1;
+        if (currentPage < totalPages) {
+            currentPage++;
+            renderTable();
+        }
+    });
+
+    // CSV export handler
+    csvBtn.addEventListener('click', function() {
+        applyFilter();
+        applySort();
+
+        var csvRows = [];
+        // Header row
+        csvRows.push(['Invoice #', 'Amount', 'Balance', 'Invoice Date', 'Due Date', 'Remaining Days']);
+
+        // Data rows (export currently filtered/sorted data)
+        filteredInvoices.forEach(function(inv) {
+            csvRows.push([
+                inv.invoice_no || '',
+                parseFloat(inv.total_billed || 0).toFixed(2),
+                parseFloat(inv.balance_due || 0).toFixed(2),
+                inv.invoice_date || '',
+                inv.due_date || '',
+                inv.remaining_days_text || ''
+            ]);
+        });
+
+        // Convert to CSV string
+        var csvContent = csvRows.map(function(row) {
+            return row.map(function(cell) {
+                var str = String(cell);
+                if (str.indexOf(',') !== -1 || str.indexOf('"') !== -1 || str.indexOf('\n') !== -1) {
+                    str = '"' + str.replace(/"/g, '""') + '"';
+                }
+                return str;
+            }).join(',');
+        }).join('\n');
+
+        // Download CSV
+        var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        var url = URL.createObjectURL(blob);
+        var link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', 'unpaid-invoices.csv');
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    });
+
+    // Initial render
+    renderTable();
+})();
+</script>
+        <?php
     }
 
     private static function filters_form( $report, $year, $month, $quarter ) {
