@@ -161,7 +161,7 @@ class DQ_Workorder_Table
         $output = '<div id="' . esc_attr($wrapper_id) . '" class="dq-workorder-table-wrapper">';
         $output .= self::get_styles();
         $output .= '<div class="dq-workorder-table-search-row" style="margin-bottom:12px;">';
-        $output .= '<input type="text" name="dq_filter_search" class="dq-workorder-search-input" placeholder="Search by Work Order ID or Title..." value="' . $search_value . '" />';
+        $output .= '<input type="text" name="dq_filter_search" class="dq-workorder-search-input" placeholder="Search by Work Order" value="' . $search_value . '" />';
         $output .= '</div>';
         $output .= '<form class="dq-workorder-table-filters" style="display:flex;gap:16px;align-items:center;margin-bottom:18px;">';
         $output .= '<label>Status <select name="dq_filter_status">' . $status_options . '</select></label>';
@@ -447,8 +447,8 @@ class DQ_Workorder_Table
             $wo_state    = function_exists('get_field') ? get_field('wo_state', $post_id) : get_post_meta($post_id, 'wo_state', true);
             $location_blk = '<div class="dq-details-block"><strong>Location Details</strong><br>'
                 . 'Account: ' . esc_html($wo_location) . '<br>'
-                . 'City: ' . esc_html($wo_state) . '<br>'
-                . 'State: ' . esc_html($wo_city) . '</div>';
+                . 'State: ' . esc_html($wo_state) . '<br>'
+                . 'City: ' . esc_html($wo_city) . '</div>';
 
             // Leads Section
             $leads_blk = '<div class="dq-details-block"><strong>Leads</strong><br>Lead: ' . esc_html(function_exists('get_field') ? get_field('wo_leads', $post_id) : get_post_meta($post_id, 'wo_leads', true))
