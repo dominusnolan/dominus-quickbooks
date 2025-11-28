@@ -565,18 +565,65 @@ class DQ_Dashboard
     }
 
     /**
-     * Render Work Order Report view (link to admin)
+     * Render Work Order Report view with sub-menu tabs
      */
-    private static function render_workorder_report_view()
+    private static function render_workorder_report_view($report_tab = 'monthly_summary')
     {
-        $output = '<div class="dqqb-dashboard-main dqqb-redirect-view">';
+        $base_url = remove_query_arg('report_tab');
+        $base_url = add_query_arg('dqqb_menu', 'workorder_report', $base_url);
+
+        $output = '<div class="dqqb-dashboard-main">';
         $output .= '<h1>Work Order Report</h1>';
-        $output .= '<p>The Work Order Report is available in the WordPress admin area.</p>';
-        $output .= '<a href="' . esc_url(admin_url('admin.php?page=dq-workorder-report')) . '" class="dqqb-admin-link" target="_blank">';
-        $output .= '<span class="dashicons dashicons-external"></span> Open Work Order Reports';
+
+        // Sub-menu tabs
+        $output .= '<div class="dqqb-report-tabs">';
+        $output .= '<a href="' . esc_url(add_query_arg('report_tab', 'monthly_summary', $base_url)) . '" class="dqqb-report-tab' . ($report_tab === 'monthly_summary' ? ' active' : '') . '">';
+        $output .= '<span class="dashicons dashicons-calendar-alt"></span> Monthly Summary';
+        $output .= '</a>';
+        $output .= '<a href="' . esc_url(add_query_arg('report_tab', 'fse_report', $base_url)) . '" class="dqqb-report-tab' . ($report_tab === 'fse_report' ? ' active' : '') . '">';
+        $output .= '<span class="dashicons dashicons-groups"></span> Field Service Engineers Report';
         $output .= '</a>';
         $output .= '</div>';
+
+        // Render appropriate content based on tab
+        $output .= '<div class="dqqb-report-content">';
+        if ($report_tab === 'fse_report') {
+            $output .= self::render_fse_report_content();
+        } else {
+            $output .= self::render_monthly_summary_content();
+        }
+        $output .= '</div>';
+
+        $output .= '</div>';
         return $output;
+    }
+
+    /**
+     * Render Monthly Summary content (reuses DQ_WorkOrder_Report logic)
+     */
+    private static function render_monthly_summary_content()
+    {
+        if (!class_exists('DQ_WorkOrder_Report')) {
+            return '<div class="dqqb-empty-state">Work Order Report class not available.</div>';
+        }
+
+        ob_start();
+        DQ_WorkOrder_Report::main_dashboard();
+        return ob_get_clean();
+    }
+
+    /**
+     * Render FSE Report content (reuses DQ_WorkOrder_Report logic)
+     */
+    private static function render_fse_report_content()
+    {
+        if (!class_exists('DQ_WorkOrder_Report')) {
+            return '<div class="dqqb-empty-state">Work Order Report class not available.</div>';
+        }
+
+        ob_start();
+        DQ_WorkOrder_Report::fse_report_dashboard();
+        return ob_get_clean();
     }
 
     /**
