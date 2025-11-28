@@ -78,17 +78,25 @@ class DQ_Dashboard
             $current_menu = 'dashboard';
         }
 
+        // Get sub-tab for workorder_report menu
+        $report_tab = isset($_GET['report_tab']) ? sanitize_key($_GET['report_tab']) : 'monthly_summary';
+        $valid_report_tabs = ['monthly_summary', 'fse_report'];
+        if (!in_array($report_tab, $valid_report_tabs, true)) {
+            $report_tab = 'monthly_summary';
+        }
+
         // Localize script
         wp_localize_script('dq-dashboard', 'dqDashboardVars', [
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('dq_dashboard_nonce'),
             'currentMenu' => $current_menu,
+            'reportTab' => $report_tab,
         ]);
 
         $output = '<div class="dqqb-dashboard-wrapper">';
         $output .= self::render_sidebar($current_menu);
         $output .= '<div class="dqqb-dashboard-content">';
-        $output .= self::render_content($current_menu);
+        $output .= self::render_content($current_menu, $report_tab);
         $output .= '</div>';
         $output .= '</div>';
 
@@ -100,7 +108,7 @@ class DQ_Dashboard
      */
     private static function render_sidebar($current_menu)
     {
-        $base_url = remove_query_arg('dqqb_menu');
+        $base_url = remove_query_arg(['dqqb_menu', 'report_tab']);
         $menu_items = [
             'dashboard' => [
                 'label' => 'Dashboard',
@@ -147,17 +155,15 @@ class DQ_Dashboard
             $active_class = ($current_menu === $key) ? 'active' : '';
             $url = add_query_arg('dqqb_menu', $key, $base_url);
             
-            // For admin page links
+            // Only financial_report links to admin area now (workorder_report is handled in front-end)
             if ($key === 'financial_report') {
                 $url = admin_url('admin.php?page=dq-financial-reports');
-            } elseif ($key === 'workorder_report') {
-                $url = admin_url('admin.php?page=dq-workorder-report');
             } elseif ($key === 'logout') {
                 $url = DQ_Login_Redirect::get_logout_url();
             }
 
             $target = '';
-            if ($key === 'financial_report' || $key === 'workorder_report') {
+            if ($key === 'financial_report') {
                 $target = ' target="_blank"';
             }
 
@@ -179,7 +185,7 @@ class DQ_Dashboard
     /**
      * Render main content area based on current menu
      */
-    private static function render_content($current_menu)
+    private static function render_content($current_menu, $report_tab = 'monthly_summary')
     {
         switch ($current_menu) {
             case 'dashboard':
@@ -193,7 +199,7 @@ class DQ_Dashboard
             case 'financial_report':
                 return self::render_financial_report_view();
             case 'workorder_report':
-                return self::render_workorder_report_view();
+                return self::render_workorder_report_view($report_tab);
             case 'team':
                 return self::render_team_view();
             default:
