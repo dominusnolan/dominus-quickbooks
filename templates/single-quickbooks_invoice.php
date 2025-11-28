@@ -207,22 +207,21 @@ elseif(is_string($email_snippet) && filter_var($email_snippet, FILTER_VALIDATE_U
 .qi-section-title{font-size:22px;font-weight:700;color:#226;text-align:left;margin:30px 0 12px}
 .qi-invoice-table {
     width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
+ 
     margin: 20px auto 30px;
     background: #fff;
-    box-shadow: 0 2px 18px rgba(112,146,183,0.07);
-    border-radius: 14px;
+
     overflow: hidden;
 }
 .qi-invoice-table thead th {
-    background: linear-gradient(90deg, #e3f3fd 60%, #f8fbff 100%);
-    color: #144477;
-    font-weight: 600;
-    font-size: 17px;
-    padding: 15px 10px;
-    border-bottom: 2px solid #e4e6ea;
+    background: #0996a0;
+    color: #fff;
+    padding: 14px 16px;
     text-align: left;
+    font-weight: 600;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 .qi-invoice-table th:last-child,
 .qi-invoice-table td:last-child { text-align: right; }
@@ -276,7 +275,7 @@ document.addEventListener("DOMContentLoaded", function() {
 <main class="single-qi-invoice">
     <div class="qi-main-wrapper">
         <section class="qi-summary-section">
-            <h2>Invoice Summary</h2>
+            <h2 style="margin-bottom:40px">Invoice Summary</h2>
             <div class="qi-summary-table">
                 <div>
                     <div class="label">Work Order IDs</div>
@@ -287,7 +286,7 @@ document.addEventListener("DOMContentLoaded", function() {
                         $wo_id = ($wo instanceof WP_Post) ? $wo->ID : (is_array($wo)&&(isset($wo['ID'])?$wo['ID']:null));
                         if(!$wo_id) $wo_id = intval($wo);
                         if(!$wo_id) continue;
-                        $url = get_edit_post_link($wo_id);
+                        $url = get_permalink($wo_id);
                         $label = get_the_title($wo_id);
                         $workorder_labels[] = $url ? '<a href="'.esc_url($url).'">'.esc_html($label).'</a>' : esc_html($label);
                     }
@@ -311,8 +310,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 <div class="qi-section-title">Invoice Details</div>
                 <?php render_invoice_table($post_id,'qi_invoice'); ?>
 
-                <div class="qi-direct-labor-title">Direct Labor Cost</div>
-                <?php render_other_expenses_table($post_id,'qi_other_expenses'); ?>
+              
             </div>
         </section>
         <aside class="qi-sidebar-section">
