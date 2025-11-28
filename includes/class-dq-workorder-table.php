@@ -90,8 +90,8 @@ class DQ_Workorder_Table
             $search_term = sanitize_text_field($atts['search']);
             // Check if search term is numeric (potential post ID)
             if (is_numeric($search_term)) {
-                // Search by exact post ID
-                $args['p'] = intval($search_term);
+                // Search by exact post ID using post__in to maintain compatibility with other filters
+                $args['post__in'] = [intval($search_term)];
             } else {
                 // Search by title (partial match)
                 $args['s'] = $search_term;
