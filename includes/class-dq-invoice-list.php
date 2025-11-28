@@ -52,6 +52,9 @@ class DQ_Invoice_List
             'date_to' => '',
             'unpaid_only' => '', // When 'true', only show invoices with qi_balance_due > 0
             'per_page' => '', // Optional: override default per_page
+            'invoice_no' => '', // Search by invoice number
+            'sort_column' => '', // Column to sort by
+            'sort_direction' => '', // Sort direction (ASC/DESC)
         ], $atts, 'dqqb_invoice_list');
 
         // Enqueue scripts
@@ -91,8 +94,42 @@ class DQ_Invoice_List
             'order' => 'DESC',
         ];
 
+        // Handle sorting
+        $sort_column = !empty($atts['sort_column']) ? sanitize_text_field($atts['sort_column']) : '';
+        $sort_direction = !empty($atts['sort_direction']) && in_array(strtoupper($atts['sort_direction']), ['ASC', 'DESC']) ? strtoupper($atts['sort_direction']) : 'DESC';
+
+        $sortable_columns = [
+            'qi_invoice_no' => 'qi_invoice_no',
+            'qi_invoice_date' => 'qi_invoice_date',
+            'qi_due_date' => 'qi_due_date',
+            'days_remaining' => 'qi_due_date', // Sort by due date for days remaining
+        ];
+
+        if (!empty($sort_column) && isset($sortable_columns[$sort_column])) {
+            $meta_key = $sortable_columns[$sort_column];
+            $args['meta_key'] = $meta_key;
+            $args['order'] = $sort_direction;
+            
+            // Use appropriate orderby type based on field type
+            if (in_array($sort_column, ['qi_invoice_date', 'qi_due_date', 'days_remaining'])) {
+                $args['orderby'] = 'meta_value';
+                $args['meta_type'] = 'DATE';
+            } else {
+                $args['orderby'] = 'meta_value';
+            }
+        }
+
         // Meta query for filters
         $meta_query = ['relation' => 'AND'];
+
+        // Search by invoice number (partial match using LIKE)
+        if (!empty($atts['invoice_no'])) {
+            $meta_query[] = [
+                'key' => 'qi_invoice_no',
+                'value' => sanitize_text_field($atts['invoice_no']),
+                'compare' => 'LIKE',
+            ];
+        }
 
         // If unpaid_only is true, remove status filter and just show invoices with positive balance
         if (!empty($atts['unpaid_only']) && $atts['unpaid_only'] === 'true') {
@@ -170,13 +207,16 @@ class DQ_Invoice_List
 
     private static function render_html($data, $atts, $wrapper_id)
     {
+        $sort_column = isset($atts['sort_column']) ? $atts['sort_column'] : '';
+        $sort_direction = isset($atts['sort_direction']) ? $atts['sort_direction'] : '';
+
         $output = '<div id="' . esc_attr($wrapper_id) . '" class="dq-invoice-list-wrapper">';
         $output .= self::get_styles();
 
         $output .= self::render_filter_form($atts, $wrapper_id);
 
         $output .= '<div class="dq-invoice-list-content">';
-        $output .= self::render_table($data['invoices']);
+        $output .= self::render_table($data['invoices'], $sort_column, $sort_direction);
         $output .= '</div>';
 
         $output .= self::render_pagination($data['current_page'], $data['max_pages']);
@@ -192,6 +232,9 @@ class DQ_Invoice_List
         $date_type = isset($atts['date_type']) ? $atts['date_type'] : 'qi_invoice_date';
         $date_from = isset($atts['date_from']) ? $atts['date_from'] : '';
         $date_to = isset($atts['date_to']) ? $atts['date_to'] : '';
+        $invoice_no = isset($atts['invoice_no']) ? $atts['invoice_no'] : '';
+        $sort_column = isset($atts['sort_column']) ? $atts['sort_column'] : '';
+        $sort_direction = isset($atts['sort_direction']) ? $atts['sort_direction'] : '';
 
         // These select options map to meta keys.
         $date_type_options = [
@@ -200,6 +243,14 @@ class DQ_Invoice_List
         ];
 
         $output = '<form class="dq-invoice-list-filter" data-wrapper="' . esc_attr($wrapper_id) . '" style="margin-bottom:20px; display:flex; gap:16px; align-items:flex-end; flex-wrap:wrap;">';
+
+        // Hidden fields for sorting
+        $output .= '<input type="hidden" name="sort_column" value="' . esc_attr($sort_column) . '">';
+        $output .= '<input type="hidden" name="sort_direction" value="' . esc_attr($sort_direction) . '">';
+
+        // Invoice number search field
+        $output .= '<div><label>Invoice #<br>
+            <input type="text" name="invoice_no" value="' . esc_attr($invoice_no) . '" placeholder="Search..." style="width:120px;"></label></div>';
 
         if (empty($atts['unpaid_only']) ) {    
             $output .= '<div><label>Status<br>
@@ -232,6 +283,10 @@ class DQ_Invoice_List
 .dq-invoice-list-wrapper.loading { opacity: 0.6; pointer-events: none; }
 .dq-invoice-list-table { width: 100%; border-collapse: collapse; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 .dq-invoice-list-table th { background: #006d7b; color: #fff; padding: 12px 10px; text-align: left; font-weight: 600; font-size: 14px; }
+.dq-invoice-list-table th.sortable { cursor: pointer; user-select: none; }
+.dq-invoice-list-table th.sortable:hover { background: #005a66; }
+.dq-invoice-list-table th.sortable .sort-arrow { margin-left: 5px; font-size: 12px; opacity: 0.5; }
+.dq-invoice-list-table th.sortable.active .sort-arrow { opacity: 1; }
 .dq-invoice-list-table td { padding: 10px; border-bottom: 1px solid #eee; vertical-align: middle; font-size: 14px; }
 .dq-invoice-list-table tr:hover td { background: #f8f9fa; }
 .dq-invoice-list-table tr:last-child td { border-bottom: none; }
@@ -246,27 +301,40 @@ class DQ_Invoice_List
 .dq-invoice-list-empty { padding: 40px; text-align: center; color: #666; font-style: italic; background: #f8f9fa; border-radius: 4px; }
 .dq-invoice-list-qbo { font-size: 13px; line-height: 1.6; }
 .dq-invoice-list-customer { font-size: 13px; line-height: 1.6; }
-.dq-invoice-list-filter select, .dq-invoice-list-filter input[type="date"] { font-size:13px; padding:6px; }
+.dq-invoice-list-filter select, .dq-invoice-list-filter input[type="date"], .dq-invoice-list-filter input[type="text"] { font-size:13px; padding:6px; }
 .dq-invoice-list-filter select{margin: 0 !important}
 </style>';
     }
 
-    private static function render_table($invoices)
+    private static function render_table($invoices, $sort_column = '', $sort_direction = '')
     {
         if (empty($invoices)) {
             return '<div class="dq-invoice-list-empty">No invoices found.</div>';
         }
 
+        // Helper function to render sortable header
+        $render_sortable_th = function($column_key, $label) use ($sort_column, $sort_direction) {
+            $is_active = ($sort_column === $column_key);
+            $active_class = $is_active ? ' active' : '';
+            $arrow = '';
+            if ($is_active) {
+                $arrow = ($sort_direction === 'ASC') ? '▲' : '▼';
+            } else {
+                $arrow = '⇅'; // Neutral indicator for inactive sortable columns
+            }
+            return '<th class="sortable' . $active_class . '" data-sort="' . esc_attr($column_key) . '">' . esc_html($label) . '<span class="sort-arrow">' . $arrow . '</span></th>';
+        };
+
         $output = '<table class="dq-invoice-list-table">';
         $output .= '<thead><tr>';
-        $output .= '<th>Invoice #</th>';
+        $output .= $render_sortable_th('qi_invoice_no', 'Invoice #');
         $output .= '<th>Workorder ID</th>';
         $output .= '<th>Amount</th>';
         $output .= '<th>QBO Invoice</th>';
         $output .= '<th>Customer</th>';
-        $output .= '<th>Invoice Date</th>';
-        $output .= '<th>Due Date</th>';
-        $output .= '<th>Days Remaining</th>';
+        $output .= $render_sortable_th('qi_invoice_date', 'Invoice Date');
+        $output .= $render_sortable_th('qi_due_date', 'Due Date');
+        $output .= $render_sortable_th('days_remaining', 'Days Remaining');
         $output .= '</tr></thead>';
         $output .= '<tbody>';
 
@@ -435,6 +503,28 @@ class DQ_Invoice_List
                 loadInvoices(1, getFilters());
             });
 
+            // Sortable column header click
+            wrapper.on('click', '.dq-invoice-list-table th.sortable', function(e) {
+                e.preventDefault();
+                var column = $(this).data('sort');
+                var form = wrapper.find('.dq-invoice-list-filter');
+                var currentColumn = form.find('input[name=\"sort_column\"]').val();
+                var currentDirection = form.find('input[name=\"sort_direction\"]').val();
+
+                // Toggle direction if same column, otherwise default to DESC
+                var newDirection = 'DESC';
+                if (column === currentColumn) {
+                    newDirection = (currentDirection === 'DESC') ? 'ASC' : 'DESC';
+                }
+
+                // Update hidden fields
+                form.find('input[name=\"sort_column\"]').val(column);
+                form.find('input[name=\"sort_direction\"]').val(newDirection);
+
+                // Reload with sort (go to page 1)
+                loadInvoices(1, getFilters());
+            });
+
             function getFilters() {
                 var form = wrapper.find('.dq-invoice-list-filter');
                 var filters = {};
@@ -511,13 +601,19 @@ class DQ_Invoice_List
             'date_to'    => isset($filters['date_to']) ? sanitize_text_field($filters['date_to']) : '',
             'unpaid_only'=> isset($filters['unpaid_only']) ? sanitize_text_field($filters['unpaid_only']) : '',
             'per_page'   => isset($filters['per_page']) ? sanitize_text_field($filters['per_page']) : '',
+            'invoice_no' => isset($filters['invoice_no']) ? sanitize_text_field($filters['invoice_no']) : '',
+            'sort_column' => isset($filters['sort_column']) ? sanitize_text_field($filters['sort_column']) : '',
+            'sort_direction' => isset($filters['sort_direction']) ? sanitize_text_field($filters['sort_direction']) : '',
         ];
 
         $data = self::get_invoices($atts, $page);
 
+        $sort_column = isset($atts['sort_column']) ? $atts['sort_column'] : '';
+        $sort_direction = isset($atts['sort_direction']) ? $atts['sort_direction'] : '';
+
         wp_send_json_success([
             'filter_form' => self::render_filter_form($atts, $wrapper_id),
-            'table' => self::render_table($data['invoices']),
+            'table' => self::render_table($data['invoices'], $sort_column, $sort_direction),
             'pagination' => self::render_pagination($data['current_page'], $data['max_pages']),
         ]);
     }
