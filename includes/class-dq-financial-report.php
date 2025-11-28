@@ -11,6 +11,7 @@ class DQ_Financial_Report {
     // Field name constants (adjust if they differ)
     const FIELD_DATE           = 'qi_invoice_date';
     const FIELD_TOTAL_BILLED   = 'qi_total_billed';
+    const FIELD_BALANCE_DUE    = 'qi_balance_due';
     const FIELD_LINES_REPEATER = 'qi_invoice';
     const FIELD_LINES_ACTIVITY = 'activity';
     const FIELD_LINES_AMOUNT   = 'amount';
@@ -153,14 +154,17 @@ class DQ_Financial_Report {
     /**
      * NEW: Renders a profitability pie chart (Direct Labor + Payroll vs Remaining Billed amount).
      * Remaining = Total Billed - Direct Labor - Payroll (or zero if negative).
+     * Also shows unpaid invoices as a separate red slice.
      */
     private static function render_profit_chart( array $data, string $report, int $year, int $month, int $quarter, array $range ) {
         // Aggregate totals
         $total_billed = 0.0;
         $direct_labor = 0.0;
+        $unpaid_total = 0.0;
         foreach ( $data as $row ) {
             $total_billed += (float)$row['invoice_amount'];
             $direct_labor += (float)$row['direct_labor'];
+            $unpaid_total += (float)$row['unpaid_amount'];
         }
 
         // Get payroll total for this period
@@ -192,6 +196,7 @@ class DQ_Financial_Report {
 #' . esc_attr($wrapper_id) . ' .dq-fr-pie-metric {margin-top:10px;font-size:13px;}
 .dq-fr-metric-positive {color:#098400;font-weight:600;}
 .dq-fr-metric-negative {color:#c40000;font-weight:600;}
+.dq-fr-metric-unpaid {color:#c40000;font-weight:600;}
 </style>';
 
         echo '<div id="' . esc_attr($wrapper_id) . '">';
@@ -207,8 +212,9 @@ class DQ_Financial_Report {
                 <span><strong>Direct Labor:</strong> ' . self::money($direct_labor) . '</span>
                 <span><strong>Payroll:</strong> ' . self::money($payroll_total) . '</span>
                 <span><strong>' . esc_html($remaining_label) . ':</strong> ' . self::money($remaining) . '</span>
+                <span><strong class="dq-fr-metric-unpaid">Unpaid Invoices:</strong> <span class="dq-fr-metric-unpaid">' . self::money($unpaid_total) . '</span></span>
               </div>';
-        echo '<noscript><p><em>Pie chart requires JavaScript. Total Billed ' . self::money($total_billed) . ' vs Direct Labor ' . self::money($direct_labor) . ' + Payroll ' . self::money($payroll_total) . '.</em></p></noscript>';
+        echo '<noscript><p><em>Pie chart requires JavaScript. Total Billed ' . self::money($total_billed) . ' vs Direct Labor ' . self::money($direct_labor) . ' + Payroll ' . self::money($payroll_total) . '. Unpaid: ' . self::money($unpaid_total) . '.</em></p></noscript>';
         echo '</div>';
 
         // Load Chart.js once (simple guard)
@@ -230,8 +236,9 @@ class DQ_Financial_Report {
       var payroll = ' . json_encode(round($payroll_total,2)) . ';
       var remaining = ' . json_encode(round(max($remaining,0),2)) . ';
       var loss = ' . json_encode($remaining < 0 ? round(abs($remaining),2) : 0) . ';
-      var dataLabels = remaining >= 0 ? ["Direct Labor","Payroll","Net Profit"] : ["Direct Labor","Payroll","Net Loss"];
-      var dataValues = remaining >= 0 ? [directLabor, payroll, remaining] : [directLabor, payroll, loss];
+      var unpaid = ' . json_encode(round($unpaid_total,2)) . ';
+      var dataLabels = remaining >= 0 ? ["Direct Labor","Payroll","Net Profit","Unpaid Invoices"] : ["Direct Labor","Payroll","Net Loss","Unpaid Invoices"];
+      var dataValues = remaining >= 0 ? [directLabor, payroll, remaining, unpaid] : [directLabor, payroll, loss, unpaid];
       new Chart(ctx, {
         type: "pie",
         data: {
@@ -241,7 +248,8 @@ class DQ_Financial_Report {
             backgroundColor: [
               "#ff6f3c",   // Direct Labor slice
               "#3498db",   // Payroll slice
-              remaining >= 0 ? "#2e8b57" : "#c40000" // Profit or Loss slice
+              remaining >= 0 ? "#2e8b57" : "#c40000", // Profit or Loss slice
+              "#dc3545"    // Unpaid Invoices slice (red)
             ],
             borderColor: "#ffffff",
             borderWidth: 2
@@ -400,6 +408,7 @@ class DQ_Financial_Report {
                     'invoices'       => [],
                     'count'          => 0,
                     'invoice_amount' => 0.0,
+                    'unpaid_amount'  => 0.0,
                     'labor_cost'     => 0.0,
                     'direct_labor'   => 0.0,
                     'travel_cost'    => 0.0,
@@ -408,13 +417,16 @@ class DQ_Financial_Report {
             }
 
             $total_billed = self::num( function_exists('get_field') ? get_field( self::FIELD_TOTAL_BILLED, $pid ) : get_post_meta( $pid, self::FIELD_TOTAL_BILLED, true ) );
+            $balance_due = self::num( function_exists('get_field') ? get_field( self::FIELD_BALANCE_DUE, $pid ) : get_post_meta( $pid, self::FIELD_BALANCE_DUE, true ) );
             $out[ $engineer_id ]['count']++;
             $out[ $engineer_id ]['invoice_amount'] += $total_billed;
+            $out[ $engineer_id ]['unpaid_amount'] += $balance_due;
             $out[ $engineer_id ]['invoices'][] = [
-                'post_id'   => $pid,
-                'date'      => $date_norm,
-                'number'    => function_exists('get_field') ? get_field('qi_invoice_no', $pid) : get_post_meta($pid,'qi_invoice_no', true),
-                'amount'    => $total_billed,
+                'post_id'     => $pid,
+                'date'        => $date_norm,
+                'number'      => function_exists('get_field') ? get_field('qi_invoice_no', $pid) : get_post_meta($pid,'qi_invoice_no', true),
+                'amount'      => $total_billed,
+                'balance_due' => $balance_due,
             ];
 
             // Lines
@@ -469,6 +481,7 @@ private static function render_table( array $data, int $engineer_filter, string 
 $totals = [
     'count'=>0,
     'invoice_amount'=>0.0,
+    'unpaid_amount'=>0.0,
     'labor_cost'=>0.0,
     'direct_labor'=>0.0,
     'travel_cost'=>0.0,
@@ -488,6 +501,7 @@ echo '<style>
 .dq-fr-name { display:flex; align-items:center; }
 .dq-fr-profit-pos { color:#098400; font-weight:600; }
 .dq-fr-profit-neg { color:#c40000; font-weight:600; }
+.dq-fr-unpaid { color:#c40000; font-weight:600; }
 .dq-fr-totals-row td { font-weight:600; background:#e6f8fc; }
 
 /* Modal + inner invoice table */
@@ -505,13 +519,14 @@ echo '<style>
 
 echo '<table class="dq-fr-table">';
 echo '<thead><tr>';
-$cols = ['Field Engineer','Total Invoices','Invoice Amount','Labor Cost','Direct Labor Cost','Travel Cost','Toll, Meals, Parking','Profit'];
+$cols = ['Field Engineer','Total Invoices','Invoice Amount','Unpaid Amount','Labor Cost','Direct Labor Cost','Travel Cost','Toll, Meals, Parking','Profit'];
 foreach ( $cols as $c ) echo '<th>' . esc_html($c) . '</th>';
 echo '</tr></thead><tbody>';
 
 foreach ( $data as $uid => $row ) {
     $totals['count']          += $row['count'];
     $totals['invoice_amount'] += $row['invoice_amount'];
+    $totals['unpaid_amount']  += $row['unpaid_amount'];
     $totals['labor_cost']     += $row['labor_cost'];
     $totals['direct_labor']   += $row['direct_labor'];
     $totals['travel_cost']    += $row['travel_cost'];
@@ -526,6 +541,8 @@ foreach ( $data as $uid => $row ) {
     // Open modal without reloading; modal is pre-rendered per row (below)
     echo '<td><a href="#" onclick="(function(m){ if(m){ m.style.display=\'block\'; } })(document.getElementById(\'' . esc_attr($modalId) . '\')); return false;">' . intval($row['count']) . '</a></td>';
     echo '<td>' . self::money( $row['invoice_amount'] ) . '</td>';
+    $unpaid_class = $row['unpaid_amount'] > 0 ? 'dq-fr-unpaid' : '';
+    echo '<td><span class="' . $unpaid_class . '">' . self::money( $row['unpaid_amount'] ) . '</span></td>';
     echo '<td>' . self::money( $row['labor_cost'] ) . '</td>';
     echo '<td>' . self::money( $row['direct_labor'] ) . '</td>';
     echo '<td>' . self::money( $row['travel_cost'] ) . '</td>';
@@ -658,10 +675,12 @@ foreach ( $data as $uid => $row ) {
 
 // Totals row
 $profit_class_total = $totals['profit'] >= 0 ? 'dq-fr-profit-pos' : 'dq-fr-profit-neg';
+$unpaid_class_total = $totals['unpaid_amount'] > 0 ? 'dq-fr-unpaid' : '';
 echo '<tr class="dq-fr-totals-row">';
 echo '<td>Totals:</td>';
 echo '<td>' . intval( $totals['count'] ) . '</td>';
 echo '<td>' . self::money( $totals['invoice_amount'] ) . '</td>';
+echo '<td><span class="' . $unpaid_class_total . '">' . self::money( $totals['unpaid_amount'] ) . '</span></td>';
 echo '<td>' . self::money( $totals['labor_cost'] ) . '</td>';
 echo '<td>' . self::money( $totals['direct_labor'] ) . '</td>';
 echo '<td>' . self::money( $totals['travel_cost'] ) . '</td>';
@@ -676,7 +695,7 @@ if ( class_exists( 'DQ_Payroll' ) ) {
 }
 if ( $payroll_total > 0 ) {
     echo '<tr class="dq-fr-totals-row" style="background:#fff3cd;">';
-    echo '<td colspan="7" style="text-align:right;"><strong>Less: Payroll</strong></td>';
+    echo '<td colspan="8" style="text-align:right;"><strong>Less: Payroll</strong></td>';
     echo '<td><span style="color:#856404;">-' . self::money( $payroll_total ) . '</span></td>';
     echo '</tr>';
 
@@ -684,7 +703,7 @@ if ( $payroll_total > 0 ) {
     $net_profit = $totals['profit'] - $payroll_total;
     $net_profit_class = $net_profit >= 0 ? 'dq-fr-profit-pos' : 'dq-fr-profit-neg';
     echo '<tr class="dq-fr-totals-row" style="background:#d4edda;">';
-    echo '<td colspan="7" style="text-align:right;"><strong>Net Profit (After Payroll)</strong></td>';
+    echo '<td colspan="8" style="text-align:right;"><strong>Net Profit (After Payroll)</strong></td>';
     echo '<td><span class="' . $net_profit_class . '">' . self::money( $net_profit ) . '</span></td>';
     echo '</tr>';
 }
@@ -749,15 +768,16 @@ echo '<script>
         header('Expires: 0');
 
         $out = fopen('php://output','w');
-        fputcsv( $out, ['Engineer','Total Invoices','Invoice Amount','Labor Cost','Direct Labor Cost','Travel Cost','Toll/Meals/Parking','Profit'] );
+        fputcsv( $out, ['Engineer','Total Invoices','Invoice Amount','Unpaid Amount','Labor Cost','Direct Labor Cost','Travel Cost','Toll/Meals/Parking','Profit'] );
 
         $totals = [
-            'count'=>0,'invoice_amount'=>0,'labor_cost'=>0,'direct_labor'=>0,'travel_cost'=>0,'tolls_meals'=>0,'profit'=>0
+            'count'=>0,'invoice_amount'=>0,'unpaid_amount'=>0,'labor_cost'=>0,'direct_labor'=>0,'travel_cost'=>0,'tolls_meals'=>0,'profit'=>0
         ];
 
         foreach ( $data as $row ) {
             $totals['count']          += $row['count'];
             $totals['invoice_amount'] += $row['invoice_amount'];
+            $totals['unpaid_amount']  += $row['unpaid_amount'];
             $totals['labor_cost']     += $row['labor_cost'];
             $totals['direct_labor']   += $row['direct_labor'];
             $totals['travel_cost']    += $row['travel_cost'];
@@ -768,6 +788,7 @@ echo '<script>
                 $row['display_name'],
                 $row['count'],
                 number_format($row['invoice_amount'],2,'.',''),
+                number_format($row['unpaid_amount'],2,'.',''),
                 number_format($row['labor_cost'],2,'.',''),
                 number_format($row['direct_labor'],2,'.',''),
                 number_format($row['travel_cost'],2,'.',''),
@@ -780,6 +801,7 @@ echo '<script>
             'Totals',
             $totals['count'],
             number_format($totals['invoice_amount'],2,'.',''),
+            number_format($totals['unpaid_amount'],2,'.',''),
             number_format($totals['labor_cost'],2,'.',''),
             number_format($totals['direct_labor'],2,'.',''),
             number_format($totals['travel_cost'],2,'.',''),
