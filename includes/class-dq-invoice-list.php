@@ -250,7 +250,7 @@ class DQ_Invoice_List
 
         // Invoice number search field
         $output .= '<div><label>Invoice #<br>
-            <input type="text" name="invoice_no" value="' . esc_attr($invoice_no) . '" placeholder="Search..." style="width:120px;"></label></div>';
+            <input type="text" style="margin-bottom:0" name="invoice_no" value="' . esc_attr($invoice_no) . '" placeholder="Search..." style="width:120px;"></label></div>';
 
         if (empty($atts['unpaid_only']) ) {    
             $output .= '<div><label>Status<br>
