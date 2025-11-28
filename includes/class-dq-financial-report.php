@@ -558,7 +558,7 @@ class DQ_Financial_Report {
             echo '    <th>Amount</th>';
             echo '    <th>Balance</th>';
             echo '    <th class="sortable" data-sort="invoice_date">Invoice Date</th>';
-            echo '    <th class="sortable desc" data-sort="due_date">Due Date</th>';
+            echo '    <th class="sortable asc" data-sort="due_date">Due Date</th>';
             echo '    <th class="sortable" data-sort="remaining_days">Remaining Days</th>';
             echo '  </tr></thead>';
             echo '  <tbody id="dq-unpaid-tbody">';
@@ -592,6 +592,8 @@ class DQ_Financial_Report {
      * Render JavaScript for the advanced unpaid invoices modal functionality.
      */
     private static function render_unpaid_modal_javascript() {
+        // Define pagination constant (used in both PHP and JS)
+        $items_per_page = 50;
         ?>
 <script>
 (function() {
@@ -606,7 +608,11 @@ class DQ_Financial_Report {
         return;
     }
 
-    var ITEMS_PER_PAGE = 50;
+    // Constants for sorting fallback values
+    var FALLBACK_DATE = '9999-12-31';  // Used for invoices without due dates (sort to end)
+    var FALLBACK_DAYS = 999999;        // Used for invoices without remaining days (sort to end)
+    var ITEMS_PER_PAGE = <?php echo (int) $items_per_page; ?>;
+
     var currentPage = 1;
     var currentFilter = 'all';
     var currentSort = 'due_date';
@@ -646,11 +652,11 @@ class DQ_Financial_Report {
                 aVal = a.invoice_date_sort || '';
                 bVal = b.invoice_date_sort || '';
             } else if (currentSort === 'due_date') {
-                aVal = a.due_date_sort || '9999-12-31';
-                bVal = b.due_date_sort || '9999-12-31';
+                aVal = a.due_date_sort || FALLBACK_DATE;
+                bVal = b.due_date_sort || FALLBACK_DATE;
             } else if (currentSort === 'remaining_days') {
-                aVal = a.remaining_days_num !== null ? a.remaining_days_num : 999999;
-                bVal = b.remaining_days_num !== null ? b.remaining_days_num : 999999;
+                aVal = a.remaining_days_num !== null ? a.remaining_days_num : FALLBACK_DAYS;
+                bVal = b.remaining_days_num !== null ? b.remaining_days_num : FALLBACK_DAYS;
             }
             var cmp = 0;
             if (typeof aVal === 'number' && typeof bVal === 'number') {
