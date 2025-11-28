@@ -108,8 +108,15 @@ class DQ_Invoice_List
         if (!empty($sort_column) && isset($sortable_columns[$sort_column])) {
             $meta_key = $sortable_columns[$sort_column];
             $args['meta_key'] = $meta_key;
-            $args['orderby'] = 'meta_value';
             $args['order'] = $sort_direction;
+            
+            // Use appropriate orderby type based on field type
+            if (in_array($sort_column, ['qi_invoice_date', 'qi_due_date', 'days_remaining'])) {
+                $args['orderby'] = 'meta_value';
+                $args['meta_type'] = 'DATE';
+            } else {
+                $args['orderby'] = 'meta_value';
+            }
         }
 
         // Meta query for filters
@@ -313,7 +320,7 @@ class DQ_Invoice_List
             if ($is_active) {
                 $arrow = ($sort_direction === 'ASC') ? '▲' : '▼';
             } else {
-                $arrow = '▼';
+                $arrow = '⇅'; // Neutral indicator for inactive sortable columns
             }
             return '<th class="sortable' . $active_class . '" data-sort="' . esc_attr($column_key) . '">' . esc_html($label) . '<span class="sort-arrow">' . $arrow . '</span></th>';
         };
