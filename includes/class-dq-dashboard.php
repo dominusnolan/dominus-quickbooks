@@ -621,9 +621,17 @@ class DQ_Dashboard
             return '<div class="dqqb-empty-state">Work Order Report class not available.</div>';
         }
 
+        // Ensure jQuery is enqueued for AJAX functionality
+        wp_enqueue_script('jquery');
+
+        // Output ajaxurl for frontend AJAX calls (matches admin area behavior)
+        $output = '<script>window.ajaxurl = ' . wp_json_encode(admin_url('admin-ajax.php')) . ';</script>';
+
         ob_start();
         DQ_WorkOrder_Report::fse_report_dashboard();
-        return ob_get_clean();
+        $output .= ob_get_clean();
+
+        return $output;
     }
 
     /**
