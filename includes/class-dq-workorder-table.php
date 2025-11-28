@@ -31,6 +31,7 @@ class DQ_Workorder_Table
             'status' => '',
             'state' => '',
             'engineer' => '',
+            'search' => '',
         ], $atts, 'workorder_table');
 
         $atts['per_page'] = max(1, intval($atts['per_page']));
@@ -84,6 +85,19 @@ class DQ_Workorder_Table
             ];
         }
 
+        // Handle search query - search by post ID (exact) or title (partial)
+        if (!empty($atts['search'])) {
+            $search_term = sanitize_text_field($atts['search']);
+            // Check if search term is numeric (potential post ID)
+            if (is_numeric($search_term)) {
+                // Search by exact post ID
+                $args['p'] = intval($search_term);
+            } else {
+                // Search by title (partial match)
+                $args['s'] = $search_term;
+            }
+        }
+
         $query = new WP_Query($args);
 
         return [
@@ -110,6 +124,14 @@ class DQ_Workorder_Table
             }
         }
 
+        // State dropdown - get distinct states from existing work orders
+        $state_options = '<option value="">All States</option>';
+        $distinct_states = self::get_distinct_states();
+        foreach ($distinct_states as $state_value) {
+            $selected = (isset($atts['state']) && $atts['state'] === $state_value) ? ' selected' : '';
+            $state_options .= '<option value="' . esc_attr($state_value) . '"' . $selected . '>' . esc_html($state_value) . '</option>';
+        }
+
         // Engineer dropdown
         $author_posts = get_posts([
             'post_type' => 'workorder',
@@ -132,11 +154,18 @@ class DQ_Workorder_Table
             }
         }
 
+        // Current search value
+        $search_value = isset($atts['search']) ? esc_attr($atts['search']) : '';
+
         // Filter UI
         $output = '<div id="' . esc_attr($wrapper_id) . '" class="dq-workorder-table-wrapper">';
         $output .= self::get_styles();
+        $output .= '<div class="dq-workorder-table-search-row" style="margin-bottom:12px;">';
+        $output .= '<input type="text" name="dq_filter_search" class="dq-workorder-search-input" placeholder="Search by Work Order ID or Title..." value="' . $search_value . '" />';
+        $output .= '</div>';
         $output .= '<form class="dq-workorder-table-filters" style="display:flex;gap:16px;align-items:center;margin-bottom:18px;">';
         $output .= '<label>Status <select name="dq_filter_status">' . $status_options . '</select></label>';
+        $output .= '<label>State <select name="dq_filter_state">' . $state_options . '</select></label>';
         $output .= '<label>Field Engineer <select name="dq_filter_engineer">' . $engineer_dropdown . '</select></label>';
         $output .= '</form>';
 
@@ -169,6 +198,20 @@ class DQ_Workorder_Table
 .dq-workorder-table-wrapper.loading {
     opacity: 0.6;
     pointer-events: none;
+}
+.dq-workorder-search-input {
+    width: 100%;
+    max-width: 400px;
+    padding: 10px 14px;
+    border: 1px solid #e8e8e8;
+    border-radius: 4px;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+.dq-workorder-search-input:focus {
+    outline: none;
+    border-color: #0996a0;
+    box-shadow: 0 0 0 2px rgba(9, 150, 160, 0.1);
 }
 .dq-workorder-table-filters {
     margin-bottom: 1em;
@@ -449,6 +492,26 @@ class DQ_Workorder_Table
         return $raw_date;
     }
 
+    private static function get_distinct_states()
+    {
+        global $wpdb;
+        $states = $wpdb->get_col(
+            $wpdb->prepare(
+                "SELECT DISTINCT pm.meta_value 
+                FROM {$wpdb->postmeta} pm 
+                INNER JOIN {$wpdb->posts} p ON pm.post_id = p.ID 
+                WHERE pm.meta_key = %s 
+                AND pm.meta_value != '' 
+                AND p.post_type = %s 
+                AND p.post_status IN ('publish', 'draft', 'pending', 'private')
+                ORDER BY pm.meta_value ASC",
+                'wo_state',
+                'workorder'
+            )
+        );
+        return $states ? $states : [];
+    }
+
     private static function render_pagination($current_page, $max_pages)
     {
         if ($max_pages <= 1) {
@@ -494,18 +557,32 @@ class DQ_Workorder_Table
         $script = "
         (function($) {
             var wrapper = $('#" . esc_js($wrapper_id) . "');
+            var searchTimeout = null;
             var settings = " . json_encode([
                 'per_page' => intval($atts['per_page']),
                 'status' => sanitize_text_field(isset($atts['status']) ? $atts['status'] : ''),
                 'state' => sanitize_text_field(isset($atts['state']) ? $atts['state'] : ''),
-                'engineer' => $engineer_val
+                'engineer' => $engineer_val,
+                'search' => sanitize_text_field(isset($atts['search']) ? $atts['search'] : '')
             ]) . ";
             wrapper.on('change', '.dq-workorder-table-filters select', function(e){
                 var status = wrapper.find('select[name=\"dq_filter_status\"]').val();
+                var state = wrapper.find('select[name=\"dq_filter_state\"]').val();
                 var engineer = wrapper.find('select[name=\"dq_filter_engineer\"]').val();
                 settings.status = status;
+                settings.state = state;
                 settings.engineer = engineer;
                 loadWorkorders(1);
+            });
+            wrapper.on('input', '.dq-workorder-search-input', function(e){
+                var searchVal = $(this).val();
+                settings.search = searchVal;
+                if (searchTimeout) {
+                    clearTimeout(searchTimeout);
+                }
+                searchTimeout = setTimeout(function() {
+                    loadWorkorders(1);
+                }, 300);
             });
             wrapper.on('click', '.dq-workorder-table-pagination a:not(.disabled)', function(e) {
                 e.preventDefault();
@@ -525,7 +602,8 @@ class DQ_Workorder_Table
                         per_page: settings.per_page,
                         status: settings.status,
                         state: settings.state,
-                        engineer: settings.engineer
+                        engineer: settings.engineer,
+                        search: settings.search
                     },
                     success: function(response) {
                         if (response.success && response.data) {
@@ -569,11 +647,13 @@ class DQ_Workorder_Table
         $status = isset($_POST['status']) ? sanitize_text_field($_POST['status']) : '';
         $state = isset($_POST['state']) ? sanitize_text_field($_POST['state']) : '';
         $engineer = isset($_POST['engineer']) ? intval($_POST['engineer']) : '';
+        $search = isset($_POST['search']) ? sanitize_text_field($_POST['search']) : '';
         $atts = [
             'per_page' => max(1, $per_page),
             'status' => $status,
             'state' => $state,
             'engineer' => $engineer,
+            'search' => $search,
         ];
         $data = self::get_workorders($atts, $page);
 

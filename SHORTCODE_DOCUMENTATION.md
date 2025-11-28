@@ -18,6 +18,8 @@ Display a paginated table of work orders on any page or post:
 - **Smooth Scrolling**: Automatically scrolls to top of table after page change
 - **Loading State**: Visual feedback while fetching new page
 - **Styled Table**: Teal headers, alternating row colors, grouped cells, clean spacing
+- **Search Bar**: Search by Work Order ID (post ID) or Title with auto-trigger filtering
+- **State Filter**: Dropdown filter populated with all distinct states from existing work orders
 
 ### Shortcode Attributes
 
@@ -55,6 +57,13 @@ Show only scheduled work orders:
 Show work orders from a specific state:
 ```
 [workorder_table state="California"]
+```
+
+#### Search by ID or Title
+
+Pre-fill the search field with a specific query:
+```
+[workorder_table search="WO-123"]
 ```
 
 #### Combined Filters
@@ -113,6 +122,9 @@ You can override styles by targeting these CSS classes:
 
 - `.dq-workorder-table-wrapper`: Main container
 - `.dq-workorder-table`: Table element
+- `.dq-workorder-table-search-row`: Search bar container
+- `.dq-workorder-search-input`: Search input field
+- `.dq-workorder-table-filters`: Filter dropdowns container
 - `.dq-workorder-table-pagination`: Pagination controls
 - `.dq-workorder-status`: Status badges
 - `.wo-id-cell`: Work order ID column
@@ -380,6 +392,17 @@ Display a table listing all Work Orders on any page or post:
 - **View Links**: Direct links to individual work order pages
 - **Status Badges**: Visual status indicators for each work order
 - **Date Calculations**: Automatic calculation of FSC contact days
+- **Search Bar**: Search by Work Order ID (post ID) or Title with auto-trigger filtering as you type
+- **State Filter**: Dropdown filter populated with all distinct states from existing work orders
+- **AJAX Filtering**: All filters update the table via AJAX without page reload
+
+### Filter UI
+
+The shortcode includes a filter bar above the table with:
+- **Search Bar**: Text input to search by Work Order ID (exact match) or Title (partial match). Auto-triggers as you type with 300ms debounce.
+- **Status Select**: Filter by work order status taxonomy (excludes "Uncategorized")
+- **State Select**: Dropdown populated with all distinct `wo_state` values from existing work orders
+- **Field Engineer Select**: Filter by the work order author
 
 ### Display Format
 
