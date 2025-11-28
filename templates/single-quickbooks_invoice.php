@@ -64,21 +64,14 @@ function render_invoice_table($post_id, $acf_field='qi_invoice') {
         <th>Rate</th>
         <th>Amount</th>
     </tr></thead><tbody>';
-    $row_idx = 0;
     while(have_rows($acf_field, $post_id)) {
         the_row();
-        printf('<tr style="background:%s">',
-            $row_idx % 2 ? "#f4f8fd" : "#f8fbff"
-        );
-        foreach(['activity','description','quantity','rate','amount'] as $i=>$sub) {
+        echo '<tr>';
+        foreach(['activity','description','quantity','rate','amount'] as $sub) {
             $val = get_sub_field($sub);
-            $td_class = '';
-            if ($sub === 'amount') $td_class = ' style="font-weight:600;color:#0b4963;text-align:right;"';
-            elseif ($i === 4) $td_class = ' style="text-align:right;"';
-            echo '<td'.$td_class.'>'.esc_html(is_numeric($val)?number_format((float)$val,2):$val).'</td>';
+            echo '<td>'.esc_html(is_numeric($val)?number_format((float)$val,2):$val).'</td>';
         }
         echo '</tr>';
-        $row_idx++;
     }
     echo '</tbody></table>';
 }
@@ -94,12 +87,9 @@ function render_other_expenses_table($post_id, $acf_field='qi_other_expenses') {
         <th>Rate</th>
         <th>Amount</th>
     </tr></thead><tbody>';
-    $row_idx = 0;
     while(have_rows($acf_field, $post_id)) {
         the_row();
-        printf('<tr style="background:%s">',
-            $row_idx % 2 ? "#f4f8fd" : "#f8fbff"
-        );
+        echo '<tr>';
         $activity    = get_sub_field('activity');
         $description = get_sub_field('description');
         $quantity    = get_sub_field('quantity');
@@ -116,16 +106,12 @@ function render_other_expenses_table($post_id, $acf_field='qi_other_expenses') {
             'quantity'    => $quantity,
             'rate'        => $rate,
             'amount'      => $amount
-        ] as $i=>$val) {
-            $td_class = '';
-            if ($i === 'amount') $td_class = ' style="font-weight:600;color:#0b4963;text-align:right;"';
-            elseif ($i === 'quantity' || $i === 'rate' || $i === 'amount') $td_class .= ' style="text-align:right;"';
-            echo '<td'.$td_class.'>';
+        ] as $val) {
+            echo '<td>';
             echo esc_html(is_numeric($val)?number_format((float)$val,2):$val);
             echo '</td>';
         }
         echo '</tr>';
-        $row_idx++;
     }
     echo '</tbody></table>';
 }
@@ -207,39 +193,33 @@ elseif(is_string($email_snippet) && filter_var($email_snippet, FILTER_VALIDATE_U
 .qi-section-title{font-size:22px;font-weight:700;color:#226;text-align:left;margin:30px 0 12px}
 .qi-invoice-table {
     width: 100%;
- 
-    margin: 20px auto 30px;
+    border-collapse: collapse;
     background: #fff;
-
-    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    margin: 20px auto 30px;
 }
 .qi-invoice-table thead th {
-    background: #0996a0;
+    background: #006d7b;
     color: #fff;
-    padding: 14px 16px;
+    padding: 12px 10px;
     text-align: left;
     font-weight: 600;
     font-size: 14px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
 }
 .qi-invoice-table th:last-child,
 .qi-invoice-table td:last-child { text-align: right; }
-.qi-invoice-table tbody tr {transition: background 0.20s;}
-.qi-invoice-table tbody tr:nth-child(even) {background: #f4f8fd;}
-.qi-invoice-table tbody tr:nth-child(odd) {background: #f8fbff;}
-.qi-invoice-table tbody tr:hover {background: #e7f6fc;}
+.qi-invoice-table tbody tr:hover td { background: #f8f9fa; }
 .qi-invoice-table td {
-    padding: 13px 10px;
-    font-size: 16px;
-    color: #222d3a;
-    border-bottom: 1px solid #e9eef2;
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+    vertical-align: middle;
+    font-size: 14px;
 }
 .qi-invoice-table td:last-child {
     font-weight: 600;
     color: #0b4963;
 }
-.qi-invoice-table tr:last-child td {border-bottom: none;}
+.qi-invoice-table tr:last-child td { border-bottom: none; }
 .qi-direct-labor-title{font-weight:700;color:#a6320c;margin:18px 0 9px;font-size:19px;}
 @media (max-width:700px){.qi-invoice-table thead th,.qi-invoice-table td { padding: 8px 5px; font-size: 13px;}}
 @media (max-width:480px){.qi-invoice-table { font-size:11.5px;}}
