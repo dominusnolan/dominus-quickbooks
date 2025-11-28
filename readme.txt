@@ -32,6 +32,9 @@ This is a framework: add order/customer syncs by calling `DQ_API` methods (see `
 Use the shortcode `[dqqb_invoice_list]` on any page or post. It supports filters: `status="paid"`, `date_from="2024-01-01"`, `date_to="2024-12-31"`. See SHORTCODE_DOCUMENTATION.md for details.
 
 == Changelog ==
+= 0.2.1 =
+* Expand workorder table search to support partial work order ID matching; users can search using any part of the numeric ID string, e.g. '505' matches 'WO-03103505'.
+
 = 0.1.0 =
 * Initial release.
 ```

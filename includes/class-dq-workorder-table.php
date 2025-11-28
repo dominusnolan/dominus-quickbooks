@@ -85,20 +85,34 @@ class DQ_Workorder_Table
             ];
         }
 
-        // Handle search query - search by post ID (exact) or title (partial)
+        // Handle search query - search by post title (partial match)
+        // For numeric searches, use LIKE on post title to match partial Work Order IDs
+        // For non-numeric searches, use WordPress default search
+        $title_search_filter = null;
         if (!empty($atts['search'])) {
             $search_term = sanitize_text_field($atts['search']);
-            // Check if search term is numeric (potential post ID)
-            if (is_numeric($search_term)) {
-                // Search by exact post ID using post__in to maintain compatibility with other filters
-                $args['post__in'] = [intval($search_term)];
+            // Check if search term is numeric (partial Work Order ID like "505" or "03103505")
+            if (ctype_digit($search_term)) {
+                // Add a filter to search by post title containing the numeric string
+                $title_search_filter = function ($where) use ($search_term) {
+                    global $wpdb;
+                    $like = '%' . $wpdb->esc_like($search_term) . '%';
+                    $where .= $wpdb->prepare(" AND {$wpdb->posts}.post_title LIKE %s", $like);
+                    return $where;
+                };
+                add_filter('posts_where', $title_search_filter);
             } else {
-                // Search by title (partial match)
+                // Search by title (partial match) using WordPress default search
                 $args['s'] = $search_term;
             }
         }
 
         $query = new WP_Query($args);
+
+        // Clean up the filter to prevent bleeding into other queries
+        if ($title_search_filter !== null) {
+            remove_filter('posts_where', $title_search_filter);
+        }
 
         return [
             'workorders' => $query->posts,
