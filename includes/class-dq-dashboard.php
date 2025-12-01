@@ -362,6 +362,7 @@ class DQ_Dashboard
      */
     private static function get_dashboard_workorders($page = 1)
     {
+        $engineer_ids = get_users(['role' => 'engineer', 'fields' => 'ID']);
         $args = [
             'post_type' => 'workorder',
             'post_status' => ['publish', 'draft', 'pending', 'private'],
@@ -369,6 +370,7 @@ class DQ_Dashboard
             'paged' => $page,
             'orderby' => 'date',
             'order' => 'DESC',
+            'author__in'     => $engineer_ids, // only authors with engineer role
         ];
 
         $query = new WP_Query($args);

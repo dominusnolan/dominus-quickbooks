@@ -52,6 +52,7 @@ class DQ_Workorder_Table
 
     private static function get_workorders($atts, $page = 1)
     {
+        $engineer_ids = get_users(['role' => 'engineer', 'fields' => 'ID']);
         $per_page = isset($atts['per_page']) ? max(1, intval($atts['per_page'])) : self::DEFAULT_PER_PAGE;
         $args = [
             'post_type' => 'workorder',
@@ -60,6 +61,7 @@ class DQ_Workorder_Table
             'paged' => $page,
             'orderby' => 'date',
             'order' => 'DESC',
+            'author__in'     => $engineer_ids, // only authors with engineer role
         ];
         $meta_query = ['relation' => 'AND'];
         if (!empty($atts['state'])) {
