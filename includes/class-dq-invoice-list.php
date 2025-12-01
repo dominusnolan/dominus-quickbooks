@@ -330,13 +330,12 @@ class DQ_Invoice_List
         $output = '<table class="dq-invoice-list-table">';
         $output .= '<thead><tr>';
         $output .= $render_sortable_th('qi_invoice_no', 'Invoice #');
-        $output .= '<th>Workorder ID</th>';
         $output .= '<th>Amount</th>';
         $output .= '<th>QBO Invoice</th>';
         $output .= '<th>Customer</th>';
         $output .= $render_sortable_th('qi_invoice_date', 'Invoice Date');
         $output .= $render_sortable_th('qi_due_date', 'Due Date');
-        $output .= $render_sortable_th('days_remaining', 'Days Remaining');
+        $output .= $render_sortable_th('days_remaining', 'Remain');
         $output .= '<th>Action</th>';
         $output .= '</tr></thead>';
         $output .= '<tbody>';
@@ -392,26 +391,6 @@ class DQ_Invoice_List
 
             $output .= '<tr>';
             $output .= '<td><a href="' . esc_url($permalink) . '">' . esc_html($invoice_no ?: 'N/A') . '</a></td>';
-            // Properly display Workorder ID
-            $wo_display = 'N/A';
-            if (is_array($wo_number)) {
-                $id_list = [];
-                foreach ($wo_number as $wo_item) {
-                    if (is_numeric($wo_item)) {
-                        $id_list[] = $wo_item;
-                    } elseif ($wo_item instanceof WP_Post) {
-                        $id_list[] = $wo_item->ID;
-                    }
-                }
-                if (!empty($id_list)) {
-                    $wo_display = implode(', ', $id_list);
-                }
-            } elseif ($wo_number instanceof WP_Post) {
-                $wo_display = $wo_number->ID;
-            } elseif (!empty($wo_number)) {
-                $wo_display = $wo_number;
-            }
-            $output .= '<td>' . esc_html($wo_display) . '</td>';
             $output .= '<td>$' . number_format((float)$total_billed, 2) . '</td>';
             $output .= '<td>' . $qbo_invoice_html . '</td>';
             $output .= '<td>' . $customer_html . '</td>';
