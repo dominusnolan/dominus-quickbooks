@@ -122,15 +122,18 @@ class DQ_Login_Redirect {
             return;
         }
 
-        // Check if this is a request to wp-login.php or wp-admin
-        if ( self::is_login_or_admin_path( $path ) ) {
-            // Allow logged-in users to access wp-admin (they've already authenticated via /access)
-            if ( self::is_admin_path( $path ) && is_user_logged_in() ) {
+        // Always redirect wp-login.php, regardless of authentication.
+        if ( self::is_login_path( $path ) ) {
+            self::do_redirect();
+        }
+
+        // For /wp-admin or any admin subpath, only allow logged-in users with capability.
+        if ( self::is_admin_path( $path ) ) {
+            if ( is_user_logged_in() && current_user_can( 'manage_options' ) ) {
+                // If user is logged in and can manage options (i.e. admin), allow.
                 return;
             }
-
-            // Redirect unauthenticated users from wp-admin
-            // Always redirect from wp-login.php (force users to use /access instead)
+            // Otherwise (not logged in, or insufficient privilege), redirect
             self::do_redirect();
         }
     }
