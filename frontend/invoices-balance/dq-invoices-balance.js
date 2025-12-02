@@ -58,7 +58,8 @@
                 var initialData = JSON.parse(dataEl.textContent);
                 allInvoices = initialData.invoices || [];
             } catch (e) {
-                console.error('DQ Invoices Balance: Failed to parse initial data', e);
+                // Log error without exposing potentially sensitive data content.
+                console.error('DQ Invoices Balance: Failed to parse initial data. Check JSON structure.', e.message);
                 return;
             }
         }
@@ -470,8 +471,9 @@
     function getDateString() {
         var d = new Date();
         var year = d.getFullYear();
-        var month = String(d.getMonth() + 1).padStart(2, '0');
-        var day = String(d.getDate()).padStart(2, '0');
+        // Use slice for IE compatibility instead of padStart.
+        var month = ('0' + (d.getMonth() + 1)).slice(-2);
+        var day = ('0' + d.getDate()).slice(-2);
         return year + '-' + month + '-' + day;
     }
 

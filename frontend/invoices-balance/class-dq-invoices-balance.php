@@ -263,7 +263,8 @@ class DQ_Invoices_Balance {
                 $interval     = $today_obj->diff( $due_date_obj );
                 $diff_days    = (int) $interval->days;
 
-                if ( 1 === $interval->invert ) {
+                // If invert is 1, the due date is in the past (overdue).
+                if ( $interval->invert === 1 ) {
                     $diff_days = -$diff_days;
                 }
 
@@ -429,7 +430,7 @@ class DQ_Invoices_Balance {
             </div>
 
             <!-- Initial data for JavaScript -->
-            <script type="application/json" id="dq-ib-initial-data"><?php echo wp_json_encode( $data ); ?></script>
+            <script type="application/json" id="dq-ib-initial-data"><?php echo wp_json_encode( $data, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT ); ?></script>
         </div>
         <?php
         return ob_get_clean();
