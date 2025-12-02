@@ -557,7 +557,7 @@ class DQ_Dashboard
     {
         $output = '<div class="dqqb-dashboard-main">';
         $output .= '<h1>Invoices Balance</h1>';
-        $output .= do_shortcode('[dqqb_invoice_list unpaid_only="true"]');
+        $output .= do_shortcode('[invoices-balance]');
         $output .= '</div>';
         return $output;
     }
