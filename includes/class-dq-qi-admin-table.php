@@ -14,14 +14,27 @@ class DQ_QI_Admin_Table {
         add_action('restrict_manage_posts', [__CLASS__, 'filters']);
         add_filter('parse_query', [__CLASS__, 'filter_query']);
         add_filter('manage_quickbooks_invoice_sortable_columns', [__CLASS__, 'sortable']);
+        // Make "Invoice No." act like the primary title column (ensures row actions work properly)
+        add_filter('list_table_primary_column', [__CLASS__, 'primary_column'], 10, 2);
     }
 
     /**
-     * Setup columns (removes date/status/categories)
+     * Make invoice_no the primary column on the invoices list screen.
+     */
+    public static function primary_column($default, $screen) {
+        if ($screen === 'edit-quickbooks_invoice') {
+            return 'invoice_no';
+        }
+        return $default;
+    }
+
+    /**
+     * Setup columns (adds checkbox, removes date/status/categories)
      */
     public static function columns($columns) {
-        unset($columns['title']);
+        // Start fresh, add checkbox (cb) first for bulk actions
         $new = [];
+        $new['cb']          = '<input type="checkbox" />'; // enables bulk select/delete
         $new['invoice_no']  = __('Invoice No.', 'dqqb');
         $new['work_order']  = __('Work Order', 'dqqb');
         $new['amount']      = __('Amount', 'dqqb');
@@ -41,8 +54,11 @@ class DQ_QI_Admin_Table {
             case 'invoice_no':
                 $title = get_the_title($post_id);
                 $edit_url = get_edit_post_link($post_id);
-                echo '<a href="'.esc_url($edit_url).'"><strong>'.esc_html($title).'</strong></a>';
+
+                // Row title link (use row-title class to match core styling/behavior)
+                echo '<strong><a class="row-title" href="'.esc_url($edit_url).'">'.esc_html($title).'</a></strong>'; 
                 break;
+
             case 'work_order':
                 $wo_ids = function_exists('get_field') ? get_field('qi_wo_number', $post_id) : get_post_meta($post_id, 'qi_wo_number', true);
                 if (!is_array($wo_ids)) $wo_ids = $wo_ids ? [$wo_ids] : [];
@@ -61,10 +77,12 @@ class DQ_QI_Admin_Table {
                 }
                 echo $links ? implode(', ', $links) : '<span style="color:#999;">—</span>';
                 break;
+
             case 'amount':
                 $amount = function_exists('get_field') ? get_field('qi_total_billed', $post_id) : get_post_meta($post_id, 'qi_total_billed', true);
                 echo $amount !== '' ? '$' . number_format((float)$amount, 2) : '<span style="color:#999;">—</span>';
                 break;
+
             case 'qbo_invoice':
                 $billed  = function_exists('get_field') ? get_field('qi_total_billed', $post_id) : get_post_meta($post_id, 'qi_total_billed', true);
                 $balance = function_exists('get_field') ? get_field('qi_balance_due', $post_id) : get_post_meta($post_id, 'qi_balance_due', true);
@@ -86,6 +104,7 @@ class DQ_QI_Admin_Table {
                     '<strong>Status:</strong> ' . $status_label .
                     '</div>';
                 break;
+
             case 'customer':
                 $customer = function_exists('get_field') ? get_field('qi_customer', $post_id) : get_post_meta($post_id, 'qi_customer', true);
                 $billto   = function_exists('get_field') ? get_field('qi_bill_to', $post_id) : get_post_meta($post_id, 'qi_bill_to', true);
@@ -98,27 +117,30 @@ class DQ_QI_Admin_Table {
                     '<strong>Ship to:</strong> ' . esc_html((string)$shipto) .
                     '</div>';
                 break;
+
             case 'invoice_date':
                 $date = function_exists('get_field') ? get_field('qi_invoice_date', $post_id) : get_post_meta($post_id, 'qi_invoice_date', true);
                 echo $date ? esc_html($date) : '<span style="color:#999;">—</span>';
                 break;
+
             case 'due_date':
                 $date = function_exists('get_field') ? get_field('qi_due_date', $post_id) : get_post_meta($post_id, 'qi_due_date', true);
                 echo $date ? esc_html($date) : '<span style="color:#999;">—</span>';
                 break;
+
             case 'days_remaining':
                 $balance = function_exists('get_field') ? get_field('qi_balance_due', $post_id) : get_post_meta($post_id, 'qi_balance_due', true);
                 $due_date = function_exists('get_field') ? get_field('qi_due_date', $post_id) : get_post_meta($post_id, 'qi_due_date', true);
-                
+
                 // Only show days remaining for invoices with a balance due and a due date
                 if ((float)$balance != 0 && !empty($due_date)) {
                     $today = new DateTime('now', new DateTimeZone('UTC'));
                     $due = DateTime::createFromFormat('Y-m-d', $due_date, new DateTimeZone('UTC'));
-                    
+
                     if ($due !== false) {
                         $diff = $today->diff($due);
                         $days = (int)$diff->format('%r%a'); // %r adds sign, %a is days
-                        
+
                         if ($days < 0) {
                             $abs_days = abs($days);
                             $tooltip = sprintf('Overdue by %d day%s', $abs_days, $abs_days !== 1 ? 's' : '');
@@ -150,47 +172,51 @@ class DQ_QI_Admin_Table {
      * Invoice/Due Date are now FROM/TO range fields with labels.
      */
     public static function filters() {
-    global $typenow;
-    if ($typenow != 'quickbooks_invoice') return;
-    echo '<style>
-        select[name="m"], select[name="cat"] {display:none !important;}
-        .dqqb-filter-label {font-weight: 500; font-size: 13px; margin-right: 4px;}
-        .dqqb-filter-sep {margin: 0 4px;}
-        .dqqb-date-range {display:inline-block;}
-    </style>';
-    // Payment Status
-    $pstat = isset($_GET['qi_payment_status']) ? $_GET['qi_payment_status'] : '';
-    echo '<select name="qi_payment_status" style="margin-right:8px;"><option value="">Payment Status...</option><option value="Paid" '.selected($pstat, 'Paid', false).'>Paid</option><option value="Unpaid" '.selected($pstat, 'Unpaid', false).'>Unpaid</option></select>';
+        global $typenow;
+        if ($typenow != 'quickbooks_invoice') return;
+        echo '<style>
+            select[name="m"], select[name="cat"] {display:none !important;}
+            .dqqb-filter-label {font-weight: 500; font-size: 13px; margin-right: 4px;}
+            .dqqb-filter-sep {margin: 0 4px;}
+            .dqqb-date-range {display:inline-block;}
+        </style>';
+        // Payment Status
+        $pstat = isset($_GET['qi_payment_status']) ? $_GET['qi_payment_status'] : '';
+        echo '<select name="qi_payment_status" style="margin-right:8px;">';
+        echo '<option value="">' . esc_html__('Payment Status...', 'dqqb') . '</option>';
+        echo '<option value="Paid" ' . selected($pstat, 'Paid', false) . '>' . esc_html__('Paid', 'dqqb') . '</option>';
+        echo '<option value="Unpaid" ' . selected($pstat, 'Unpaid', false) . '>' . esc_html__('Unpaid', 'dqqb') . '</option>';
+        echo '</select>';
 
-    // Date FIELD dropdown
-    $date_field = isset($_GET['qi_date_field']) ? $_GET['qi_date_field'] : 'invoice_date';
-    echo '<select name="qi_date_field" id="dqqb-date-field-select" style="margin-right:8px;">';
-    echo '<option value="invoice_date"'.selected($date_field, 'invoice_date', false).'>Invoice Date</option>';
-    echo '<option value="due_date"'.selected($date_field, 'due_date', false).'>Due Date</option>';
-    echo '</select>';
+        // Date FIELD dropdown
+        $date_field = isset($_GET['qi_date_field']) ? $_GET['qi_date_field'] : 'invoice_date';
+        echo '<select name="qi_date_field" id="dqqb-date-field-select" style="margin-right:8px;">';
+        echo '<option value="invoice_date"'.selected($date_field, 'invoice_date', false).'>Invoice Date</option>';
+        echo '<option value="due_date"'.selected($date_field, 'due_date', false).'>Due Date</option>';
+        echo '</select>';
 
-    // Date ranges
-    $inqd_from = isset($_GET['qi_invoice_date_from']) ? $_GET['qi_invoice_date_from'] : '';
-    $inqd_to = isset($_GET['qi_invoice_date_to']) ? $_GET['qi_invoice_date_to'] : '';
-    $dud_from = isset($_GET['qi_due_date_from']) ? $_GET['qi_due_date_from'] : '';
-    $dud_to = isset($_GET['qi_due_date_to']) ? $_GET['qi_due_date_to'] : '';
+        // Date ranges
+        $inqd_from = isset($_GET['qi_invoice_date_from']) ? $_GET['qi_invoice_date_from'] : '';
+        $inqd_to = isset($_GET['qi_invoice_date_to']) ? $_GET['qi_invoice_date_to'] : '';
+        $dud_from = isset($_GET['qi_due_date_from']) ? $_GET['qi_due_date_from'] : '';
+        $dud_to = isset($_GET['qi_due_date_to']) ? $_GET['qi_due_date_to'] : '';
 
-    // Only show relevant date range input
-    echo '<span id="dqqb-date-invoice" class="dqqb-date-range" style="'.($date_field=='invoice_date'?'':'display:none').'">';
-    echo '<label for="dqqb-invoice-date-from" class="dqqb-filter-label">Invoice Date:</label>';
-    echo '<input type="date" name="qi_invoice_date_from" id="dqqb-invoice-date-from" value="' . esc_attr($inqd_from) . '" placeholder="mm/dd/yyyy" />';
-    echo '<span class="dqqb-filter-sep">–</span>';
-    echo '<input type="date" name="qi_invoice_date_to" id="dqqb-invoice-date-to" value="' . esc_attr($inqd_to) . '" placeholder="mm/dd/yyyy" style="margin-right:8px;" />';
-    echo '</span>';
-    echo '<span id="dqqb-date-due" class="dqqb-date-range" style="'.($date_field=='due_date'?'':'display:none').'">';
-    echo '<label for="dqqb-due-date-from" class="dqqb-filter-label">Due Date:</label>';
-    echo '<input type="date" name="qi_due_date_from" id="dqqb-due-date-from" value="' . esc_attr($dud_from) . '" placeholder="mm/dd/yyyy" />';
-    echo '<span class="dqqb-filter-sep">–</span>';
-    echo '<input type="date" name="qi_due_date_to" id="dqqb-due-date-to" value="' . esc_attr($dud_to) . '" placeholder="mm/dd/yyyy" style="margin-right:8px;" />';
-    echo '</span>';
+        // Only show relevant date range input
+        echo '<span id="dqqb-date-invoice" class="dqqb-date-range" style="'.($date_field=='invoice_date'?'':'display:none').'">';
+        echo '<label for="dqqb-invoice-date-from" class="dqqb-filter-label">Invoice Date:</label>';
+        echo '<input type="date" name="qi_invoice_date_from" id="dqqb-invoice-date-from" value="' . esc_attr($inqd_from) . '" placeholder="mm/dd/yyyy" />';
+        echo '<span class="dqqb-filter-sep">–</span>';
+        echo '<input type="date" name="qi_invoice_date_to" id="dqqb-invoice-date-to" value="' . esc_attr($inqd_to) . '" placeholder="mm/dd/yyyy" style="margin-right:8px;" />';
+        echo '</span>';
+        echo '<span id="dqqb-date-due" class="dqqb-date-range" style="'.($date_field=='due_date'?'':'display:none').'">';
+        echo '<label for="dqqb-due-date-from" class="dqqb-filter-label">Due Date:</label>';
+        echo '<input type="date" name="qi_due_date_from" id="dqqb-due-date-from" value="' . esc_attr($dud_from) . '" placeholder="mm/dd/yyyy" />';
+        echo '<span class="dqqb-filter-sep">–</span>';
+        echo '<input type="date" name="qi_due_date_to" id="dqqb-due-date-to" value="' . esc_attr($dud_to) . '" placeholder="mm/dd/yyyy" style="margin-right:8px;" />';
+        echo '</span>';
 
-    // JS: switch visible date range
-    echo <<<JS
+        // JS: switch visible date range
+        echo <<<JS
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     var select = document.getElementById('dqqb-date-field-select');
@@ -205,7 +231,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 JS;
-}
+    }
 
     /**
      * Filtering logic to allow date range for invoice/due date.
@@ -215,7 +241,7 @@ JS;
         if (!is_admin() || $pagenow != 'edit.php') return;
         $post_type = isset($_GET['post_type']) ? $_GET['post_type'] : '';
         if ($post_type != 'quickbooks_invoice') return;
-    
+
         $meta_queries = [];
         // Payment status
         if (!empty($_GET['qi_payment_status'])) {
