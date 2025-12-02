@@ -35,6 +35,46 @@ class DQ_Financial_Report {
         add_action( 'admin_menu', [ __CLASS__, 'menu' ] );
         add_action( 'admin_post_dq_financial_report_csv', [ __CLASS__, 'handle_csv' ] );
         add_action( 'admin_post_dq_financial_report_auth', [ __CLASS__, 'handle_password_auth' ] );
+        add_action( 'admin_init', [ __CLASS__, 'register_settings' ] );
+    }
+
+    /**
+     * Register the Financial Reports Password setting on the WordPress General Settings page.
+     */
+    public static function register_settings() {
+        register_setting(
+            'general',
+            self::PASSWORD_OPTION_KEY,
+            [
+                'type'              => 'string',
+                'sanitize_callback' => 'sanitize_text_field',
+                'default'           => '',
+            ]
+        );
+
+        add_settings_field(
+            self::PASSWORD_OPTION_KEY,
+            __( 'Financial Reports Password', 'dominus-quickbooks' ),
+            [ __CLASS__, 'render_password_field' ],
+            'options-general.php',
+            'default'
+        );
+    }
+
+    /**
+     * Render the password input field for the General Settings page.
+     */
+    public static function render_password_field() {
+        if ( ! current_user_can( 'manage_options' ) ) {
+            return;
+        }
+        $value = get_option( self::PASSWORD_OPTION_KEY, '' );
+        printf(
+            '<input type="password" id="%1$s" name="%1$s" value="%2$s" class="regular-text" autocomplete="new-password" />',
+            esc_attr( self::PASSWORD_OPTION_KEY ),
+            esc_attr( $value )
+        );
+        echo '<p class="description">' . esc_html__( 'Set a password to protect access to Financial Reports. Leave empty to disable password protection.', 'dominus-quickbooks' ) . '</p>';
     }
 
     /**
