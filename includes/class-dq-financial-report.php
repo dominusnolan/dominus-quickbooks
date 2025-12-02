@@ -1618,22 +1618,22 @@ echo '<script>
 
             foreach ( $payroll_records as $record ) {
                 // Get assigned user display name
-                $assignee = 'Unassigned';
-                if ( ! empty( $record['user_id'] ) && $record['user_id'] > 0 ) {
+                $assigned_to = 'Unassigned';
+                if ( isset( $record['user_id'] ) && $record['user_id'] > 0 ) {
                     $user = get_user_by( 'id', $record['user_id'] );
                     if ( $user ) {
-                        $assignee = $user->display_name;
+                        $assigned_to = $user->display_name;
                     }
                 }
-
+                
                 fputcsv( $out, [
                     $record['date'],
                     number_format($record['amount'],2,'.',''),
-                    $assignee,
+                    $assigned_to,
                 ] );
             }
 
-            fputcsv( $out, ['Total Payroll', number_format($payroll_total,2,'.',''), ''] );
+            fputcsv( $out, ['Total Payroll', number_format($payroll_total,2,'.',''), '' ] );
         }
 
         // Add net profit after payroll
@@ -1646,7 +1646,7 @@ echo '<script>
     }
 
     /**
-     * Render payroll management section (form + records table) with modal UI.
+     * Render payroll management section (form + records table + modal).
      */
     private static function render_payroll_section( $report, $year, $month, $quarter, $range ) {
         if ( ! class_exists( 'DQ_Payroll' ) ) {
@@ -1699,73 +1699,14 @@ echo '<script>
         }
         echo '</h2>';
 
-        // Display summary for the period
-        echo '<p><strong>Period:</strong> ' . esc_html( $period_label ) . ' | <strong>Total Payroll:</strong> ' . self::money( $total ) . ' | <strong>Records:</strong> ' . count( $records ) . '</p>';
-
-        // Inline add form (admin only - handled inside the method)
-        DQ_Payroll::render_add_form( $report, $year, $month, $quarter );
-        DQ_Payroll::render_records_table( $range['start'], $range['end'] );
-
-        echo '</div>';
-
-        // Modal HTML (admin only)
-        if ( $is_admin ) {
-            self::render_payroll_modal( $modal_id, $report, $year, $month, $quarter, $range, $records, $period_label );
-        }
-    }
-
-    /**
-     * Render the payroll management modal.
-     */
-    private static function render_payroll_modal( $modal_id, $report, $year, $month, $quarter, $range, $records, $period_label ) {
-        $nonce_field = wp_nonce_field( DQ_Payroll::NONCE_ADD_ACTION, '_wpnonce_payroll_add', true, false );
-
-        // Build hidden fields to preserve current filter state
-        $hidden_fields  = '<input type="hidden" name="report" value="' . esc_attr( $report ) . '">';
-        $hidden_fields .= '<input type="hidden" name="year" value="' . esc_attr( $year ) . '">';
-        $hidden_fields .= '<input type="hidden" name="month" value="' . esc_attr( $month ) . '">';
-        $hidden_fields .= '<input type="hidden" name="quarter" value="' . esc_attr( $quarter ) . '">';
-
-        // Default date to today (using WordPress timezone)
-        $default_date = wp_date( 'Y-m-d' );
-
-        echo '<div id="' . esc_attr( $modal_id ) . '" class="dq-payroll-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="' . esc_attr( $modal_id ) . '-title">';
-        echo '  <div class="dq-payroll-modal-window">';
-        echo '    <button class="dq-payroll-modal-close" onclick="dqClosePayrollModal();event.preventDefault();" aria-label="Close modal">&times;</button>';
-        echo '    <h2 id="' . esc_attr( $modal_id ) . '-title">Manage Payroll — ' . esc_html( $period_label ) . '</h2>';
-
-        // Add form
-        echo '    <div class="dq-payroll-modal-form">';
-        echo '      <h3>Add Payroll Record</h3>';
-        echo '      <form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
-        echo '        <input type="hidden" name="action" value="dq_payroll_add">';
-        echo $nonce_field;
-        echo $hidden_fields;
-        echo '        <div class="form-row">';
-        echo '          <div class="form-field">';
-        echo '            <label for="payroll_date_modal">Date</label>';
-        echo '            <input type="date" id="payroll_date_modal" name="payroll_date" value="' . esc_attr( $default_date ) . '" required>';
-        echo '          </div>';
-        echo '          <div class="form-field">';
-        echo '            <label for="payroll_amount_modal">Amount ($)</label>';
-        echo '            <input type="number" id="payroll_amount_modal" name="payroll_amount" step="0.01" min="0" required placeholder="0.00" style="width:120px;">';
-        echo '          </div>';
-        echo '          <div class="form-field">';
-        echo '            <label for="payroll_user_id_modal">Assigned To</label>';
-        echo DQ_Payroll::render_user_dropdown( 'payroll_user_id', 0 );
-        echo '          </div>';
-        echo '          <div class="form-field">';
-        echo '            <label>&nbsp;</label>';
-        echo '            <input type="submit" class="button button-primary" value="Add Payroll">';
-        echo '          </div>';
-        echo '        </div>';
-        echo '      </form>';
-        echo '    </div>';
-
-        // Records table
-        echo '    <h3>Payroll Records</h3>';
-        if ( empty( $records ) ) {
-            echo '    <p><em>No payroll records for this period.</em></p>';
+        // Render add form, records table, and modal (admin only - handled inside the methods)
+        if ( class_exists( 'DQ_Payroll' ) ) {
+            // Render the Manage Payroll button with modal
+            DQ_Payroll::render_modal( $report, $year, $month, $quarter, $range );
+            
+            // Also render inline form and table for convenience
+            DQ_Payroll::render_add_form( $report, $year, $month, $quarter );
+            DQ_Payroll::render_records_table( $range['start'], $range['end'] );
         } else {
             echo '    <table class="dq-payroll-modal-table">';
             echo '      <thead><tr>';
