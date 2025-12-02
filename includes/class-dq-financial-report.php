@@ -35,6 +35,88 @@ class DQ_Financial_Report {
         add_action( 'admin_menu', [ __CLASS__, 'menu' ] );
         add_action( 'admin_post_dq_financial_report_csv', [ __CLASS__, 'handle_csv' ] );
         add_action( 'admin_post_dq_financial_report_auth', [ __CLASS__, 'handle_password_auth' ] );
+        add_action( 'admin_init', [ __CLASS__, 'register_settings' ] );
+    }
+
+    /**
+     * Register the Financial Reports Password setting on the WordPress General Settings page.
+     */
+    public static function register_settings() {
+        register_setting(
+            'general',
+            self::PASSWORD_OPTION_KEY,
+            [
+                'type'              => 'string',
+                'sanitize_callback' => [ __CLASS__, 'sanitize_password_field' ],
+                'default'           => '',
+            ]
+        );
+
+        add_settings_field(
+            self::PASSWORD_OPTION_KEY,
+            __( 'Financial Reports Password', 'dominus-quickbooks' ),
+            [ __CLASS__, 'render_password_field' ],
+            'general',
+            'default'
+        );
+    }
+
+    /**
+     * Sanitize the password field value.
+     * If empty, preserve the existing password (to allow saving without re-entering).
+     * If the clear checkbox is checked, return empty string to remove protection.
+     *
+     * Note: This callback is invoked by the WordPress Settings API which handles
+     * nonce verification before calling sanitize callbacks.
+     *
+     * @param string $value The submitted value.
+     * @return string The sanitized value.
+     */
+    public static function sanitize_password_field( $value ) {
+        $value = sanitize_text_field( $value );
+        
+        // Check if user wants to clear the password via the clear checkbox
+        // The Settings API verifies nonces before this callback is invoked
+        $clear_key = self::PASSWORD_OPTION_KEY . '_clear';
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verified by WordPress Settings API before sanitize callback
+        $should_clear = isset( $_POST[ $clear_key ] ) && sanitize_text_field( wp_unslash( $_POST[ $clear_key ] ) ) === '1';
+        
+        if ( $should_clear ) {
+            return '';
+        }
+        
+        // If value is empty, preserve the existing password
+        if ( $value === '' ) {
+            return get_option( self::PASSWORD_OPTION_KEY, '' );
+        }
+        
+        return $value;
+    }
+
+    /**
+     * Render the password input field for the General Settings page.
+     */
+    public static function render_password_field() {
+        if ( ! current_user_can( 'manage_options' ) ) {
+            return;
+        }
+        $has_password = ! empty( get_option( self::PASSWORD_OPTION_KEY, '' ) );
+        printf(
+            '<input type="password" id="%1$s" name="%1$s" value="" class="regular-text" autocomplete="off" placeholder="%2$s" />',
+            esc_attr( self::PASSWORD_OPTION_KEY ),
+            $has_password ? esc_attr__( '(password is set)', 'dominus-quickbooks' ) : ''
+        );
+        if ( $has_password ) {
+            // Add a checkbox to allow clearing the password
+            printf(
+                '<br /><label><input type="checkbox" name="%s_clear" value="1" /> %s</label>',
+                esc_attr( self::PASSWORD_OPTION_KEY ),
+                esc_html__( 'Clear password (remove protection)', 'dominus-quickbooks' )
+            );
+            echo '<p class="description">' . esc_html__( 'Enter a new password to change it. Leave empty to keep the current password. Check the box above to remove password protection.', 'dominus-quickbooks' ) . '</p>';
+        } else {
+            echo '<p class="description">' . esc_html__( 'Set a password to protect access to Financial Reports. Leave empty for no password protection.', 'dominus-quickbooks' ) . '</p>';
+        }
     }
 
     /**
