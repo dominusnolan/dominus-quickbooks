@@ -68,6 +68,9 @@ require_once DQQB_PATH . 'includes/class-dq-login-form.php';
 // NEW: Public invoices balance shortcode [invoices-balance]
 require_once DQQB_PATH . 'frontend/invoices-balance/class-dq-invoices-balance.php';
 
+
+require_once DQQB_PATH . 'includes/taxonomy-purchase-order.php';
+
 // -----------------------------------------------------------------------------
 // Initialize Plugin
 // -----------------------------------------------------------------------------
