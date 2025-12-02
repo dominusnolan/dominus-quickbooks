@@ -550,162 +550,123 @@ You can override styles by targeting these CSS classes:
 
 ---
 
-## Financial Reports Shortcode
+## Invoices Balance Shortcode
 
 ### Basic Usage
 
-Display a button that opens the unpaid invoices modal on any page or post:
+Display a public-facing table of all unpaid/overdue invoices:
 
 ```
-[dq-financial-reports]
+[invoices-balance]
 ```
 
 ### Features
 
-- **Popup Modal**: Same UI as the admin Financial Reports unpaid invoices modal
-- **Summary Stats**: Shows Total Overdue and Total Incoming amounts
-- **Filter Buttons**: Show All, Overdue, or Incoming invoices
-- **Sortable Columns**: Click column headers to sort by Invoice Date, Due Date, or Remaining Days
-- **Pagination**: Navigate through large invoice lists (50 per page)
-- **CSV Download**: Export currently filtered data to CSV file
-- **REST API**: Secure nonce-protected endpoint for fetching data client-side
-- **Accessibility**: Focus trap in modal, ESC to close, screen reader friendly
-- **Mobile Responsive**: Works on all device sizes
-- **Capability Check**: Only users with `view_financial_reports` or `manage_options` capability can view
-
-### Shortcode Attributes
-
-| Attribute | Values | Default | Description |
-|-----------|--------|---------|-------------|
-| `button_text` | string | "View Unpaid Invoices" | Custom text for the trigger button |
-| `inline` | `true` or `false` | `false` | When `true`, shows inline summary instead of just button |
-| `class` | string | empty | Additional CSS class(es) for the wrapper |
-
-#### Custom Button Text
-
-```
-[dq-financial-reports button_text="Check Outstanding Balances"]
-```
-
-#### Inline Summary Mode
-
-Show a summary card with totals directly on the page:
-
-```
-[dq-financial-reports inline="true"]
-```
-
-This renders the Total Overdue and Total Incoming amounts inline with a "View Details" button to open the full modal.
-
-#### Custom CSS Class
-
-```
-[dq-financial-reports class="my-custom-class"]
-```
-
-### Permission Requirements
-
-The shortcode checks user permissions before displaying any data:
-
-- **Logged-in users**: Must have `view_financial_reports` capability or be an administrator (`manage_options`)
-- **Logged-out users**: Shown a login prompt with a link to the login page
-
-The `view_financial_reports` capability is automatically granted to:
-- Administrators
-- Engineer role (custom role added by this plugin)
+- **Public Access**: No login required - data is viewable publicly (read-only)
+- **Summary Cards**: Shows "Total Overdue" and "Total Incoming" badges at the top
+- **Filter Controls**: Buttons to filter by "Show All", "Overdue", or "Incoming"
+- **Sortable Columns**: Click column headers to sort by Invoice #, Invoice Date, Due Date, or Remaining Days
+- **CSV Export**: "Download CSV" button exports filtered data in the same format as admin reports
+- **Pagination**: Handles large datasets with page navigation
+- **Responsive Design**: Works on desktop, tablet, and mobile devices
+- **Keyboard Navigation**: Fully accessible with keyboard navigation support
+- **AJAX Filtering**: Filter and sort without page reload
+- **Red/Green Theming**: Overdue invoices highlighted in red, incoming in green
 
 ### Display Format
 
-The modal displays an interactive data table with the following columns:
+The invoices balance table displays the following columns:
 
 | Column | Description |
 |--------|-------------|
-| **Invoice #** | Invoice number linked to the invoice page |
-| **Amount** | Total billed amount (`qi_total_billed`) |
-| **Balance** | Balance due amount (`qi_balance_due`) in red |
-| **Invoice Date** | Date invoice was created (`qi_invoice_date`) |
-| **Due Date** | Payment due date (`qi_due_date`) |
-| **Remaining Days** | Days until due (green) or days overdue (red) |
+| **Invoice #** | Invoice number (`qi_invoice_no`) - links to the individual invoice page |
+| **Amount** | Total billed amount (`qi_total_billed`) with currency formatting |
+| **Balance** | Balance due (`qi_balance_due`) - highlighted in red for overdue invoices |
+| **Invoice Date** | Invoice date (`qi_invoice_date`) |
+| **Due Date** | Due date (`qi_due_date`) |
+| **Remaining Days** | Calculated days until due date, or days overdue (negative) |
 
-### Filters
+### Summary Cards
 
-The modal includes three filter buttons:
+The shortcode displays two summary cards above the table:
 
-- **Show All**: Display all unpaid invoices
-- **Overdue**: Only invoices past due date (red)
-- **Incoming**: Only invoices not yet due (green)
+- **Total Overdue** (red): Sum of balance due for all invoices past their due date
+- **Total Incoming** (green): Sum of balance due for all invoices not yet due
 
-### Sorting
+### Filter Options
 
-Click any sortable column header to sort:
-- Click once for ascending order (↑)
-- Click again for descending order (↓)
+Three filter buttons are available:
 
-Sortable columns:
-- Invoice Date
-- Due Date
-- Remaining Days
+- **Show All**: Display all unpaid invoices (default)
+- **Overdue**: Display only invoices past their due date
+- **Incoming**: Display only invoices not yet due
 
 ### CSV Export
 
-The "Download CSV" button exports the currently filtered and sorted data to a CSV file with these columns:
-- Invoice #
-- Amount
-- Balance
-- Invoice Date
-- Due Date
-- Remaining Days
+The "Download CSV" button exports the currently filtered invoices with the following columns (matching the admin report format):
+
+1. Invoice #
+2. Amount
+3. Balance
+4. Invoice Date
+5. Due Date
+6. Remaining Days
+
+### REST API
+
+The shortcode also registers a public REST API endpoint for programmatic access:
+
+- **Endpoint**: `/wp-json/dq-quickbooks/v1/invoices-balance`
+- **Method**: GET
+- **Parameters**: 
+  - `filter` (optional): `all`, `overdue`, or `incoming`
+- **Response**: JSON with invoices array and totals
+
+CSV download endpoint:
+
+- **Endpoint**: `/wp-json/dq-quickbooks/v1/invoices-balance/csv`
+- **Method**: GET
+- **Parameters**: 
+  - `filter` (optional): `all`, `overdue`, or `incoming`
+- **Response**: CSV file download
 
 ### Technical Notes
 
-- Uses WordPress REST API with nonce verification for secure data fetching
-- REST endpoint: `/wp-json/dq-financial-reports/v1/unpaid-invoices`
-- Assets (CSS/JS) only load on pages where shortcode is used
-- Data fetched via AJAX on modal open (no page reload)
-- Matches CSV format from admin Financial Reports page
-- Works with ACF fields (falls back to post meta):
-  - `qi_invoice_no`: Invoice number
-  - `qi_invoice_date`: Invoice date
-  - `qi_due_date`: Due date
-  - `qi_total_billed`: Total billed amount
-  - `qi_balance_due`: Balance due amount
+- Uses the same data source as the admin financial report popup for consistency
+- No authentication required - designed for public client portals
+- Only exposes necessary invoice fields (no sensitive credentials)
+- Assets (CSS/JS) are only loaded when the shortcode is present on the page
+- All assets are namespaced under `dq-quickbooks` to avoid collisions
 
 ### Styling
 
-The shortcode includes built-in styling matching the admin modal. You can override styles by targeting these CSS classes:
+The shortcode includes built-in styling matching the admin report popup:
 
-- `.dq-fr-shortcode-wrapper`: Main container
-- `.dq-fr-open-modal-btn`: Trigger button
-- `.dq-fr-modal-overlay`: Modal backdrop
-- `.dq-fr-modal-window`: Modal container
-- `.dq-fr-modal-content`: Modal content area
-- `.dq-fr-summary`: Summary stats container
-- `.dq-fr-summary-item`: Individual stat card
-- `.dq-fr-filters`: Filter buttons container
-- `.dq-fr-filter-btn`: Filter button
-- `.dq-fr-csv-btn`: CSV download button
-- `.dq-fr-table`: Data table
-- `.dq-fr-pagination`: Pagination container
-- `.dq-fr-access-denied`: Access denied message
+- Red (#dc3545) header background for the table
+- Red highlighting for overdue balances and remaining days
+- Green highlighting for incoming (on-time) invoices
+- Summary cards with red/green backgrounds
+- Responsive design with mobile-friendly layout
 
-### Examples
+You can override styles by targeting these CSS classes:
 
-**Show button with default text:**
-```
-[dq-financial-reports]
-```
+- `.dq-invoices-balance-wrapper`: Main container
+- `.dq-ib-summary`: Summary cards container
+- `.dq-ib-summary-card.dq-ib-overdue`: Overdue total card
+- `.dq-ib-summary-card.dq-ib-incoming`: Incoming total card
+- `.dq-ib-controls`: Filter and CSV button container
+- `.dq-ib-filter-btn`: Filter buttons
+- `.dq-ib-csv-btn`: CSV download button
+- `.dq-ib-table`: Main table
+- `.dq-ib-sortable`: Sortable column headers
+- `.dq-ib-overdue-cell`: Overdue balance cells
+- `.dq-ib-days-overdue`: Overdue remaining days
+- `.dq-ib-days-remaining`: On-time remaining days
+- `.dq-ib-pagination`: Pagination controls
 
-**Show button with custom text:**
-```
-[dq-financial-reports button_text="Outstanding Invoices"]
-```
+### Example
 
-**Show inline summary with quick stats:**
+**Display unpaid invoices table on a client portal page:**
 ```
-[dq-financial-reports inline="true"]
-```
-
-**Combine inline mode with custom class:**
-```
-[dq-financial-reports inline="true" class="dashboard-widget"]
+[invoices-balance]
 ```
