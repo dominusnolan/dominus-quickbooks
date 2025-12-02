@@ -10,6 +10,7 @@ class DQ_Payroll {
 
     const CPT_SLUG           = 'payroll';
     const FIELD_AMOUNT       = 'payroll_amount';
+    const FIELD_USER         = 'payroll_user_id';
     const NONCE_ADD_ACTION   = 'dq_payroll_add';
     const NONCE_DELETE_ACTION = 'dq_payroll_delete';
 
@@ -126,6 +127,23 @@ class DQ_Payroll {
             update_post_meta( $post_id, self::FIELD_AMOUNT, $amount_value );
         }
 
+        // Capture and store assigned user ID (optional)
+        $user_id = isset( $_POST['payroll_user_id'] ) ? intval( $_POST['payroll_user_id'] ) : 0;
+        if ( $user_id > 0 ) {
+            // Validate that user exists
+            $user = get_user_by( 'id', $user_id );
+            if ( ! $user ) {
+                $user_id = 0;
+            }
+        }
+
+        // Store user ID - use ACF if available, fallback to post meta
+        if ( function_exists( 'update_field' ) ) {
+            update_field( self::FIELD_USER, $user_id, $post_id );
+        } else {
+            update_post_meta( $post_id, self::FIELD_USER, $user_id );
+        }
+
         // Redirect back to the referring page
         $redirect_url = self::get_redirect_url();
         wp_safe_redirect( $redirect_url );
@@ -200,10 +218,12 @@ class DQ_Payroll {
         $records = [];
         foreach ( $posts as $post ) {
             $amount = self::get_amount( $post->ID );
+            $user_id = self::get_user_id( $post->ID );
             $records[] = [
                 'post_id' => $post->ID,
                 'date'    => get_the_date( 'Y-m-d', $post ),
                 'amount'  => $amount,
+                'user_id' => $user_id,
             ];
         }
 
@@ -252,6 +272,31 @@ class DQ_Payroll {
     }
 
     /**
+     * Get assigned user ID for a payroll post.
+     *
+     * @param int $post_id Post ID.
+     * @return int User ID (0 if unassigned or invalid)
+     */
+    public static function get_user_id( $post_id ) {
+        if ( function_exists( 'get_field' ) ) {
+            $user_id = get_field( self::FIELD_USER, $post_id );
+        } else {
+            $user_id = get_post_meta( $post_id, self::FIELD_USER, true );
+        }
+
+        $user_id = intval( $user_id );
+        if ( $user_id > 0 ) {
+            // Validate user exists
+            $user = get_user_by( 'id', $user_id );
+            if ( ! $user ) {
+                return 0;
+            }
+        }
+
+        return $user_id;
+    }
+
+    /**
      * Render the payroll quick entry form (admin only).
      *
      * @param string $report  Report type (monthly, quarterly, yearly).
@@ -290,10 +335,40 @@ class DQ_Payroll {
         echo '<input type="number" name="payroll_amount" step="0.01" min="0" required placeholder="0.00" style="padding:6px 10px;border:1px solid #ccc;border-radius:4px;width:120px;">';
         echo '</div>';
         echo '<div>';
+        echo '<label style="font-weight:600;display:block;margin-bottom:4px;">Assigned To</label>';
+        echo self::render_user_dropdown( 'payroll_user_id', 0 );
+        echo '</div>';
+        echo '<div>';
         echo '<input type="submit" class="button button-primary" value="Add Payroll">';
         echo '</div>';
         echo '</form>';
         echo '</div>';
+    }
+
+    /**
+     * Render a user dropdown for payroll assignment.
+     *
+     * @param string $name      The name attribute for the select element.
+     * @param int    $selected  The currently selected user ID.
+     * @return string HTML for the dropdown.
+     */
+    public static function render_user_dropdown( $name, $selected = 0 ) {
+        $users = get_users( [
+            'orderby' => 'display_name',
+            'order'   => 'ASC',
+        ] );
+
+        $html = '<select name="' . esc_attr( $name ) . '" style="padding:6px 10px;border:1px solid #ccc;border-radius:4px;min-width:150px;">';
+        $html .= '<option value="0"' . selected( $selected, 0, false ) . '>— Unassigned —</option>';
+
+        foreach ( $users as $user ) {
+            $html .= '<option value="' . esc_attr( $user->ID ) . '"' . selected( $selected, $user->ID, false ) . '>';
+            $html .= esc_html( $user->display_name );
+            $html .= '</option>';
+        }
+
+        $html .= '</select>';
+        return $html;
     }
 
     /**
@@ -313,19 +388,22 @@ class DQ_Payroll {
         $is_admin = self::user_can_manage();
 
         echo '<style>
-.dq-payroll-table { width:100%; max-width:600px; border-collapse:collapse; background:#fff; margin-bottom:20px; }
+.dq-payroll-table { width:100%; max-width:800px; border-collapse:collapse; background:#fff; margin-bottom:20px; }
 .dq-payroll-table th { background:#006d7b; color:#fff; padding:8px 10px; text-align:left; font-weight:600; }
 .dq-payroll-table td { padding:8px 10px; border-bottom:1px solid #eee; vertical-align:middle; }
 .dq-payroll-table tr:last-child td { border-bottom:none; }
 .dq-payroll-totals td { font-weight:600; background:#e6f8fc; }
 .dq-payroll-delete { color:#c40000; text-decoration:none; }
 .dq-payroll-delete:hover { text-decoration:underline; }
+.dq-payroll-user-link { text-decoration:none; color:#0073aa; }
+.dq-payroll-user-link:hover { text-decoration:underline; }
 </style>';
 
         echo '<table class="dq-payroll-table">';
         echo '<thead><tr>';
         echo '<th>Date</th>';
         echo '<th>Amount</th>';
+        echo '<th>Assigned To</th>';
         if ( $is_admin ) {
             echo '<th>Actions</th>';
         }
@@ -336,9 +414,20 @@ class DQ_Payroll {
             $total += (float) $record['amount'];
             $date_display = wp_date( 'M j, Y', strtotime( $record['date'] ) );
 
+            // Get assigned user display
+            $user_display = 'Unassigned';
+            if ( ! empty( $record['user_id'] ) && $record['user_id'] > 0 ) {
+                $user = get_user_by( 'id', $record['user_id'] );
+                if ( $user ) {
+                    $edit_user_url = get_edit_user_link( $user->ID );
+                    $user_display = '<a href="' . esc_url( $edit_user_url ) . '" class="dq-payroll-user-link">' . esc_html( $user->display_name ) . '</a>';
+                }
+            }
+
             echo '<tr>';
             echo '<td>' . esc_html( $date_display ) . '</td>';
             echo '<td>$' . number_format( (float) $record['amount'], 2 ) . '</td>';
+            echo '<td>' . $user_display . '</td>';
 
             if ( $is_admin ) {
                 $delete_url = wp_nonce_url(
@@ -356,6 +445,7 @@ class DQ_Payroll {
         echo '<tr class="dq-payroll-totals">';
         echo '<td>Total Payroll</td>';
         echo '<td>$' . number_format( $total, 2 ) . '</td>';
+        echo '<td></td>';
         if ( $is_admin ) {
             echo '<td></td>';
         }

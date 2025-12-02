@@ -1614,16 +1614,26 @@ echo '<script>
             // Empty row separator
             fputcsv( $out, [] );
             fputcsv( $out, ['--- Payroll Deductions ---'] );
-            fputcsv( $out, ['Date', 'Amount'] );
+            fputcsv( $out, ['Date', 'Amount', 'Assigned To'] );
 
             foreach ( $payroll_records as $record ) {
+                // Get assigned user display name
+                $assignee = 'Unassigned';
+                if ( ! empty( $record['user_id'] ) && $record['user_id'] > 0 ) {
+                    $user = get_user_by( 'id', $record['user_id'] );
+                    if ( $user ) {
+                        $assignee = $user->display_name;
+                    }
+                }
+
                 fputcsv( $out, [
                     $record['date'],
                     number_format($record['amount'],2,'.',''),
+                    $assignee,
                 ] );
             }
 
-            fputcsv( $out, ['Total Payroll', number_format($payroll_total,2,'.','') ] );
+            fputcsv( $out, ['Total Payroll', number_format($payroll_total,2,'.',''), ''] );
         }
 
         // Add net profit after payroll
@@ -1636,20 +1646,202 @@ echo '<script>
     }
 
     /**
-     * Render payroll management section (form + records table).
+     * Render payroll management section (form + records table) with modal UI.
      */
     private static function render_payroll_section( $report, $year, $month, $quarter, $range ) {
-        echo '<div class="dq-payroll-section" style="margin-top:30px;">';
-        echo '<h2>Payroll Management</h2>';
-
-        // Render add form (admin only - handled inside the method)
-        if ( class_exists( 'DQ_Payroll' ) ) {
-            DQ_Payroll::render_add_form( $report, $year, $month, $quarter );
-            DQ_Payroll::render_records_table( $range['start'], $range['end'] );
-        } else {
+        if ( ! class_exists( 'DQ_Payroll' ) ) {
+            echo '<div class="dq-payroll-section" style="margin-top:30px;">';
+            echo '<h2>Payroll Management</h2>';
             echo '<p><em>Payroll module not available.</em></p>';
+            echo '</div>';
+            return;
         }
 
+        $is_admin = DQ_Payroll::user_can_manage();
+        $period_label = self::human_date_label( $report, $year, $month, $quarter );
+        $modal_id = 'dq-payroll-modal';
+        $records = DQ_Payroll::get_records( $range['start'], $range['end'] );
+        $total = 0.0;
+        foreach ( $records as $record ) {
+            $total += (float) $record['amount'];
+        }
+
+        // Modal Styles
+        echo '<style>
+.dq-payroll-modal-overlay { position:fixed; inset:0; width:100vw; height:100vh; background:rgba(0,0,0,0.5); z-index:100000; display:none; overflow-y:auto; }
+.dq-payroll-modal-window { background:#fff; max-width:900px; margin:40px auto; padding:24px 20px 20px; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.15); position:relative; }
+.dq-payroll-modal-close { position:absolute; right:16px; top:12px; font-size:32px; background:transparent; border:none; color:#333; cursor:pointer; line-height:1; }
+.dq-payroll-modal-close:hover { color:#c40000; }
+.dq-payroll-modal-close:focus { outline:2px solid #0073aa; outline-offset:2px; }
+.dq-payroll-modal-form { background:#f9f9f9; padding:16px; border:1px solid #e1e4e8; border-radius:6px; margin-bottom:20px; }
+.dq-payroll-modal-form h3 { margin-top:0; margin-bottom:12px; }
+.dq-payroll-modal-form .form-row { display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; }
+.dq-payroll-modal-form .form-field { display:flex; flex-direction:column; gap:4px; }
+.dq-payroll-modal-form .form-field label { font-weight:600; font-size:13px; }
+.dq-payroll-modal-form .form-field input,
+.dq-payroll-modal-form .form-field select { padding:6px 10px; border:1px solid #ccc; border-radius:4px; }
+.dq-payroll-modal-table { width:100%; border-collapse:collapse; background:#fff; margin-top:16px; }
+.dq-payroll-modal-table th { background:#006d7b; color:#fff; padding:8px 10px; text-align:left; font-weight:600; font-size:14px; }
+.dq-payroll-modal-table td { padding:8px 10px; border-bottom:1px solid #eee; vertical-align:middle; font-size:13px; }
+.dq-payroll-modal-table tr:last-child td { border-bottom:none; }
+.dq-payroll-modal-table .dq-payroll-totals td { font-weight:600; background:#e6f8fc; }
+.dq-payroll-modal-delete { color:#c40000; text-decoration:none; }
+.dq-payroll-modal-delete:hover { text-decoration:underline; }
+.dq-payroll-modal-user-link { text-decoration:none; color:#0073aa; }
+.dq-payroll-modal-user-link:hover { text-decoration:underline; }
+.dq-payroll-manage-btn { margin-left:15px; }
+</style>';
+
+        echo '<div class="dq-payroll-section" style="margin-top:30px;">';
+        echo '<h2>Payroll Management';
+        if ( $is_admin ) {
+            echo ' <button type="button" class="button button-primary dq-payroll-manage-btn" onclick="document.getElementById(\'' . esc_attr( $modal_id ) . '\').style.display=\'block\'; document.querySelector(\'#' . esc_attr( $modal_id ) . ' .dq-payroll-modal-close\').focus();">Manage Payroll</button>';
+        }
+        echo '</h2>';
+
+        // Display summary for the period
+        echo '<p><strong>Period:</strong> ' . esc_html( $period_label ) . ' | <strong>Total Payroll:</strong> ' . self::money( $total ) . ' | <strong>Records:</strong> ' . count( $records ) . '</p>';
+
+        // Inline add form (admin only - handled inside the method)
+        DQ_Payroll::render_add_form( $report, $year, $month, $quarter );
+        DQ_Payroll::render_records_table( $range['start'], $range['end'] );
+
         echo '</div>';
+
+        // Modal HTML (admin only)
+        if ( $is_admin ) {
+            self::render_payroll_modal( $modal_id, $report, $year, $month, $quarter, $range, $records, $period_label );
+        }
+    }
+
+    /**
+     * Render the payroll management modal.
+     */
+    private static function render_payroll_modal( $modal_id, $report, $year, $month, $quarter, $range, $records, $period_label ) {
+        $nonce_field = wp_nonce_field( DQ_Payroll::NONCE_ADD_ACTION, '_wpnonce_payroll_add', true, false );
+
+        // Build hidden fields to preserve current filter state
+        $hidden_fields  = '<input type="hidden" name="report" value="' . esc_attr( $report ) . '">';
+        $hidden_fields .= '<input type="hidden" name="year" value="' . esc_attr( $year ) . '">';
+        $hidden_fields .= '<input type="hidden" name="month" value="' . esc_attr( $month ) . '">';
+        $hidden_fields .= '<input type="hidden" name="quarter" value="' . esc_attr( $quarter ) . '">';
+
+        // Default date to today (using WordPress timezone)
+        $default_date = wp_date( 'Y-m-d' );
+
+        echo '<div id="' . esc_attr( $modal_id ) . '" class="dq-payroll-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="' . esc_attr( $modal_id ) . '-title">';
+        echo '  <div class="dq-payroll-modal-window">';
+        echo '    <button class="dq-payroll-modal-close" onclick="dqClosePayrollModal();event.preventDefault();" aria-label="Close modal">&times;</button>';
+        echo '    <h2 id="' . esc_attr( $modal_id ) . '-title">Manage Payroll — ' . esc_html( $period_label ) . '</h2>';
+
+        // Add form
+        echo '    <div class="dq-payroll-modal-form">';
+        echo '      <h3>Add Payroll Record</h3>';
+        echo '      <form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+        echo '        <input type="hidden" name="action" value="dq_payroll_add">';
+        echo $nonce_field;
+        echo $hidden_fields;
+        echo '        <div class="form-row">';
+        echo '          <div class="form-field">';
+        echo '            <label for="payroll_date_modal">Date</label>';
+        echo '            <input type="date" id="payroll_date_modal" name="payroll_date" value="' . esc_attr( $default_date ) . '" required>';
+        echo '          </div>';
+        echo '          <div class="form-field">';
+        echo '            <label for="payroll_amount_modal">Amount ($)</label>';
+        echo '            <input type="number" id="payroll_amount_modal" name="payroll_amount" step="0.01" min="0" required placeholder="0.00" style="width:120px;">';
+        echo '          </div>';
+        echo '          <div class="form-field">';
+        echo '            <label for="payroll_user_id_modal">Assigned To</label>';
+        echo DQ_Payroll::render_user_dropdown( 'payroll_user_id', 0 );
+        echo '          </div>';
+        echo '          <div class="form-field">';
+        echo '            <label>&nbsp;</label>';
+        echo '            <input type="submit" class="button button-primary" value="Add Payroll">';
+        echo '          </div>';
+        echo '        </div>';
+        echo '      </form>';
+        echo '    </div>';
+
+        // Records table
+        echo '    <h3>Payroll Records</h3>';
+        if ( empty( $records ) ) {
+            echo '    <p><em>No payroll records for this period.</em></p>';
+        } else {
+            echo '    <table class="dq-payroll-modal-table">';
+            echo '      <thead><tr>';
+            echo '        <th>Date</th>';
+            echo '        <th>Amount</th>';
+            echo '        <th>Assigned To</th>';
+            echo '        <th>Actions</th>';
+            echo '      </tr></thead><tbody>';
+
+            $total = 0.0;
+            foreach ( $records as $record ) {
+                $total += (float) $record['amount'];
+                $date_display = wp_date( 'M j, Y', strtotime( $record['date'] ) );
+
+                // Get assigned user display
+                $user_display = 'Unassigned';
+                if ( ! empty( $record['user_id'] ) && $record['user_id'] > 0 ) {
+                    $user = get_user_by( 'id', $record['user_id'] );
+                    if ( $user ) {
+                        $edit_user_url = get_edit_user_link( $user->ID );
+                        $user_display = '<a href="' . esc_url( $edit_user_url ) . '" class="dq-payroll-modal-user-link" target="_blank">' . esc_html( $user->display_name ) . '</a>';
+                    }
+                }
+
+                $delete_url = wp_nonce_url(
+                    admin_url( 'admin-post.php?action=dq_payroll_delete&payroll_id=' . $record['post_id'] ),
+                    DQ_Payroll::NONCE_DELETE_ACTION . '_' . $record['post_id'],
+                    '_wpnonce_payroll_delete'
+                );
+
+                echo '      <tr>';
+                echo '        <td>' . esc_html( $date_display ) . '</td>';
+                echo '        <td>$' . number_format( (float) $record['amount'], 2 ) . '</td>';
+                echo '        <td>' . $user_display . '</td>';
+                echo '        <td><a href="' . esc_url( $delete_url ) . '" class="dq-payroll-modal-delete" onclick="return confirm(\'Are you sure you want to delete this payroll record?\');">Delete</a></td>';
+                echo '      </tr>';
+            }
+
+            // Total row
+            echo '      <tr class="dq-payroll-totals">';
+            echo '        <td>Total Payroll</td>';
+            echo '        <td>$' . number_format( $total, 2 ) . '</td>';
+            echo '        <td></td>';
+            echo '        <td></td>';
+            echo '      </tr>';
+
+            echo '    </tbody></table>';
+        }
+
+        echo '  </div>';
+        echo '</div>';
+
+        // JavaScript for modal close functionality
+        echo '<script>
+(function(){
+    var modalId = "' . esc_js( $modal_id ) . '";
+    var modal = document.getElementById(modalId);
+
+    window.dqClosePayrollModal = function() {
+        if (modal) modal.style.display = "none";
+    };
+
+    // Close on ESC key
+    document.addEventListener("keydown", function(e) {
+        if (e.key === "Escape" && modal && modal.style.display === "block") {
+            dqClosePayrollModal();
+        }
+    });
+
+    // Close on overlay click
+    if (modal) {
+        modal.addEventListener("click", function(ev) {
+            if (ev.target === modal) dqClosePayrollModal();
+        });
+    }
+})();
+</script>';
     }
 }
