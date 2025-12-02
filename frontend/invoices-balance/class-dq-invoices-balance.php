@@ -354,12 +354,17 @@ class DQ_Invoices_Balance {
             <!-- Summary Cards -->
             <div class="dq-ib-summary">
                 <div class="dq-ib-summary-card dq-ib-overdue" aria-label="Total Overdue">
-                    <span class="dq-ib-summary-label">Total Overdue</span>
+                    <span class="dq-ib-summary-label">Overdue</span>
                     <span class="dq-ib-summary-value" id="dq-ib-overdue-total">$<?php echo esc_html( number_format( $data['total_overdue'], 2 ) ); ?></span>
                 </div>
                 <div class="dq-ib-summary-card dq-ib-incoming" aria-label="Total Incoming">
-                    <span class="dq-ib-summary-label">Total Incoming</span>
+                    <span class="dq-ib-summary-label">Not due yet</span>
                     <span class="dq-ib-summary-value" id="dq-ib-incoming-total">$<?php echo esc_html( number_format( $data['total_incoming'], 2 ) ); ?></span>
+                </div>
+
+                <div class="dq-ib-summary-card dq-ib-incoming" aria-label="Total Incoming">
+                    <span class="dq-ib-summary-label">Total Collectables</span>
+                    <span class="dq-ib-summary-value" id="dq-ib-incoming-total">$<?php echo esc_html( number_format( $data['total_incoming'] +  $data['total_overdue'], 2 ) ); ?></span>
                 </div>
             </div>
 
