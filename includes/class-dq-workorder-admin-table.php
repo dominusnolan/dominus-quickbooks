@@ -260,7 +260,6 @@ class DQ_Workorder_Admin_Table {
         $done  = self::is_quality_assurance_done( $post_id );
         $label = $done ? __( 'Quality assurance complete', 'dqqb' ) : __( 'Quality assurance not done', 'dqqb' );
 
-        // Button using dashicons-yes, colored via classes
         printf(
             '<button type="button" class="dq-qa-toggle dashicons dashicons-yes %1$s" data-post-id="%2$d" data-done="%3$s" aria-label="%4$s" title="%4$s"></button>',
             $done ? 'dq-qa-checked' : 'dq-qa-unchecked',
@@ -277,27 +276,15 @@ class DQ_Workorder_Admin_Table {
      * @param int $post_id
      * @return bool
      */
-    private static function is_quality_assurance_done( $post_id ) {
-        $keys = [ 'quality_assurance', 'wo_quality_assurance', 'qa_done', 'quality_assurance_done' ];
-
-        foreach ( $keys as $key ) {
-            $raw = self::get_acf_or_meta( $key, $post_id );
-
-            // If no value stored, continue
-            if ( $raw === '' ) {
-                continue;
-            }
-
-            $val = strtolower( trim( (string) $raw ) );
-            if ( in_array( $val, [ '1', 'yes', 'true', 'on', 'checked', 'done', 'complete', 'completed' ], true ) ) {
-                return true;
-            }
-            if ( in_array( $val, [ '0', 'no', 'false', 'off', 'unchecked', 'not done' ], true ) ) {
-                return false;
-            }
+     private static function is_quality_assurance_done( $post_id ) {
+        if ( function_exists( 'get_field' ) ) {
+            $val = get_field( 'quality_assurance', $post_id );
+            // ACF true/false returns 1 or 0 (or falsey empty)
+            return ( $val === 1 || $val === '1' );
         }
-
-        return false;
+        // Fallback to meta if ACF not loaded
+        $raw = get_post_meta( $post_id, 'quality_assurance', true );
+        return ( $raw === '1' || $raw === 1 );
     }
 
     /**
@@ -894,39 +881,30 @@ class DQ_Workorder_Admin_Table {
      * AJAX handler: toggle QA done status
      */
     public static function ajax_toggle_quality_assurance() {
-        // Verify nonce
         if ( ! check_ajax_referer( 'dq_toggle_quality_assurance', 'nonce', false ) ) {
             wp_send_json_error( [ 'message' => 'Invalid security token.' ], 403 );
         }
 
-        // Validate post id
         $post_id = isset( $_POST['post_id'] ) ? absint( wp_unslash( $_POST['post_id'] ) ) : 0;
         if ( $post_id <= 0 ) {
             wp_send_json_error( [ 'message' => 'Invalid post ID.' ], 400 );
         }
-
-        // Permission
         if ( ! current_user_can( 'edit_post', $post_id ) ) {
             wp_send_json_error( [ 'message' => 'Permission denied.' ], 403 );
         }
 
-        // Determine desired state (default: toggle to 1)
         $done = isset( $_POST['done'] ) ? (int) wp_unslash( $_POST['done'] ) : 1;
         $done = $done === 1 ? 1 : 0;
 
-        // Determine field key to update
-        $key = self::determine_qa_key( $post_id );
-
-        // Update via ACF if available for that field, else meta
         $updated = false;
-        if ( function_exists( 'get_field_object' ) && function_exists( 'update_field' ) ) {
-            $obj = get_field_object( $key, $post_id );
+        if ( function_exists( 'update_field' ) && function_exists( 'get_field_object' ) ) {
+            $obj = get_field_object( 'quality_assurance', $post_id );
             if ( $obj && is_array( $obj ) ) {
-                $updated = (bool) update_field( $key, (string) $done, $post_id );
+                $updated = (bool) update_field( 'quality_assurance', $done, $post_id );
             }
         }
         if ( ! $updated ) {
-            $updated = (bool) update_post_meta( $post_id, $key, (string) $done );
+            $updated = (bool) update_post_meta( $post_id, 'quality_assurance', (string) $done );
         }
 
         if ( ! $updated ) {
