@@ -47,6 +47,9 @@ class DQ_Workorder_Admin_Table {
 
         // AJAX handler for expandable details
         add_action( 'wp_ajax_dq_workorder_expand_details', [ __CLASS__, 'ajax_expand_details' ] );
+
+        // AJAX handler for inline QA toggle
+        add_action( 'wp_ajax_dq_toggle_quality_assurance', [ __CLASS__, 'ajax_toggle_quality_assurance' ] );
     }
 
     /**
@@ -56,14 +59,15 @@ class DQ_Workorder_Admin_Table {
      * 1. Work Order ID (sortable)
      * 2. Field Engineer with picture
      * 3. Status (taxonomy)
-     * 4. Product ID
-     * 5. State
-     * 6. City
-     * 7. Date Dispatched (sortable)
-     * 8. Date Scheduled (sortable)
-     * 9. Date Closed by FSE (sortable)
-     * 10. Date FSR Closed in SMAX (sortable)
-     * 11. Expand link/button
+     * 4. QA inline toggle
+     * 5. Product ID
+     * 6. State
+     * 7. City
+     * 8. Date Dispatched (sortable)
+     * 9. Date Scheduled (sortable)
+     * 10. Date Closed by FSE (sortable)
+     * 11. Date FSR Closed in SMAX (sortable)
+     * 12. Expand link/button
      *
      * @param array $columns Existing columns
      * @return array Modified columns
@@ -77,18 +81,19 @@ class DQ_Workorder_Admin_Table {
 
         // Define new columns in required order
         $new_columns = [];
-        $new_columns['cb']                = '<input type="checkbox" />';
-        $new_columns['wo_id']             = __( 'Work Order ID', 'dqqb' );
-        $new_columns['wo_field_engineer'] = __( 'Field Engineer', 'dqqb' );
-        $new_columns['wo_status']         = __( 'Status', 'dqqb' );
-        $new_columns['wo_product_id']     = __( 'Product ID', 'dqqb' );
-        $new_columns['wo_state']          = __( 'State', 'dqqb' );
-        $new_columns['wo_city']           = __( 'City', 'dqqb' );
+        $new_columns['cb']                 = '<input type="checkbox" />';
+        $new_columns['wo_id']              = __( 'Work Order ID', 'dqqb' );
+        $new_columns['wo_field_engineer']  = __( 'Field Engineer', 'dqqb' );
+        $new_columns['wo_status']          = __( 'Status', 'dqqb' );
+        $new_columns['wo_quality_assurance'] = __( 'QA', 'dqqb' );
+        $new_columns['wo_product_id']      = __( 'Product ID', 'dqqb' );
+        $new_columns['wo_state']           = __( 'State', 'dqqb' );
+        $new_columns['wo_city']            = __( 'City', 'dqqb' );
         $new_columns['wo_date_dispatched'] = __( 'Date Dispatched', 'dqqb' );
-        $new_columns['wo_date_scheduled'] = __( 'Date Scheduled', 'dqqb' );
+        $new_columns['wo_date_scheduled']  = __( 'Date Scheduled', 'dqqb' );
         $new_columns['wo_date_fse_closed'] = __( 'Date Closed by FSE', 'dqqb' );
         $new_columns['wo_date_smax_closed'] = __( 'Date FSR Closed in SMAX', 'dqqb' );
-        $new_columns['wo_expand']         = __( 'Expand', 'dqqb' );
+        $new_columns['wo_expand']          = __( 'Expand', 'dqqb' );
 
         return $new_columns;
     }
@@ -116,6 +121,10 @@ class DQ_Workorder_Admin_Table {
 
             case 'wo_status':
                 self::render_column_status( $post_id );
+                break;
+
+            case 'wo_quality_assurance':
+                self::render_column_quality_assurance( $post_id );
                 break;
 
             case 'wo_product_id':
@@ -220,27 +229,107 @@ class DQ_Workorder_Admin_Table {
     /**
      * Render Status column from taxonomy
      *
-     * Uses the 'category' taxonomy and filters for term(s) whose name is 'status'.
+     * Uses the 'category' taxonomy and filters for term(s) whose name is 'uncategorized'.
      *
      * @param int $post_id Post ID
      * @return void
      */
     private static function render_column_status( $post_id ) {
-        
-        $status_terms = get_the_terms($post_id, 'category');
+        $status_terms = get_the_terms( $post_id, 'category' );
         $status_value = '';
-        if (!empty($status_terms) && !is_wp_error($status_terms)) {
-            $filtered_terms = array_filter($status_terms, function($term) {
-                return strtolower($term->name) !== 'uncategorized';
-            });
-            $status_names = array_map(function($term) {
-                return esc_html($term->name);
-            }, $filtered_terms);
-            $status_value = implode(', ', $status_names);
+        if ( ! empty( $status_terms ) && ! is_wp_error( $status_terms ) ) {
+            $filtered_terms = array_filter( $status_terms, function( $term ) {
+                return strtolower( $term->name ) !== 'uncategorized';
+            } );
+            $status_names = array_map( function( $term ) {
+                return esc_html( $term->name );
+            }, $filtered_terms );
+            $status_value = implode( ', ', $status_names );
         }
-        
-        echo $status_value;
 
+        echo $status_value;
+    }
+
+    /**
+     * Render QA column with inline toggle button (green check if done, gray if not)
+     *
+     * @param int $post_id
+     * @return void
+     */
+    private static function render_column_quality_assurance( $post_id ) {
+        $done  = self::is_quality_assurance_done( $post_id );
+        $label = $done ? __( 'Quality assurance complete', 'dqqb' ) : __( 'Quality assurance not done', 'dqqb' );
+
+        // Button using dashicons-yes, colored via classes
+        printf(
+            '<button type="button" class="dq-qa-toggle dashicons dashicons-yes %1$s" data-post-id="%2$d" data-done="%3$s" aria-label="%4$s" title="%4$s"></button>',
+            $done ? 'dq-qa-checked' : 'dq-qa-unchecked',
+            (int) $post_id,
+            $done ? '1' : '0',
+            esc_attr( $label )
+        );
+    }
+
+    /**
+     * Try common QA keys to determine if QA is done.
+     * Adjust order or pin to your canonical key if needed.
+     *
+     * @param int $post_id
+     * @return bool
+     */
+    private static function is_quality_assurance_done( $post_id ) {
+        $keys = [ 'quality_assurance', 'wo_quality_assurance', 'qa_done', 'quality_assurance_done' ];
+
+        foreach ( $keys as $key ) {
+            $raw = self::get_acf_or_meta( $key, $post_id );
+
+            // If no value stored, continue
+            if ( $raw === '' ) {
+                continue;
+            }
+
+            $val = strtolower( trim( (string) $raw ) );
+            if ( in_array( $val, [ '1', 'yes', 'true', 'on', 'checked', 'done', 'complete', 'completed' ], true ) ) {
+                return true;
+            }
+            if ( in_array( $val, [ '0', 'no', 'false', 'off', 'unchecked', 'not done' ], true ) ) {
+                return false;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Decide which meta/ACF key to use for updating QA.
+     * Prefers an existing ACF field or existing meta, else falls back to "quality_assurance".
+     *
+     * @param int $post_id
+     * @return string
+     */
+    private static function determine_qa_key( $post_id ) {
+        $candidates = [ 'quality_assurance', 'wo_quality_assurance', 'qa_done', 'quality_assurance_done' ];
+
+        // Prefer an actual ACF field if present
+        if ( function_exists( 'get_field_object' ) ) {
+            foreach ( $candidates as $key ) {
+                $obj = get_field_object( $key, $post_id );
+                if ( $obj && is_array( $obj ) ) {
+                    return $key;
+                }
+            }
+        }
+
+        // Otherwise prefer an existing meta key with any value (including "0")
+        foreach ( $candidates as $key ) {
+            $meta = get_post_meta( $post_id, $key, true );
+            if ( $meta !== '' ) {
+                return $key;
+            }
+        }
+
+        // Default
+        return 'quality_assurance';
     }
 
     /**
@@ -369,6 +458,9 @@ class DQ_Workorder_Admin_Table {
         $columns['wo_date_scheduled']   = 'wo_date_scheduled';
         $columns['wo_date_fse_closed']  = 'wo_date_fse_closed';
         $columns['wo_date_smax_closed'] = 'wo_date_smax_closed';
+
+        // If you later want QA sortable, map wo_quality_assurance to a meta key in handle_sorting()
+        // $columns['wo_quality_assurance'] = 'wo_quality_assurance';
 
         return $columns;
     }
@@ -527,6 +619,8 @@ class DQ_Workorder_Admin_Table {
             'wo_date_scheduled'   => 'schedule_date_time',
             'wo_date_fse_closed'  => 'date_service_completed_by_fse',
             'wo_date_smax_closed' => 'closed_on',
+            // If enabling QA sorting:
+            // 'wo_quality_assurance' => 'quality_assurance',
         ];
 
         if ( isset( $meta_key_map[ $orderby ] ) ) {
@@ -557,7 +651,7 @@ class DQ_Workorder_Admin_Table {
         // Inline styles for the admin table
         wp_add_inline_style( 'common', self::get_admin_styles() );
 
-        // Inline script for expand/collapse functionality
+        // Inline script for expand/collapse functionality and QA toggle
         wp_enqueue_script( 'jquery' );
         wp_add_inline_script( 'jquery', self::get_admin_script() );
     }
@@ -579,6 +673,28 @@ class DQ_Workorder_Admin_Table {
             }
             .dq-wo-expand-btn .dashicons {
                 transition: transform 0.2s ease;
+            }
+
+            /* QA toggle button */
+            .dq-qa-toggle {
+                background: none;
+                border: none;
+                cursor: pointer;
+                padding: 0;
+                font-size: 30px;
+                line-height: 1;
+                vertical-align: middle;
+            }
+            .dq-qa-toggle.is-loading {
+                opacity: 0.6;
+                pointer-events: none;
+            }
+            .dq-qa-checked {
+                color: #46b450; /* WP green */
+            }
+            .dq-qa-unchecked {
+                color: #b0b0b0;
+                opacity: 0.8;
             }
 
             /* Expanded details row */
@@ -654,13 +770,14 @@ class DQ_Workorder_Admin_Table {
     }
 
     /**
-     * Get JavaScript for expand/collapse functionality
+     * Get JavaScript for expand/collapse functionality and QA toggle
      *
      * @return string JavaScript code
      */
     private static function get_admin_script() {
-        $ajax_url = admin_url( 'admin-ajax.php' );
-        $nonce    = wp_create_nonce( 'dq_workorder_expand' );
+        $ajax_url      = admin_url( 'admin-ajax.php' );
+        $expand_nonce  = wp_create_nonce( 'dq_workorder_expand' );
+        $toggle_nonce  = wp_create_nonce( 'dq_toggle_quality_assurance' );
 
         return '
             jQuery(document).ready(function($) {
@@ -698,7 +815,7 @@ class DQ_Workorder_Admin_Table {
                     }
 
                     // Show loading state
-                    var $loadingRow = $("<tr class=\"dq-wo-details-row\" data-post-id=\"" + postId + "\"><td colspan=\"" + colCount + "\"><div class=\"dq-wo-details-loading\">' . esc_js( __( 'Loading details', 'dqqb' ) ) . '</div></td></tr>");
+                    var $loadingRow = $("<tr class=\"dq-wo-details-row\" data-post-id=\"" + postId + "\"><td colspan=\"" + colCount + "\"><div class=\"dq-wo-details-loading\">' . esc_js( __( 'Loading details…', 'dqqb' ) ) . '</div></td></tr>");
                     $row.after($loadingRow);
                     $btn.addClass("expanded");
                     $btn.find("span:not(.dashicons)").text("' . esc_js( __( 'Collapse', 'dqqb' ) ) . '");
@@ -709,7 +826,7 @@ class DQ_Workorder_Admin_Table {
                         type: "POST",
                         data: {
                             action: "dq_workorder_expand_details",
-                            nonce: "' . esc_js( $nonce ) . '",
+                            nonce: "' . esc_js( $expand_nonce ) . '",
                             post_id: postId
                         },
                         success: function(response) {
@@ -730,8 +847,93 @@ class DQ_Workorder_Admin_Table {
                     var $newRow = $("<tr class=\"dq-wo-details-row\" data-post-id=\"" + postId + "\"><td colspan=\"" + colCount + "\"><div class=\"dq-wo-details-content\">" + html + "</div></td></tr>");
                     $row.after($newRow);
                 }
+
+                // Inline QA toggle
+                $(document).on("click", ".dq-qa-toggle", function(e) {
+                    e.preventDefault();
+                    var $btn = $(this);
+                    if ($btn.data("loading")) return;
+
+                    var postId = $btn.data("post-id");
+                    var done = parseInt($btn.data("done"), 10) === 1 ? 1 : 0;
+                    var next = done ? 0 : 1;
+
+                    $btn.data("loading", true).addClass("is-loading");
+
+                    $.ajax({
+                        url: "' . esc_js( $ajax_url ) . '",
+                        type: "POST",
+                        dataType: "json",
+                        data: {
+                            action: "dq_toggle_quality_assurance",
+                            nonce: "' . esc_js( $toggle_nonce ) . '",
+                            post_id: postId,
+                            done: next
+                        }
+                    }).done(function(resp) {
+                        if (resp && resp.success && resp.data) {
+                            var newDone = resp.data.done ? 1 : 0;
+                            $btn.data("done", newDone);
+                            $btn.toggleClass("dq-qa-checked", !!newDone).toggleClass("dq-qa-unchecked", !newDone);
+                            $btn.attr("aria-label", newDone ? "' . esc_js( __( 'Quality assurance complete', 'dqqb' ) ) . '" : "' . esc_js( __( 'Quality assurance not done', 'dqqb' ) ) . '");
+                            $btn.attr("title", newDone ? "' . esc_js( __( 'Quality assurance complete', 'dqqb' ) ) . '" : "' . esc_js( __( 'Quality assurance not done', 'dqqb' ) ) . '");
+                        } else {
+                            alert("' . esc_js( __( 'Unable to update QA status.', 'dqqb' ) ) . '");
+                        }
+                    }).fail(function() {
+                        alert("' . esc_js( __( 'Error updating QA status.', 'dqqb' ) ) . '");
+                    }).always(function() {
+                        $btn.data("loading", false).removeClass("is-loading");
+                    });
+                });
             });
         ';
+    }
+
+    /**
+     * AJAX handler: toggle QA done status
+     */
+    public static function ajax_toggle_quality_assurance() {
+        // Verify nonce
+        if ( ! check_ajax_referer( 'dq_toggle_quality_assurance', 'nonce', false ) ) {
+            wp_send_json_error( [ 'message' => 'Invalid security token.' ], 403 );
+        }
+
+        // Validate post id
+        $post_id = isset( $_POST['post_id'] ) ? absint( wp_unslash( $_POST['post_id'] ) ) : 0;
+        if ( $post_id <= 0 ) {
+            wp_send_json_error( [ 'message' => 'Invalid post ID.' ], 400 );
+        }
+
+        // Permission
+        if ( ! current_user_can( 'edit_post', $post_id ) ) {
+            wp_send_json_error( [ 'message' => 'Permission denied.' ], 403 );
+        }
+
+        // Determine desired state (default: toggle to 1)
+        $done = isset( $_POST['done'] ) ? (int) wp_unslash( $_POST['done'] ) : 1;
+        $done = $done === 1 ? 1 : 0;
+
+        // Determine field key to update
+        $key = self::determine_qa_key( $post_id );
+
+        // Update via ACF if available for that field, else meta
+        $updated = false;
+        if ( function_exists( 'get_field_object' ) && function_exists( 'update_field' ) ) {
+            $obj = get_field_object( $key, $post_id );
+            if ( $obj && is_array( $obj ) ) {
+                $updated = (bool) update_field( $key, (string) $done, $post_id );
+            }
+        }
+        if ( ! $updated ) {
+            $updated = (bool) update_post_meta( $post_id, $key, (string) $done );
+        }
+
+        if ( ! $updated ) {
+            wp_send_json_error( [ 'message' => 'Failed to update.' ], 500 );
+        }
+
+        wp_send_json_success( [ 'done' => (bool) $done ] );
     }
 
     /**
