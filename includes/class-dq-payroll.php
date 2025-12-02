@@ -593,12 +593,12 @@ class DQ_Payroll {
 </style>';
 
         // Manage Payroll button
-        echo '<button type="button" class="dq-payroll-manage-btn" onclick="document.getElementById(\'' . esc_attr( $modal_id ) . '\').style.display=\'block\'; document.getElementById(\'' . esc_attr( $modal_id ) . '\').querySelector(\'.dq-payroll-modal-close\').focus();">Manage Payroll</button>';
+        echo '<button type="button" class="dq-payroll-manage-btn" id="dq-payroll-open-modal-btn">Manage Payroll</button>';
 
         // Modal markup
         echo '<div id="' . esc_attr( $modal_id ) . '" class="dq-payroll-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="' . esc_attr( $modal_id ) . '-title">';
         echo '  <div class="dq-payroll-modal-window">';
-        echo '    <button type="button" class="dq-payroll-modal-close" onclick="document.getElementById(\'' . esc_attr( $modal_id ) . '\').style.display=\'none\'; event.preventDefault();" aria-label="Close modal">&times;</button>';
+        echo '    <button type="button" class="dq-payroll-modal-close" id="dq-payroll-close-modal-btn" aria-label="Close modal">&times;</button>';
         echo '    <h2 id="' . esc_attr( $modal_id ) . '-title">Manage Payroll</h2>';
 
         // Add form section
@@ -685,21 +685,40 @@ class DQ_Payroll {
 (function(){
     var modalId = "' . esc_js( $modal_id ) . '";
     var modal = document.getElementById(modalId);
-    if (!modal) return;
+    var openBtn = document.getElementById("dq-payroll-open-modal-btn");
+    var closeBtn = document.getElementById("dq-payroll-close-modal-btn");
+    
+    if (!modal || !openBtn || !closeBtn) return;
 
-    // Close on ESC key
-    document.addEventListener("keydown", function(e) {
-        if (e.key === "Escape" && modal.style.display === "block") {
-            modal.style.display = "none";
+    function openModal() {
+        modal.style.display = "block";
+        closeBtn.focus();
+    }
+
+    function closeModal() {
+        modal.style.display = "none";
+    }
+
+    function handleKeydown(e) {
+        if (e.key === "Escape" && modal && modal.style.display === "block") {
+            closeModal();
         }
-    });
+    }
 
-    // Close on overlay click
-    modal.addEventListener("click", function(ev) {
+    function handleOverlayClick(ev) {
         if (ev.target === modal) {
-            modal.style.display = "none";
+            closeModal();
         }
+    }
+
+    // Attach event listeners
+    openBtn.addEventListener("click", openModal);
+    closeBtn.addEventListener("click", function(e) {
+        e.preventDefault();
+        closeModal();
     });
+    document.addEventListener("keydown", handleKeydown);
+    modal.addEventListener("click", handleOverlayClick);
 })();
 </script>';
     }
