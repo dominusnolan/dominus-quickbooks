@@ -162,9 +162,16 @@ class DQ_Workorder_Admin_Table {
      * @return void
      */
     private static function render_column_wo_id( $post_id ) {
-        $title    = get_the_title( $post_id );
-        $edit_url = get_edit_post_link( $post_id );
+        $title     = get_the_title( $post_id );
+        $edit_url  = get_edit_post_link( $post_id );
+        $view_url  = get_permalink( $post_id );
+
+        echo '<div class="dq-wo-id-cell">';
         echo '<a href="' . esc_url( $edit_url ) . '"><strong>' . esc_html( $title ) . '</strong></a>';
+        echo '<div class="row-actions">';
+        echo '<span class="view"><a href="' . esc_url( $view_url ) . '" target="_blank" rel="noopener" aria-label="' . esc_attr__( 'View on site', 'dqqb' ) . '">' . esc_html__( 'View', 'dqqb' ) . '</a></span>';
+        echo '</div>';
+        echo '</div>';
     }
 
     /**
@@ -823,6 +830,32 @@ class DQ_Workorder_Admin_Table {
             }
             .dq-wo-invoice-link:hover {
                 text-decoration: underline;
+            }
+            .wp-list-table td.column-wo_id .row-actions {
+                visibility: hidden;
+                margin-top: 2px;
+            }
+            .wp-list-table tr:hover td.column-wo_id .row-actions,
+            .wp-list-table td.column-wo_id:focus-within .row-actions {
+                visibility: visible;
+            }
+
+            /* Optional: make the View link look like a small button */
+            .wp-list-table td.column-wo_id .row-actions .view a {
+                display: inline-block;
+                padding: 2px 6px;
+                border: 1px solid #ccd0d4;
+                border-radius: 3px;
+                text-decoration: none;
+                font-size: 11px;
+                line-height: 1.6;
+                background: #f6f7f7;
+                color: #2271b1;
+            }
+            .wp-list-table td.column-wo_id .row-actions .view a:hover {
+                background: #f0f0f0;
+                border-color: #bfc4c8;
+                color: #135e96;
             }
         ';
     }
