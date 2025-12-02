@@ -50,6 +50,9 @@ class DQ_Workorder_Admin_Table {
 
         // AJAX handler for inline QA toggle
         add_action( 'wp_ajax_dq_toggle_quality_assurance', [ __CLASS__, 'ajax_toggle_quality_assurance' ] );
+
+        // AJAX handler for creating/linking invoice CPT
+        add_action( 'wp_ajax_dq_wo_create_invoice_cpt', [ __CLASS__, 'ajax_create_invoice_cpt' ] );
     }
 
     /**
@@ -85,6 +88,7 @@ class DQ_Workorder_Admin_Table {
         $new_columns['wo_id']              = __( 'Work Order ID', 'dqqb' );
         $new_columns['wo_field_engineer']  = __( 'Field Engineer', 'dqqb' );
         $new_columns['wo_status']          = __( 'Status', 'dqqb' );
+        $new_columns['wo_invoice']         = __( 'Invoice', 'dqqb' );
         $new_columns['wo_quality_assurance'] = __( 'QA', 'dqqb' );
         $new_columns['wo_state']           = __( 'State', 'dqqb' );
         $new_columns['wo_city']            = __( 'City', 'dqqb' );
@@ -120,6 +124,10 @@ class DQ_Workorder_Admin_Table {
 
             case 'wo_status':
                 self::render_column_status( $post_id );
+                break;
+
+            case 'wo_invoice':
+                self::render_column_invoice( $post_id );
                 break;
 
             case 'wo_quality_assurance':
@@ -243,6 +251,64 @@ class DQ_Workorder_Admin_Table {
         }
 
         echo $status_value;
+    }
+
+    /**
+     * Render Invoice column
+     *
+     * Displays a link to the linked quickbooks_invoice CPT if one exists,
+     * or an inline input field to create/link an invoice.
+     *
+     * @param int $post_id Post ID
+     * @return void
+     */
+    private static function render_column_invoice( $post_id ) {
+        $invoice_no = self::get_acf_or_meta( 'wo_invoice_no', $post_id );
+
+        if ( ! empty( $invoice_no ) ) {
+            // Check if an invoice CPT exists with this invoice number
+            $invoice_post_id = self::find_invoice_cpt_by_number( $invoice_no );
+
+            if ( $invoice_post_id ) {
+                // Display link to the invoice CPT
+                $edit_url = get_edit_post_link( $invoice_post_id );
+                echo '<a href="' . esc_url( $edit_url ) . '" class="dq-wo-invoice-link">' . esc_html( $invoice_no ) . '</a>';
+                return;
+            }
+        }
+
+        // Display inline input for invoice number
+        echo '<div class="dq-wo-invoice-input-wrap" data-post-id="' . esc_attr( $post_id ) . '">';
+        echo '<input type="text" class="dq-wo-invoice-input" placeholder="' . esc_attr__( 'Invoice No', 'dqqb' ) . '" value="' . esc_attr( $invoice_no ) . '" />';
+        echo '<button type="button" class="button button-small dq-wo-invoice-add-btn">' . esc_html__( 'Save', 'dqqb' ) . '</button>';
+        echo '</div>';
+    }
+
+    /**
+     * Find quickbooks_invoice CPT by invoice number
+     *
+     * @param string $invoice_no The invoice number to search for
+     * @return int|null Post ID if found, null otherwise
+     */
+    private static function find_invoice_cpt_by_number( $invoice_no ) {
+        if ( empty( $invoice_no ) ) {
+            return null;
+        }
+
+        $posts = get_posts( [
+            'post_type'      => 'quickbooks_invoice',
+            'post_status'    => 'any',
+            'fields'         => 'ids',
+            'meta_key'       => 'qi_invoice_no',
+            'meta_value'     => $invoice_no,
+            'posts_per_page' => 1
+        ] );
+
+        if ( ! empty( $posts ) ) {
+            return (int) $posts[0];
+        }
+
+        return null;
     }
 
     /**
@@ -719,6 +785,43 @@ class DQ_Workorder_Admin_Table {
             .wp-list-table tr.dq-qa-done > td {
                 background-color: #f7ff005c;
             }
+
+            /* Invoice column styles */
+            .dq-wo-invoice-input-wrap {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+            }
+            .dq-wo-invoice-input {
+                width: 100px;
+                padding: 3px 6px;
+                border: 1px solid #ddd;
+                border-radius: 3px;
+                font-size: 12px;
+            }
+            .dq-wo-invoice-input:focus {
+                border-color: #0996a0;
+                outline: none;
+                box-shadow: 0 0 0 1px #0996a0;
+            }
+            .dq-wo-invoice-add-btn {
+                padding: 2px 8px !important;
+                font-size: 11px !important;
+                line-height: 1.4 !important;
+                height: auto !important;
+            }
+            .dq-wo-invoice-add-btn.is-loading {
+                opacity: 0.6;
+                pointer-events: none;
+            }
+            .dq-wo-invoice-link {
+                color: #0996a0;
+                font-weight: 500;
+                text-decoration: none;
+            }
+            .dq-wo-invoice-link:hover {
+                text-decoration: underline;
+            }
         ';
     }
 
@@ -731,6 +834,7 @@ class DQ_Workorder_Admin_Table {
         $ajax_url      = admin_url( 'admin-ajax.php' );
         $expand_nonce  = wp_create_nonce( 'dq_workorder_expand' );
         $toggle_nonce  = wp_create_nonce( 'dq_toggle_quality_assurance' );
+        $invoice_nonce = wp_create_nonce( 'dq_wo_create_invoice_cpt' );
 
         return '
             jQuery(document).ready(function($) {
@@ -849,6 +953,49 @@ class DQ_Workorder_Admin_Table {
                         $btn.data("loading", false).removeClass("is-loading");
                     });
                 });
+
+                // Handle Invoice Save button click
+                $(document).on("click", ".dq-wo-invoice-add-btn", function(e) {
+                    e.preventDefault();
+                    var $btn = $(this);
+                    if ($btn.data("loading")) return;
+
+                    var $wrap = $btn.closest(".dq-wo-invoice-input-wrap");
+                    var $input = $wrap.find(".dq-wo-invoice-input");
+                    var postId = $wrap.data("post-id");
+                    var invoiceNo = $.trim($input.val());
+
+                    if (!invoiceNo) {
+                        alert("' . esc_js( __( 'Please enter an invoice number.', 'dqqb' ) ) . '");
+                        $input.focus();
+                        return;
+                    }
+
+                    $btn.data("loading", true).addClass("is-loading");
+
+                    $.ajax({
+                        url: "' . esc_js( $ajax_url ) . '",
+                        type: "POST",
+                        dataType: "json",
+                        data: {
+                            action: "dq_wo_create_invoice_cpt",
+                            nonce: "' . esc_js( $invoice_nonce ) . '",
+                            post_id: postId,
+                            invoice_no: invoiceNo
+                        }
+                    }).done(function(resp) {
+                        if (resp && resp.success && resp.data && resp.data.link_html) {
+                            $wrap.replaceWith(resp.data.link_html);
+                        } else {
+                            var msg = (resp && resp.data && resp.data.message) ? resp.data.message : "' . esc_js( __( 'Failed to save invoice.', 'dqqb' ) ) . '";
+                            alert(msg);
+                        }
+                    }).fail(function() {
+                        alert("' . esc_js( __( 'Error saving invoice.', 'dqqb' ) ) . '");
+                    }).always(function() {
+                        $btn.data("loading", false).removeClass("is-loading");
+                    });
+                });
             });
         ';
     }
@@ -888,6 +1035,95 @@ class DQ_Workorder_Admin_Table {
         }
 
         wp_send_json_success( [ 'done' => (bool) $done ] );
+    }
+
+    /**
+     * AJAX handler: create or link quickbooks_invoice CPT to Work Order
+     *
+     * Creates a new quickbooks_invoice post if one doesn't exist with the given invoice number,
+     * links it to the Work Order via the qi_wo_number relation field, and saves the invoice
+     * number to the Work Order's wo_invoice_no field.
+     */
+    public static function ajax_create_invoice_cpt() {
+        if ( ! check_ajax_referer( 'dq_wo_create_invoice_cpt', 'nonce', false ) ) {
+            wp_send_json_error( [ 'message' => 'Invalid security token.' ], 403 );
+        }
+
+        $post_id = isset( $_POST['post_id'] ) ? absint( wp_unslash( $_POST['post_id'] ) ) : 0;
+        if ( $post_id <= 0 ) {
+            wp_send_json_error( [ 'message' => 'Invalid post ID.' ], 400 );
+        }
+
+        // Verify the post exists and is a workorder
+        $post = get_post( $post_id );
+        if ( ! $post || $post->post_type !== 'workorder' ) {
+            wp_send_json_error( [ 'message' => 'Invalid workorder.' ], 400 );
+        }
+
+        if ( ! current_user_can( 'edit_post', $post_id ) ) {
+            wp_send_json_error( [ 'message' => 'Permission denied.' ], 403 );
+        }
+
+        $invoice_no = isset( $_POST['invoice_no'] ) ? sanitize_text_field( wp_unslash( $_POST['invoice_no'] ) ) : '';
+        if ( empty( $invoice_no ) ) {
+            wp_send_json_error( [ 'message' => 'Invoice number is required.' ], 400 );
+        }
+
+        // Find or create the quickbooks_invoice CPT
+        $invoice_post_id = self::find_invoice_cpt_by_number( $invoice_no );
+
+        if ( ! $invoice_post_id ) {
+            // Create new quickbooks_invoice post
+            $invoice_post_id = wp_insert_post( [
+                'post_type'   => 'quickbooks_invoice',
+                'post_title'  => $invoice_no,
+                'post_status' => 'publish',
+            ], true );
+
+            if ( is_wp_error( $invoice_post_id ) ) {
+                wp_send_json_error( [ 'message' => 'Failed to create invoice: ' . $invoice_post_id->get_error_message() ], 500 );
+            }
+
+            // Set qi_invoice_no on the new invoice CPT
+            self::update_acf_or_meta( 'qi_invoice_no', $invoice_no, $invoice_post_id );
+        }
+
+        // Update the qi_wo_number relation on the invoice to include this Work Order
+        // ACF relation fields store an array of post IDs
+        $existing_relations = [];
+        if ( function_exists( 'get_field' ) ) {
+            $existing_relations = get_field( 'qi_wo_number', $invoice_post_id );
+        } else {
+            $existing_relations = get_post_meta( $invoice_post_id, 'qi_wo_number', true );
+        }
+
+        // Normalize to array
+        if ( ! is_array( $existing_relations ) ) {
+            $existing_relations = ! empty( $existing_relations ) ? [ $existing_relations ] : [];
+        }
+
+        // Extract post IDs from relation (could be WP_Post objects or IDs)
+        $relation_ids = array_filter( array_map( function( $rel ) {
+            if ( $rel instanceof WP_Post ) {
+                return $rel->ID;
+            }
+            return is_numeric( $rel ) ? (int) $rel : null;
+        }, $existing_relations ) );
+
+        // Add the current Work Order if not already in the relation
+        if ( ! in_array( $post_id, $relation_ids, true ) ) {
+            $relation_ids[] = $post_id;
+            self::update_acf_or_meta( 'qi_wo_number', $relation_ids, $invoice_post_id );
+        }
+
+        // Save wo_invoice_no on the Work Order
+        self::update_acf_or_meta( 'wo_invoice_no', $invoice_no, $post_id );
+
+        // Build the link HTML to return
+        $edit_url = get_edit_post_link( $invoice_post_id );
+        $link_html = '<a href="' . esc_url( $edit_url ) . '" class="dq-wo-invoice-link">' . esc_html( $invoice_no ) . '</a>';
+
+        wp_send_json_success( [ 'link_html' => $link_html ] );
     }
 
     /**
@@ -1057,6 +1293,24 @@ class DQ_Workorder_Admin_Table {
 
         $value = get_post_meta( $post_id, $field_name, true );
         return is_array( $value ) ? '' : (string) $value;
+    }
+
+    /**
+     * Helper: Update ACF field or post meta
+     *
+     * Checks if ACF is available and uses update_field(),
+     * otherwise falls back to update_post_meta().
+     *
+     * @param string $field_name Field name
+     * @param mixed $value Value to save
+     * @param int $post_id Post ID
+     * @return bool Whether the update was successful
+     */
+    private static function update_acf_or_meta( $field_name, $value, $post_id ) {
+        if ( function_exists( 'update_field' ) ) {
+            return (bool) update_field( $field_name, $value, $post_id );
+        }
+        return (bool) update_post_meta( $post_id, $field_name, $value );
     }
 
     /**
