@@ -1786,7 +1786,7 @@ echo '<script>
                     $user = get_user_by( 'id', $record['user_id'] );
                     if ( $user ) {
                         $edit_user_url = get_edit_user_link( $user->ID );
-                        $user_display = '<a href="' . esc_url( $edit_user_url ) . '" class="dq-payroll-modal-user-link" target="_blank">' . esc_html( $user->display_name ) . '</a>';
+                        $user_display = '<a href="' . esc_url( $edit_user_url ) . '" class="dq-payroll-modal-user-link" target="_blank" rel="noopener">' . esc_html( $user->display_name ) . '</a>';
                     }
                 }
 
