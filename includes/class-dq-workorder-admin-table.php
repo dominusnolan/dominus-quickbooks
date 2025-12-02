@@ -61,16 +61,17 @@ class DQ_Workorder_Admin_Table {
      * Removes default columns and adds custom ones per requirements:
      * 1. Work Order ID (sortable)
      * 2. Field Engineer with picture
-     * 3. Status (taxonomy)
-     * 4. QA inline toggle
-     * 5. Product ID
-     * 6. State
-     * 7. City
-     * 8. Date Dispatched (sortable)
-     * 9. Date Scheduled (sortable)
-     * 10. Date Closed by FSE (sortable)
-     * 11. Date FSR Closed in SMAX (sortable)
-     * 12. Expand link/button
+     * 3. Date Dispatched (sortable)
+     * 4. Date Scheduled (sortable)
+     * 5. Date Closed by FSE (sortable)
+     * 6. Quality Assurance (QA inline toggle)
+     * 7. Date FSR Closed in SMAX (sortable)
+     * 8. Invoice
+     * 9. Status (taxonomy)
+     * 10. Expand link/button
+     *
+     * Note: State and City are not shown as columns but remain visible
+     * in the expanded details panel (Location section).
      *
      * @param array $columns Existing columns
      * @return array Modified columns
@@ -84,19 +85,17 @@ class DQ_Workorder_Admin_Table {
 
         // Define new columns in required order
         $new_columns = [];
-        $new_columns['cb']                 = '<input type="checkbox" />';
-        $new_columns['wo_id']              = __( 'Work Order ID', 'dqqb' );
-        $new_columns['wo_field_engineer']  = __( 'Field Engineer', 'dqqb' );
-        $new_columns['wo_status']          = __( 'Status', 'dqqb' );
-        $new_columns['wo_invoice']         = __( 'Invoice', 'dqqb' );
-        $new_columns['wo_quality_assurance'] = __( 'QA', 'dqqb' );
-        $new_columns['wo_state']           = __( 'State', 'dqqb' );
-        $new_columns['wo_city']            = __( 'City', 'dqqb' );
-        $new_columns['wo_date_dispatched'] = __( 'Date Dispatched', 'dqqb' );
-        $new_columns['wo_date_scheduled']  = __( 'Date Scheduled', 'dqqb' );
-        $new_columns['wo_date_fse_closed'] = __( 'Date Closed by FSE', 'dqqb' );
-        $new_columns['wo_date_smax_closed'] = __( 'Date FSR Closed in SMAX', 'dqqb' );
-        $new_columns['wo_expand']          = __( 'Expand', 'dqqb' );
+        $new_columns['cb']                   = '<input type="checkbox" />';
+        $new_columns['wo_id']                = __( 'Work Order ID', 'dqqb' );
+        $new_columns['wo_field_engineer']    = __( 'Field Engineer', 'dqqb' );
+        $new_columns['wo_date_dispatched']   = __( 'Date Dispatched', 'dqqb' );
+        $new_columns['wo_date_scheduled']    = __( 'Date Scheduled', 'dqqb' );
+        $new_columns['wo_date_fse_closed']   = __( 'Date Closed by FSE', 'dqqb' );
+        $new_columns['wo_quality_assurance'] = __( 'Quality Assurance', 'dqqb' );
+        $new_columns['wo_date_smax_closed']  = __( 'Date FSR Closed in SMAX', 'dqqb' );
+        $new_columns['wo_invoice']           = __( 'Invoice', 'dqqb' );
+        $new_columns['wo_status']            = __( 'Status', 'dqqb' );
+        $new_columns['wo_expand']            = __( 'Expand', 'dqqb' );
 
         return $new_columns;
     }
@@ -132,14 +131,6 @@ class DQ_Workorder_Admin_Table {
 
             case 'wo_quality_assurance':
                 self::render_column_quality_assurance( $post_id );
-                break;
-
-            case 'wo_state':
-                self::render_column_state( $post_id );
-                break;
-
-            case 'wo_city':
-                self::render_column_city( $post_id );
                 break;
 
             case 'wo_date_dispatched':
@@ -786,14 +777,23 @@ class DQ_Workorder_Admin_Table {
                 background-color: #f7ff005c;
             }
 
-            /* Invoice column styles */
+            /* Invoice column styles - constrain width and prevent overflow */
+            .column-wo_invoice {
+                width: 180px;
+            }
+            .wp-list-table td.column-wo_invoice {
+                overflow: hidden;
+            }
             .dq-wo-invoice-input-wrap {
-                display: flex;
+                display: inline-flex;
                 align-items: center;
-                gap: 4px;
+                gap: 6px;
+                max-width: 100%;
+                flex-wrap: nowrap;
             }
             .dq-wo-invoice-input {
-                width: 100px;
+                flex: 1 1 auto;
+                min-width: 0;
                 padding: 3px 6px;
                 border: 1px solid #ddd;
                 border-radius: 3px;
@@ -805,6 +805,8 @@ class DQ_Workorder_Admin_Table {
                 box-shadow: 0 0 0 1px #0996a0;
             }
             .dq-wo-invoice-add-btn {
+                white-space: nowrap;
+                flex: 0 0 auto;
                 padding: 2px 8px !important;
                 font-size: 11px !important;
                 line-height: 1.4 !important;
