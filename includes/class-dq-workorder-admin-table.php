@@ -295,22 +295,17 @@ class DQ_Workorder_Admin_Table {
             return null;
         }
 
-        $query = new WP_Query( [
+        $posts = get_posts( [
             'post_type'      => 'quickbooks_invoice',
             'post_status'    => 'any',
             'fields'         => 'ids',
-            'meta_query'     => [
-                [
-                    'key'     => 'qi_invoice_no',
-                    'value'   => $invoice_no,
-                    'compare' => '='
-                ]
-            ],
+            'meta_key'       => 'qi_invoice_no',
+            'meta_value'     => $invoice_no,
             'posts_per_page' => 1
         ] );
 
-        if ( ! empty( $query->posts ) ) {
-            return (int) $query->posts[0];
+        if ( ! empty( $posts ) ) {
+            return (int) $posts[0];
         }
 
         return null;
@@ -1090,11 +1085,7 @@ class DQ_Workorder_Admin_Table {
             }
 
             // Set qi_invoice_no on the new invoice CPT
-            if ( function_exists( 'update_field' ) ) {
-                update_field( 'qi_invoice_no', $invoice_no, $invoice_post_id );
-            } else {
-                update_post_meta( $invoice_post_id, 'qi_invoice_no', $invoice_no );
-            }
+            self::update_acf_or_meta( 'qi_invoice_no', $invoice_no, $invoice_post_id );
         }
 
         // Update the qi_wo_number relation on the invoice to include this Work Order
@@ -1112,31 +1103,21 @@ class DQ_Workorder_Admin_Table {
         }
 
         // Extract post IDs from relation (could be WP_Post objects or IDs)
-        $relation_ids = [];
-        foreach ( $existing_relations as $rel ) {
+        $relation_ids = array_filter( array_map( function( $rel ) {
             if ( $rel instanceof WP_Post ) {
-                $relation_ids[] = $rel->ID;
-            } elseif ( is_numeric( $rel ) ) {
-                $relation_ids[] = (int) $rel;
+                return $rel->ID;
             }
-        }
+            return is_numeric( $rel ) ? (int) $rel : null;
+        }, $existing_relations ) );
 
         // Add the current Work Order if not already in the relation
         if ( ! in_array( $post_id, $relation_ids, true ) ) {
             $relation_ids[] = $post_id;
-            if ( function_exists( 'update_field' ) ) {
-                update_field( 'qi_wo_number', $relation_ids, $invoice_post_id );
-            } else {
-                update_post_meta( $invoice_post_id, 'qi_wo_number', $relation_ids );
-            }
+            self::update_acf_or_meta( 'qi_wo_number', $relation_ids, $invoice_post_id );
         }
 
         // Save wo_invoice_no on the Work Order
-        if ( function_exists( 'update_field' ) ) {
-            update_field( 'wo_invoice_no', $invoice_no, $post_id );
-        } else {
-            update_post_meta( $post_id, 'wo_invoice_no', $invoice_no );
-        }
+        self::update_acf_or_meta( 'wo_invoice_no', $invoice_no, $post_id );
 
         // Build the link HTML to return
         $edit_url = get_edit_post_link( $invoice_post_id );
@@ -1312,6 +1293,24 @@ class DQ_Workorder_Admin_Table {
 
         $value = get_post_meta( $post_id, $field_name, true );
         return is_array( $value ) ? '' : (string) $value;
+    }
+
+    /**
+     * Helper: Update ACF field or post meta
+     *
+     * Checks if ACF is available and uses update_field(),
+     * otherwise falls back to update_post_meta().
+     *
+     * @param string $field_name Field name
+     * @param mixed $value Value to save
+     * @param int $post_id Post ID
+     * @return bool Whether the update was successful
+     */
+    private static function update_acf_or_meta( $field_name, $value, $post_id ) {
+        if ( function_exists( 'update_field' ) ) {
+            return (bool) update_field( $field_name, $value, $post_id );
+        }
+        return (bool) update_post_meta( $post_id, $field_name, $value );
     }
 
     /**
