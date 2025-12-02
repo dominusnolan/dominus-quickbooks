@@ -27,9 +27,117 @@ class DQ_Financial_Report {
     const ACTIVITY_TRAVEL      = ['Travel Zone 1','Travel Zone 2','Travel Zone 3'];
     const ACTIVITY_TOLLS       = ['Toll', 'Meals', 'Parking'];
 
+    // Password protection constants
+    const PASSWORD_OPTION_KEY  = 'dq_financial_reports_password';
+    const PASSWORD_COOKIE_NAME = 'dq_fr_access';
+
     public static function init() {
         add_action( 'admin_menu', [ __CLASS__, 'menu' ] );
         add_action( 'admin_post_dq_financial_report_csv', [ __CLASS__, 'handle_csv' ] );
+        add_action( 'admin_post_dq_financial_report_auth', [ __CLASS__, 'handle_password_auth' ] );
+    }
+
+    /**
+     * Check if a password is set for the financial reports.
+     *
+     * @return string|false The password if set, false otherwise.
+     */
+    private static function get_password() {
+        $password = get_option( self::PASSWORD_OPTION_KEY, '' );
+        return ! empty( $password ) ? $password : false;
+    }
+
+    /**
+     * Check if the user has valid access via cookie.
+     *
+     * @return bool True if access is granted, false otherwise.
+     */
+    private static function has_valid_access() {
+        $password = self::get_password();
+        if ( ! $password ) {
+            // No password set, access is granted
+            return true;
+        }
+
+        if ( ! isset( $_COOKIE[ self::PASSWORD_COOKIE_NAME ] ) ) {
+            return false;
+        }
+
+        // Verify the cookie value matches a hash of the password
+        $cookie_value = sanitize_text_field( wp_unslash( $_COOKIE[ self::PASSWORD_COOKIE_NAME ] ) );
+        return hash_equals( wp_hash( $password ), $cookie_value );
+    }
+
+    /**
+     * Handle password authentication form submission.
+     */
+    public static function handle_password_auth() {
+        if ( ! self::user_can_view() ) {
+            wp_die( 'Insufficient permissions.' );
+        }
+
+        check_admin_referer( 'dq_fr_auth' );
+
+        $password = self::get_password();
+        $entered_password = isset( $_POST['dq_fr_password'] ) ? sanitize_text_field( wp_unslash( $_POST['dq_fr_password'] ) ) : '';
+        $redirect_page = isset( $_POST['dq_fr_redirect'] ) ? sanitize_text_field( wp_unslash( $_POST['dq_fr_redirect'] ) ) : 'dq-financial-reports';
+
+        if ( $password && hash_equals( $password, $entered_password ) ) {
+            // Set session-only cookie (expires when browser closes)
+            $cookie_value = wp_hash( $password );
+            setcookie( self::PASSWORD_COOKIE_NAME, $cookie_value, 0, COOKIEPATH, COOKIE_DOMAIN, is_ssl(), true );
+
+            wp_safe_redirect( admin_url( 'admin.php?page=' . $redirect_page ) );
+            exit;
+        }
+
+        // Password doesn't match, redirect back with error
+        wp_safe_redirect( admin_url( 'admin.php?page=' . $redirect_page . '&auth_error=1' ) );
+        exit;
+    }
+
+    /**
+     * Render the password form for protected access.
+     *
+     * @param string $page_slug The current page slug for redirect after authentication.
+     */
+    private static function render_password_form( $page_slug = 'dq-financial-reports' ) {
+        $has_error = isset( $_GET['auth_error'] ) && sanitize_text_field( wp_unslash( $_GET['auth_error'] ) ) === '1';
+
+        echo '<style>
+.dq-fr-auth-card { max-width: 400px; padding: 20px; margin-top: 20px; }
+.dq-fr-auth-card h2 { margin-top: 0; }
+.dq-fr-auth-card label { display: block; margin-bottom: 5px; font-weight: 600; }
+</style>';
+
+        echo '<div class="wrap">';
+        echo '<h1>' . esc_html__( 'Financial Reports', 'dominus-quickbooks' ) . '</h1>';
+
+        if ( $has_error ) {
+            echo '<div class="notice notice-error"><p>' . esc_html__( 'Incorrect password. Please try again.', 'dominus-quickbooks' ) . '</p></div>';
+        }
+
+        echo '<div class="card dq-fr-auth-card">';
+        echo '<h2>' . esc_html__( 'Password Required', 'dominus-quickbooks' ) . '</h2>';
+        echo '<p>' . esc_html__( 'Please enter the password to access Financial Reports.', 'dominus-quickbooks' ) . '</p>';
+
+        echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+        echo '<input type="hidden" name="action" value="dq_financial_report_auth">';
+        echo '<input type="hidden" name="dq_fr_redirect" value="' . esc_attr( $page_slug ) . '">';
+        wp_nonce_field( 'dq_fr_auth' );
+
+        echo '<p>';
+        echo '<label for="dq_fr_password">' . esc_html__( 'Password', 'dominus-quickbooks' ) . '</label>';
+        echo '<input type="password" id="dq_fr_password" name="dq_fr_password" class="regular-text" required autofocus>';
+        echo '</p>';
+
+        echo '<p class="submit">';
+        echo '<input type="submit" class="button button-primary" value="' . esc_attr__( 'Access Reports', 'dominus-quickbooks' ) . '">';
+        echo '</p>';
+
+        echo '</form>';
+        echo '</div>';
+        echo '</div>';
     }
 
     public static function user_can_view() {
@@ -111,7 +219,19 @@ class DQ_Financial_Report {
             wp_die( 'Insufficient permissions.' );
         }
 
-        $report  = isset($_GET['report']) ? sanitize_key($_GET['report']) : 'yearly';
+        // Extract report type once at the beginning
+        $report = isset($_GET['report']) ? sanitize_key($_GET['report']) : 'yearly';
+        if ( ! in_array( $report, ['monthly','quarterly','yearly'], true ) ) {
+            $report = 'yearly';
+        }
+        $page_slug = self::page_slug_for( $report );
+
+        // Check for password protection
+        if ( ! self::has_valid_access() ) {
+            self::render_password_form( $page_slug );
+            return;
+        }
+
         $year    = isset($_GET['year']) ? intval($_GET['year']) : intval(date('Y'));
         $month   = isset($_GET['month']) ? intval($_GET['month']) : intval(date('n'));
         $quarter = isset($_GET['quarter']) ? intval($_GET['quarter']) : 1;
@@ -121,7 +241,6 @@ class DQ_Financial_Report {
         if ( $year < 2000 || $year > 2100 ) $year = intval(date('Y'));
         if ( $month < 1 || $month > 12 ) $month = intval(date('n'));
         if ( $quarter < 1 || $quarter > 4 ) $quarter = 1;
-        if ( ! in_array( $report, ['monthly','quarterly','yearly'], true ) ) $report = 'yearly';
 
         $range = self::compute_date_range( $report, $year, $month, $quarter );
         $data  = self::aggregate( $range['start'], $range['end'] );
@@ -1336,6 +1455,12 @@ echo '<script>
         if ( ! self::user_can_view() ) {
             wp_die('Permission denied');
         }
+
+        // Check for password protection on CSV download
+        if ( ! self::has_valid_access() ) {
+            wp_die( 'Please authenticate first by visiting the Financial Reports page.' );
+        }
+
         check_admin_referer( 'dq_fr_csv' );
 
         $report  = isset($_GET['report']) ? sanitize_key($_GET['report']) : 'yearly';
