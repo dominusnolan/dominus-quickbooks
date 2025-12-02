@@ -547,3 +547,126 @@ You can override styles by targeting these CSS classes:
 ```
 [dq_login]
 ```
+
+---
+
+## Invoices Balance Shortcode
+
+### Basic Usage
+
+Display a public-facing table of all unpaid/overdue invoices:
+
+```
+[invoices-balance]
+```
+
+### Features
+
+- **Public Access**: No login required - data is viewable publicly (read-only)
+- **Summary Cards**: Shows "Total Overdue" and "Total Incoming" badges at the top
+- **Filter Controls**: Buttons to filter by "Show All", "Overdue", or "Incoming"
+- **Sortable Columns**: Click column headers to sort by Invoice #, Invoice Date, Due Date, or Remaining Days
+- **CSV Export**: "Download CSV" button exports filtered data in the same format as admin reports
+- **Pagination**: Handles large datasets with page navigation
+- **Responsive Design**: Works on desktop, tablet, and mobile devices
+- **Keyboard Navigation**: Fully accessible with keyboard navigation support
+- **AJAX Filtering**: Filter and sort without page reload
+- **Red/Green Theming**: Overdue invoices highlighted in red, incoming in green
+
+### Display Format
+
+The invoices balance table displays the following columns:
+
+| Column | Description |
+|--------|-------------|
+| **Invoice #** | Invoice number (`qi_invoice_no`) - links to the individual invoice page |
+| **Amount** | Total billed amount (`qi_total_billed`) with currency formatting |
+| **Balance** | Balance due (`qi_balance_due`) - highlighted in red for overdue invoices |
+| **Invoice Date** | Invoice date (`qi_invoice_date`) |
+| **Due Date** | Due date (`qi_due_date`) |
+| **Remaining Days** | Calculated days until due date, or days overdue (negative) |
+
+### Summary Cards
+
+The shortcode displays two summary cards above the table:
+
+- **Total Overdue** (red): Sum of balance due for all invoices past their due date
+- **Total Incoming** (green): Sum of balance due for all invoices not yet due
+
+### Filter Options
+
+Three filter buttons are available:
+
+- **Show All**: Display all unpaid invoices (default)
+- **Overdue**: Display only invoices past their due date
+- **Incoming**: Display only invoices not yet due
+
+### CSV Export
+
+The "Download CSV" button exports the currently filtered invoices with the following columns (matching the admin report format):
+
+1. Invoice #
+2. Amount
+3. Balance
+4. Invoice Date
+5. Due Date
+6. Remaining Days
+
+### REST API
+
+The shortcode also registers a public REST API endpoint for programmatic access:
+
+- **Endpoint**: `/wp-json/dq-quickbooks/v1/invoices-balance`
+- **Method**: GET
+- **Parameters**: 
+  - `filter` (optional): `all`, `overdue`, or `incoming`
+- **Response**: JSON with invoices array and totals
+
+CSV download endpoint:
+
+- **Endpoint**: `/wp-json/dq-quickbooks/v1/invoices-balance/csv`
+- **Method**: GET
+- **Parameters**: 
+  - `filter` (optional): `all`, `overdue`, or `incoming`
+- **Response**: CSV file download
+
+### Technical Notes
+
+- Uses the same data source as the admin financial report popup for consistency
+- No authentication required - designed for public client portals
+- Only exposes necessary invoice fields (no sensitive credentials)
+- Assets (CSS/JS) are only loaded when the shortcode is present on the page
+- All assets are namespaced under `dq-quickbooks` to avoid collisions
+
+### Styling
+
+The shortcode includes built-in styling matching the admin report popup:
+
+- Red (#dc3545) header background for the table
+- Red highlighting for overdue balances and remaining days
+- Green highlighting for incoming (on-time) invoices
+- Summary cards with red/green backgrounds
+- Responsive design with mobile-friendly layout
+
+You can override styles by targeting these CSS classes:
+
+- `.dq-invoices-balance-wrapper`: Main container
+- `.dq-ib-summary`: Summary cards container
+- `.dq-ib-summary-card.dq-ib-overdue`: Overdue total card
+- `.dq-ib-summary-card.dq-ib-incoming`: Incoming total card
+- `.dq-ib-controls`: Filter and CSV button container
+- `.dq-ib-filter-btn`: Filter buttons
+- `.dq-ib-csv-btn`: CSV download button
+- `.dq-ib-table`: Main table
+- `.dq-ib-sortable`: Sortable column headers
+- `.dq-ib-overdue-cell`: Overdue balance cells
+- `.dq-ib-days-overdue`: Overdue remaining days
+- `.dq-ib-days-remaining`: On-time remaining days
+- `.dq-ib-pagination`: Pagination controls
+
+### Example
+
+**Display unpaid invoices table on a client portal page:**
+```
+[invoices-balance]
+```

@@ -31,7 +31,19 @@ This is a framework: add order/customer syncs by calling `DQ_API` methods (see `
 = How do I display invoices on the frontend? =
 Use the shortcode `[dqqb_invoice_list]` on any page or post. It supports filters: `status="paid"`, `date_from="2024-01-01"`, `date_to="2024-12-31"`. See SHORTCODE_DOCUMENTATION.md for details.
 
+= How do I display unpaid/overdue invoices for clients? =
+Use the shortcode `[invoices-balance]` on any page. It displays a public-facing table of unpaid invoices with totals, filters, and CSV export. No login required. See SHORTCODE_DOCUMENTATION.md for details.
+
 == Changelog ==
+= 0.3.0 =
+* Add public `[invoices-balance]` shortcode for displaying unpaid/overdue invoices table
+* Includes summary badges for Total Overdue and Total Incoming
+* Filter controls (Show All, Overdue, Incoming) with AJAX filtering
+* Sortable columns for Invoice #, Invoice Date, Due Date, Remaining Days
+* CSV download matching admin report format
+* Public REST API endpoint for programmatic access
+* Red/green theming matching admin financial report popup
+
 = 0.2.1 =
 * Expand workorder table search to support partial work order ID matching; users can search using any part of the numeric ID string, e.g. '505' matches 'WO-03103505'.
 

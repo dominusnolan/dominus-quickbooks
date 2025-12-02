@@ -3,7 +3,7 @@
  * Plugin Name: Dominus QuickBooks
  * Plugin URI:  https://example.com
  * Description: Sync Work Orders (CPT) with QuickBooks Online via OAuth2.
- * Version:     0.2.0
+ * Version:     0.3.0
  * Author:      Nolan Tan
  * Requires PHP: 7.4
  * Requires at least: 6.0
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 // -----------------------------------------------------------------------------
 // Constants
 // -----------------------------------------------------------------------------
-define( 'DQQB_VERSION', '0.2.0' );
+define( 'DQQB_VERSION', '0.3.0' );
 define( 'DQQB_PATH', plugin_dir_path( __FILE__ ) );
 define( 'DQQB_URL', plugin_dir_url( __FILE__ ) );
 
@@ -65,6 +65,9 @@ require_once DQQB_PATH . 'includes/class-dq-login-redirect.php';
 // NEW: Login form shortcode for /access page
 require_once DQQB_PATH . 'includes/class-dq-login-form.php';
 
+// NEW: Public invoices balance shortcode [invoices-balance]
+require_once DQQB_PATH . 'frontend/invoices-balance/class-dq-invoices-balance.php';
+
 // -----------------------------------------------------------------------------
 // Initialize Plugin
 // -----------------------------------------------------------------------------
@@ -103,6 +106,7 @@ add_action( 'plugins_loaded', function() {
     if ( class_exists( 'DQ_Invoice_List' ) ) DQ_Invoice_List::init(); // NEW
     if ( class_exists( 'DQ_Workorder_Table' ) ) DQ_Workorder_Table::init(); // NEW
     if ( class_exists( 'DQ_Dashboard' ) ) DQ_Dashboard::init(); // NEW: Front-end dashboard
+    if ( class_exists( 'DQ_Invoices_Balance' ) ) DQ_Invoices_Balance::init(); // NEW: Public invoices balance shortcode
     
     if ( class_exists( 'DQ_Workorder_Template' ) ) DQ_Workorder_Template::init(); // NEW
     if ( class_exists( 'DQ_Login_Redirect' ) ) DQ_Login_Redirect::init(); // NEW: Login redirect handler
