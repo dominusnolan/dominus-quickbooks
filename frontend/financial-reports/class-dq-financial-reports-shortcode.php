@@ -45,6 +45,16 @@ class DQ_Financial_Reports_Shortcode {
     const REST_NAMESPACE = 'dq-financial-reports/v1';
 
     /**
+     * Default start date for queries (all time).
+     */
+    const DEFAULT_START_DATE = '2000-01-01';
+
+    /**
+     * Fallback date for sorting invoices without due dates (sort to end).
+     */
+    const FALLBACK_DUE_DATE = '9999-12-31';
+
+    /**
      * Track if assets have been enqueued.
      *
      * @var bool
@@ -312,10 +322,10 @@ class DQ_Financial_Reports_Shortcode {
 
         // Default to all time if no dates specified.
         if ( empty( $start_date ) ) {
-            $start_date = '2000-01-01';
+            $start_date = self::DEFAULT_START_DATE;
         }
         if ( empty( $end_date ) ) {
-            $end_date = date( 'Y-m-d' );
+            $end_date = current_time( 'Y-m-d' );
         }
 
         $unpaid_invoices = self::get_unpaid_invoices( $start_date, $end_date );
@@ -337,7 +347,7 @@ class DQ_Financial_Reports_Shortcode {
      */
     public static function get_unpaid_invoices( $start, $end ) {
         $unpaid  = [];
-        $today   = date( 'Y-m-d' );
+        $today   = current_time( 'Y-m-d' );
 
         $total_overdue  = 0.0;
         $total_incoming = 0.0;
@@ -419,7 +429,7 @@ class DQ_Financial_Reports_Shortcode {
                 'invoice_date'        => $invoice_date,
                 'invoice_date_sort'   => self::normalize_date( $invoice_date ),
                 'due_date'            => $due_date_raw ?: 'N/A',
-                'due_date_sort'       => $due_date ?: '9999-12-31',
+                'due_date_sort'       => $due_date ?: self::FALLBACK_DUE_DATE,
                 'remaining_days_num'  => $remaining_days_num,
                 'remaining_days_text' => $remaining_days_text,
                 'remaining_class'     => $remaining_class,
@@ -468,7 +478,7 @@ class DQ_Financial_Reports_Shortcode {
             return $raw;
         }
         $ts = strtotime( $raw );
-        return $ts ? date( 'Y-m-d', $ts ) : '';
+        return $ts ? gmdate( 'Y-m-d', $ts ) : '';
     }
 
     /**
