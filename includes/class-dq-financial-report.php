@@ -47,7 +47,7 @@ class DQ_Financial_Report {
             self::PASSWORD_OPTION_KEY,
             [
                 'type'              => 'string',
-                'sanitize_callback' => 'sanitize_text_field',
+                'sanitize_callback' => [ __CLASS__, 'sanitize_password_field' ],
                 'default'           => '',
             ]
         );
@@ -56,9 +56,34 @@ class DQ_Financial_Report {
             self::PASSWORD_OPTION_KEY,
             __( 'Financial Reports Password', 'dominus-quickbooks' ),
             [ __CLASS__, 'render_password_field' ],
-            'options-general.php',
+            'general',
             'default'
         );
+    }
+
+    /**
+     * Sanitize the password field value.
+     * If empty, preserve the existing password (to allow saving without re-entering).
+     * If the clear checkbox is checked, return empty string to remove protection.
+     *
+     * @param string $value The submitted value.
+     * @return string The sanitized value.
+     */
+    public static function sanitize_password_field( $value ) {
+        $value = sanitize_text_field( $value );
+        
+        // Check if user wants to clear the password
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verified by WordPress Settings API
+        if ( isset( $_POST[ self::PASSWORD_OPTION_KEY . '_clear' ] ) && $_POST[ self::PASSWORD_OPTION_KEY . '_clear' ] === '1' ) {
+            return '';
+        }
+        
+        // If value is empty, preserve the existing password
+        if ( $value === '' ) {
+            return get_option( self::PASSWORD_OPTION_KEY, '' );
+        }
+        
+        return $value;
     }
 
     /**
@@ -68,13 +93,23 @@ class DQ_Financial_Report {
         if ( ! current_user_can( 'manage_options' ) ) {
             return;
         }
-        $value = get_option( self::PASSWORD_OPTION_KEY, '' );
+        $has_password = ! empty( get_option( self::PASSWORD_OPTION_KEY, '' ) );
         printf(
-            '<input type="password" id="%1$s" name="%1$s" value="%2$s" class="regular-text" autocomplete="new-password" />',
+            '<input type="password" id="%1$s" name="%1$s" value="" class="regular-text" autocomplete="new-password" placeholder="%2$s" />',
             esc_attr( self::PASSWORD_OPTION_KEY ),
-            esc_attr( $value )
+            $has_password ? esc_attr__( '(password is set)', 'dominus-quickbooks' ) : ''
         );
-        echo '<p class="description">' . esc_html__( 'Set a password to protect access to Financial Reports. Leave empty to disable password protection.', 'dominus-quickbooks' ) . '</p>';
+        if ( $has_password ) {
+            // Add a checkbox to allow clearing the password
+            printf(
+                '<br /><label><input type="checkbox" name="%s_clear" value="1" /> %s</label>',
+                esc_attr( self::PASSWORD_OPTION_KEY ),
+                esc_html__( 'Clear password (remove protection)', 'dominus-quickbooks' )
+            );
+            echo '<p class="description">' . esc_html__( 'Enter a new password to change it. Leave empty to keep the current password. Check the box above to remove password protection.', 'dominus-quickbooks' ) . '</p>';
+        } else {
+            echo '<p class="description">' . esc_html__( 'Set a password to protect access to Financial Reports. Leave empty for no password protection.', 'dominus-quickbooks' ) . '</p>';
+        }
     }
 
     /**
