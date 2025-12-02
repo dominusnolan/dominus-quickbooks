@@ -1,0 +1,606 @@
+/**
+ * Financial Reports Shortcode Styles
+ *
+ * Styles for the [dq-financial-reports] shortcode frontend modal.
+ *
+ * @package DominusQuickBooks
+ * @subpackage Frontend
+ * @since 0.3.0
+ */
+
+/* ==========================================================================
+   Access Denied
+   ========================================================================== */
+
+.dq-fr-access-denied {
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 6px;
+    padding: 20px;
+    text-align: center;
+    color: #856404;
+    font-size: 14px;
+}
+
+.dq-fr-access-denied p {
+    margin: 0 0 12px;
+}
+
+.dq-fr-login-btn {
+    display: inline-block;
+    background: #006d7b;
+    color: #fff;
+    padding: 10px 24px;
+    border-radius: 4px;
+    text-decoration: none;
+    font-weight: 600;
+    transition: background 0.2s;
+}
+
+.dq-fr-login-btn:hover {
+    background: #005a66;
+    color: #fff;
+}
+
+/* ==========================================================================
+   Button Trigger
+   ========================================================================== */
+
+.dq-fr-shortcode-wrapper {
+    margin: 10px 0;
+}
+
+.dq-fr-open-modal-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: linear-gradient(135deg, #dc3545, #c82333);
+    color: #fff;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 6px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 2px 4px rgba(220, 53, 69, 0.3);
+}
+
+.dq-fr-open-modal-btn:hover {
+    background: linear-gradient(135deg, #c82333, #bd2130);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(220, 53, 69, 0.4);
+}
+
+.dq-fr-open-modal-btn:focus {
+    outline: 2px solid #dc3545;
+    outline-offset: 2px;
+}
+
+.dq-fr-open-modal-btn .dashicons {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+}
+
+/* ==========================================================================
+   Inline Summary
+   ========================================================================== */
+
+.dq-fr-inline .dq-fr-inline-summary {
+    background: #fff;
+    border: 1px solid #e1e4e8;
+    border-radius: 8px;
+    padding: 16px 20px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.dq-fr-inline-loading {
+    color: #666;
+    font-style: italic;
+    text-align: center;
+    padding: 20px;
+}
+
+.dq-fr-inline-content {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: center;
+}
+
+.dq-fr-inline-stat {
+    padding: 12px 18px;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.dq-fr-inline-stat.overdue {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.dq-fr-inline-stat.incoming {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.dq-fr-inline-stat strong {
+    display: block;
+    font-size: 20px;
+    margin-top: 4px;
+}
+
+.dq-fr-inline-view-btn {
+    margin-left: auto;
+    background: #dc3545;
+    color: #fff;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.dq-fr-inline-view-btn:hover {
+    background: #c82333;
+}
+
+/* ==========================================================================
+   Modal Overlay
+   ========================================================================== */
+
+.dq-fr-modal-overlay {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 100000;
+    overflow-y: auto;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+.dq-fr-modal-window {
+    background: #fff;
+    max-width: 1100px;
+    margin: 20px auto;
+    padding: 24px 24px 20px;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    position: relative;
+    max-height: calc(100vh - 80px);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.dq-fr-modal-close {
+    position: absolute;
+    right: 16px;
+    top: 12px;
+    font-size: 32px;
+    background: transparent;
+    border: none;
+    color: #333;
+    cursor: pointer;
+    line-height: 1;
+    padding: 4px;
+    transition: color 0.2s;
+}
+
+.dq-fr-modal-close:hover {
+    color: #c40000;
+}
+
+.dq-fr-modal-close:focus {
+    outline: 2px solid #0073aa;
+    outline-offset: 2px;
+}
+
+.dq-fr-modal-window h2 {
+    margin: 0 0 16px;
+    padding-right: 40px;
+    font-size: 22px;
+    font-weight: 600;
+    color: #333;
+}
+
+.dq-fr-modal-content {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+/* ==========================================================================
+   Loading State
+   ========================================================================== */
+
+.dq-fr-loading {
+    text-align: center;
+    padding: 40px 20px;
+    color: #666;
+    font-style: italic;
+}
+
+/* ==========================================================================
+   Modal Controls (Summary & Filters)
+   ========================================================================== */
+
+.dq-fr-modal-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #eee;
+}
+
+.dq-fr-summary {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.dq-fr-summary-item {
+    padding: 10px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.dq-fr-summary-item.overdue {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.dq-fr-summary-item.incoming {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.dq-fr-summary-item strong {
+    display: block;
+    font-size: 18px;
+    margin-top: 4px;
+}
+
+.dq-fr-filters {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.dq-fr-filters label {
+    font-weight: 600;
+    margin-right: 8px;
+    font-size: 14px;
+}
+
+.dq-fr-filter-btn {
+    padding: 6px 14px;
+    border: 1px solid #d1d5db;
+    background: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.15s;
+}
+
+.dq-fr-filter-btn:hover {
+    background: #f3f4f6;
+}
+
+.dq-fr-filter-btn:focus {
+    outline: 2px solid #0073aa;
+    outline-offset: 1px;
+}
+
+.dq-fr-filter-btn.active {
+    background: #dc3545;
+    color: #fff;
+    border-color: #dc3545;
+}
+
+.dq-fr-csv-btn {
+    padding: 8px 16px;
+    background: #28a745;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    margin-left: auto;
+    transition: background 0.2s;
+}
+
+.dq-fr-csv-btn:hover {
+    background: #218838;
+}
+
+.dq-fr-csv-btn:focus {
+    outline: 2px solid #28a745;
+    outline-offset: 2px;
+}
+
+/* ==========================================================================
+   Data Table
+   ========================================================================== */
+
+.dq-fr-table-wrapper {
+    overflow-x: auto;
+}
+
+.dq-fr-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.dq-fr-table th {
+    background: #dc3545;
+    color: #fff;
+    padding: 10px 12px;
+    font-weight: 600;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.dq-fr-table th.sortable {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    padding-right: 24px;
+}
+
+.dq-fr-table th.sortable:hover {
+    background: #b82d3c;
+}
+
+.dq-fr-table th.sortable::after {
+    content: "⇅";
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    opacity: 0.5;
+    font-size: 12px;
+}
+
+.dq-fr-table th.sortable.asc::after {
+    content: "↑";
+    opacity: 1;
+}
+
+.dq-fr-table th.sortable.desc::after {
+    content: "↓";
+    opacity: 1;
+}
+
+.dq-fr-table td {
+    border-bottom: 1px solid #eee;
+    padding: 10px 12px;
+    vertical-align: middle;
+}
+
+.dq-fr-table tr:last-child td {
+    border-bottom: none;
+}
+
+.dq-fr-table tr:hover td {
+    background: #fff8f8;
+}
+
+.dq-fr-table a {
+    color: #006d7b;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.dq-fr-table a:hover {
+    text-decoration: underline;
+}
+
+.dq-fr-balance {
+    color: #c40000;
+    font-weight: 600;
+}
+
+.dq-fr-days-overdue {
+    color: #c40000;
+    font-weight: 600;
+}
+
+.dq-fr-days-remaining {
+    color: #098400;
+    font-weight: 600;
+}
+
+.dq-fr-no-results {
+    text-align: center;
+    padding: 40px 20px;
+    color: #666;
+    font-style: italic;
+}
+
+/* ==========================================================================
+   Pagination
+   ========================================================================== */
+
+.dq-fr-pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid #eee;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.dq-fr-pagination-info {
+    font-size: 13px;
+    color: #666;
+}
+
+.dq-fr-pagination-controls {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.dq-fr-pagination-controls button {
+    padding: 6px 12px;
+    border: 1px solid #d1d5db;
+    background: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.15s;
+}
+
+.dq-fr-pagination-controls button:hover:not(:disabled) {
+    background: #f3f4f6;
+}
+
+.dq-fr-pagination-controls button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.dq-fr-pagination-controls button:focus {
+    outline: 2px solid #0073aa;
+    outline-offset: 1px;
+}
+
+.dq-fr-page-numbers {
+    display: flex;
+    gap: 4px;
+}
+
+.dq-fr-page-num {
+    padding: 6px 10px;
+    border: 1px solid #d1d5db;
+    background: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    min-width: 36px;
+    text-align: center;
+}
+
+.dq-fr-page-num:hover {
+    background: #f3f4f6;
+}
+
+.dq-fr-page-num.active {
+    background: #dc3545;
+    color: #fff;
+    border-color: #dc3545;
+}
+
+.dq-fr-page-ellipsis {
+    padding: 6px 4px;
+    color: #666;
+}
+
+/* ==========================================================================
+   Responsive Design
+   ========================================================================== */
+
+@media screen and (max-width: 768px) {
+    .dq-fr-modal-window {
+        margin: 10px;
+        padding: 16px;
+        max-height: calc(100vh - 40px);
+    }
+
+    .dq-fr-modal-window h2 {
+        font-size: 18px;
+        padding-right: 36px;
+    }
+
+    .dq-fr-modal-close {
+        font-size: 28px;
+        right: 12px;
+        top: 8px;
+    }
+
+    .dq-fr-modal-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .dq-fr-summary {
+        justify-content: center;
+    }
+
+    .dq-fr-filters {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .dq-fr-csv-btn {
+        margin-left: 0;
+        width: 100%;
+    }
+
+    .dq-fr-table {
+        font-size: 13px;
+    }
+
+    .dq-fr-table th,
+    .dq-fr-table td {
+        padding: 8px 10px;
+    }
+
+    .dq-fr-pagination {
+        flex-direction: column;
+        align-items: stretch;
+        text-align: center;
+    }
+
+    .dq-fr-pagination-controls {
+        justify-content: center;
+    }
+
+    .dq-fr-inline-content {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .dq-fr-inline-view-btn {
+        margin-left: 0;
+        width: 100%;
+    }
+}
+
+/* ==========================================================================
+   Print Styles
+   ========================================================================== */
+
+@media print {
+    .dq-fr-modal-overlay {
+        position: relative;
+        background: none;
+        padding: 0;
+    }
+
+    .dq-fr-modal-window {
+        max-width: none;
+        max-height: none;
+        margin: 0;
+        box-shadow: none;
+        border-radius: 0;
+    }
+
+    .dq-fr-modal-close,
+    .dq-fr-csv-btn,
+    .dq-fr-pagination-controls {
+        display: none;
+    }
+}

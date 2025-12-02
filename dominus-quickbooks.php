@@ -111,6 +111,7 @@ add_action( 'plugins_loaded', function() {
     if ( class_exists( 'DQ_Workorder_Template' ) ) DQ_Workorder_Template::init(); // NEW
     if ( class_exists( 'DQ_Login_Redirect' ) ) DQ_Login_Redirect::init(); // NEW: Login redirect handler
     if ( class_exists( 'DQ_Login_Form' ) ) DQ_Login_Form::init(); // NEW: Login form shortcode
+    if ( class_exists( 'DQ_Financial_Reports_Shortcode' ) ) DQ_Financial_Reports_Shortcode::init(); // NEW: Frontend financial reports shortcode
 });
 
 // -----------------------------------------------------------------------------
