@@ -86,7 +86,6 @@ class DQ_Workorder_Admin_Table {
         $new_columns['wo_field_engineer']  = __( 'Field Engineer', 'dqqb' );
         $new_columns['wo_status']          = __( 'Status', 'dqqb' );
         $new_columns['wo_quality_assurance'] = __( 'QA', 'dqqb' );
-        $new_columns['wo_product_id']      = __( 'Product ID', 'dqqb' );
         $new_columns['wo_state']           = __( 'State', 'dqqb' );
         $new_columns['wo_city']            = __( 'City', 'dqqb' );
         $new_columns['wo_date_dispatched'] = __( 'Date Dispatched', 'dqqb' );
@@ -125,10 +124,6 @@ class DQ_Workorder_Admin_Table {
 
             case 'wo_quality_assurance':
                 self::render_column_quality_assurance( $post_id );
-                break;
-
-            case 'wo_product_id':
-                self::render_column_product_id( $post_id );
                 break;
 
             case 'wo_state':
@@ -296,19 +291,6 @@ class DQ_Workorder_Admin_Table {
      */
     private static function determine_qa_key( $post_id ) {
         return 'quality_assurance';
-    }
-
-    /**
-     * Render Product ID column
-     *
-     * Uses ACF field: installed_product_id
-     *
-     * @param int $post_id Post ID
-     * @return void
-     */
-    private static function render_column_product_id( $post_id ) {
-        $value = self::get_acf_or_meta( 'installed_product_id', $post_id );
-        echo $value ? esc_html( $value ) : '<span style="color:#999;">—</span>';
     }
 
     /**
@@ -732,6 +714,11 @@ class DQ_Workorder_Admin_Table {
             @keyframes dq-wo-spin {
                 to { transform: rotate(360deg); }
             }
+
+            /* Highlight row when QA is complete */
+            .wp-list-table tr.dq-qa-done > td {
+                background-color: #f7ff005c;
+            }
         ';
     }
 
@@ -749,6 +736,15 @@ class DQ_Workorder_Admin_Table {
             jQuery(document).ready(function($) {
                 // Store loaded details to avoid repeated AJAX calls
                 var loadedDetails = {};
+
+                // Helper to sync the row class to the QA button state
+                function dqUpdateRowQaClass($btn) {
+                    var done = parseInt($btn.data("done"), 10) === 1;
+                    $btn.closest("tr").toggleClass("dq-qa-done", done);
+                }
+
+                // On initial page load, set the class for all existing QA buttons
+                $(".dq-qa-toggle").each(function() { dqUpdateRowQaClass($(this)); });
 
                 // Handle expand/collapse button click
                 $(document).on("click", ".dq-wo-expand-btn", function(e) {
@@ -843,6 +839,7 @@ class DQ_Workorder_Admin_Table {
                             $btn.toggleClass("dq-qa-checked", !!newDone).toggleClass("dq-qa-unchecked", !newDone);
                             $btn.attr("aria-label", newDone ? "' . esc_js( __( 'Quality assurance complete', 'dqqb' ) ) . '" : "' . esc_js( __( 'Quality assurance not done', 'dqqb' ) ) . '");
                             $btn.attr("title", newDone ? "' . esc_js( __( 'Quality assurance complete', 'dqqb' ) ) . '" : "' . esc_js( __( 'Quality assurance not done', 'dqqb' ) ) . '");
+                            dqUpdateRowQaClass($btn);
                         } else {
                             alert("' . esc_js( __( 'Unable to update QA status.', 'dqqb' ) ) . '");
                         }
@@ -937,11 +934,12 @@ class DQ_Workorder_Admin_Table {
     /**
      * Render HTML for expanded details section
      *
-     * Creates a grid layout with four sections:
+     * Creates a grid layout with five sections:
      * 1. Customer Information
      * 2. Leads
      * 3. Location
-     * 4. Comments
+     * 4. Product
+     * 5. Comments
      *
      * @param int $post_id Post ID
      * @return string HTML content
@@ -1004,7 +1002,16 @@ class DQ_Workorder_Admin_Table {
                 </dl>
             </div>
 
-            <!-- Section 4: Comments -->
+            <!-- Section 4: Product -->
+            <div class="dq-wo-details-section">
+                <h4><?php esc_html_e( 'Product', 'dqqb' ); ?></h4>
+                <dl>
+                    <dt><?php esc_html_e( 'Product ID', 'dqqb' ); ?></dt>
+                    <dd><?php echo esc_html( self::get_acf_or_meta( 'installed_product_id', $post_id ) ?: '—' ); ?></dd>
+                </dl>
+            </div>
+
+            <!-- Section 5: Comments -->
             <div class="dq-wo-details-section">
                 <h4><?php esc_html_e( 'Comments', 'dqqb' ); ?></h4>
                 <dl>
