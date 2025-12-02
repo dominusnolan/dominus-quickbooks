@@ -102,7 +102,13 @@ class DQ_Financial_Report {
      * @param string $page_slug The current page slug for redirect after authentication.
      */
     private static function render_password_form( $page_slug = 'dq-financial-reports' ) {
-        $has_error = isset( $_GET['auth_error'] ) && $_GET['auth_error'] === '1';
+        $has_error = isset( $_GET['auth_error'] ) && sanitize_text_field( wp_unslash( $_GET['auth_error'] ) ) === '1';
+
+        echo '<style>
+.dq-fr-auth-card { max-width: 400px; padding: 20px; margin-top: 20px; }
+.dq-fr-auth-card h2 { margin-top: 0; }
+.dq-fr-auth-card label { display: block; margin-bottom: 5px; font-weight: 600; }
+</style>';
 
         echo '<div class="wrap">';
         echo '<h1>' . esc_html__( 'Financial Reports', 'dominus-quickbooks' ) . '</h1>';
@@ -111,8 +117,8 @@ class DQ_Financial_Report {
             echo '<div class="notice notice-error"><p>' . esc_html__( 'Incorrect password. Please try again.', 'dominus-quickbooks' ) . '</p></div>';
         }
 
-        echo '<div class="card" style="max-width: 400px; padding: 20px; margin-top: 20px;">';
-        echo '<h2 style="margin-top: 0;">' . esc_html__( 'Password Required', 'dominus-quickbooks' ) . '</h2>';
+        echo '<div class="card dq-fr-auth-card">';
+        echo '<h2>' . esc_html__( 'Password Required', 'dominus-quickbooks' ) . '</h2>';
         echo '<p>' . esc_html__( 'Please enter the password to access Financial Reports.', 'dominus-quickbooks' ) . '</p>';
 
         echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
@@ -121,7 +127,7 @@ class DQ_Financial_Report {
         wp_nonce_field( 'dq_fr_auth' );
 
         echo '<p>';
-        echo '<label for="dq_fr_password" style="display: block; margin-bottom: 5px; font-weight: 600;">' . esc_html__( 'Password', 'dominus-quickbooks' ) . '</label>';
+        echo '<label for="dq_fr_password">' . esc_html__( 'Password', 'dominus-quickbooks' ) . '</label>';
         echo '<input type="password" id="dq_fr_password" name="dq_fr_password" class="regular-text" required autofocus>';
         echo '</p>';
 
@@ -213,15 +219,19 @@ class DQ_Financial_Report {
             wp_die( 'Insufficient permissions.' );
         }
 
+        // Extract report type once at the beginning
+        $report = isset($_GET['report']) ? sanitize_key($_GET['report']) : 'yearly';
+        if ( ! in_array( $report, ['monthly','quarterly','yearly'], true ) ) {
+            $report = 'yearly';
+        }
+        $page_slug = self::page_slug_for( $report );
+
         // Check for password protection
         if ( ! self::has_valid_access() ) {
-            $report = isset($_GET['report']) ? sanitize_key($_GET['report']) : 'yearly';
-            $page_slug = self::page_slug_for( $report );
             self::render_password_form( $page_slug );
             return;
         }
 
-        $report  = isset($_GET['report']) ? sanitize_key($_GET['report']) : 'yearly';
         $year    = isset($_GET['year']) ? intval($_GET['year']) : intval(date('Y'));
         $month   = isset($_GET['month']) ? intval($_GET['month']) : intval(date('n'));
         $quarter = isset($_GET['quarter']) ? intval($_GET['quarter']) : 1;
@@ -231,7 +241,6 @@ class DQ_Financial_Report {
         if ( $year < 2000 || $year > 2100 ) $year = intval(date('Y'));
         if ( $month < 1 || $month > 12 ) $month = intval(date('n'));
         if ( $quarter < 1 || $quarter > 4 ) $quarter = 1;
-        if ( ! in_array( $report, ['monthly','quarterly','yearly'], true ) ) $report = 'yearly';
 
         $range = self::compute_date_range( $report, $year, $month, $quarter );
         $data  = self::aggregate( $range['start'], $range['end'] );
