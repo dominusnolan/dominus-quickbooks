@@ -362,8 +362,8 @@ class DQ_Invoices_Balance {
                     <span class="dq-ib-summary-value" id="dq-ib-incoming-total">$<?php echo esc_html( number_format( $data['total_incoming'], 2 ) ); ?></span>
                 </div>
 
-                <div class="dq-ib-summary-card dq-ib-incoming" aria-label="Total Incoming">
-                    <span class="dq-ib-summary-label">Total Collectables</span>
+                <div class="dq-ib-summary-card dq-ib-overdue" aria-label="Total Incoming">
+                    <span class="dq-ib-summary-label">Unpaid</span>
                     <span class="dq-ib-summary-value" id="dq-ib-incoming-total">$<?php echo esc_html( number_format( $data['total_incoming'] +  $data['total_overdue'], 2 ) ); ?></span>
                 </div>
             </div>
