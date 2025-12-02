@@ -226,24 +226,21 @@ class DQ_Workorder_Admin_Table {
      * @return void
      */
     private static function render_column_status( $post_id ) {
-        $terms = get_the_terms( $post_id, 'category' );
-
-        if ( ! empty( $terms ) && ! is_wp_error( $terms ) ) {
-            // Filter terms to find ones with name 'status' (case-insensitive)
-            $status_terms = array_filter( $terms, function( $term ) {
-                return strtolower( $term->name ) === 'status';
-            } );
-
-            if ( ! empty( $status_terms ) ) {
-                $term_names = array_map( function( $term ) {
-                    return esc_html( $term->name );
-                }, $status_terms );
-                echo implode( ', ', $term_names );
-                return;
-            }
+        
+        $status_terms = get_the_terms($post_id, 'category');
+        $status_value = '';
+        if (!empty($status_terms) && !is_wp_error($status_terms)) {
+            $filtered_terms = array_filter($status_terms, function($term) {
+                return strtolower($term->name) !== 'uncategorized';
+            });
+            $status_names = array_map(function($term) {
+                return esc_html($term->name);
+            }, $filtered_terms);
+            $status_value = implode(', ', $status_names);
         }
+        
+        echo $status_value;
 
-        echo '<span style="color:#999;">—</span>';
     }
 
     /**
