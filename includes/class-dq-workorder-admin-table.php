@@ -77,6 +77,7 @@ class DQ_Workorder_Admin_Table {
 
         // Define new columns in required order
         $new_columns = [];
+        $new_columns['cb']                = '<input type="checkbox" />';
         $new_columns['wo_id']             = __( 'Work Order ID', 'dqqb' );
         $new_columns['wo_field_engineer'] = __( 'Field Engineer', 'dqqb' );
         $new_columns['wo_status']         = __( 'Status', 'dqqb' );
@@ -101,6 +102,10 @@ class DQ_Workorder_Admin_Table {
      */
     public static function column_content( $column, $post_id ) {
         switch ( $column ) {
+            case 'cb':
+                echo '<input type="checkbox" name="post[]" value="' . esc_attr( $post_id ) . '" />';
+                break;
+
             case 'wo_id':
                 self::render_column_wo_id( $post_id );
                 break;
@@ -215,22 +220,30 @@ class DQ_Workorder_Admin_Table {
     /**
      * Render Status column from taxonomy
      *
-     * Uses the 'status' taxonomy for workorders.
+     * Uses the 'category' taxonomy and filters for term(s) whose name is 'status'.
      *
      * @param int $post_id Post ID
      * @return void
      */
     private static function render_column_status( $post_id ) {
-        $terms = get_the_terms( $post_id, 'status' );
+        $terms = get_the_terms( $post_id, 'category' );
 
         if ( ! empty( $terms ) && ! is_wp_error( $terms ) ) {
-            $term_names = array_map( function( $term ) {
-                return esc_html( $term->name );
-            }, $terms );
-            echo implode( ', ', $term_names );
-        } else {
-            echo '<span style="color:#999;">—</span>';
+            // Filter terms to find ones with name 'status' (case-insensitive)
+            $status_terms = array_filter( $terms, function( $term ) {
+                return strtolower( $term->name ) === 'status';
+            } );
+
+            if ( ! empty( $status_terms ) ) {
+                $term_names = array_map( function( $term ) {
+                    return esc_html( $term->name );
+                }, $status_terms );
+                echo implode( ', ', $term_names );
+                return;
+            }
         }
+
+        echo '<span style="color:#999;">—</span>';
     }
 
     /**
