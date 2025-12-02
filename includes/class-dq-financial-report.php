@@ -1614,16 +1614,26 @@ echo '<script>
             // Empty row separator
             fputcsv( $out, [] );
             fputcsv( $out, ['--- Payroll Deductions ---'] );
-            fputcsv( $out, ['Date', 'Amount'] );
+            fputcsv( $out, ['Date', 'Amount', 'Assigned To'] );
 
             foreach ( $payroll_records as $record ) {
+                // Get assigned user display name
+                $assigned_to = 'Unassigned';
+                if ( isset( $record['user_id'] ) && $record['user_id'] > 0 ) {
+                    $user = get_user_by( 'id', $record['user_id'] );
+                    if ( $user ) {
+                        $assigned_to = $user->display_name;
+                    }
+                }
+                
                 fputcsv( $out, [
                     $record['date'],
                     number_format($record['amount'],2,'.',''),
+                    $assigned_to,
                 ] );
             }
 
-            fputcsv( $out, ['Total Payroll', number_format($payroll_total,2,'.','') ] );
+            fputcsv( $out, ['Total Payroll', number_format($payroll_total,2,'.',''), '' ] );
         }
 
         // Add net profit after payroll
@@ -1636,14 +1646,18 @@ echo '<script>
     }
 
     /**
-     * Render payroll management section (form + records table).
+     * Render payroll management section (form + records table + modal).
      */
     private static function render_payroll_section( $report, $year, $month, $quarter, $range ) {
         echo '<div class="dq-payroll-section" style="margin-top:30px;">';
         echo '<h2>Payroll Management</h2>';
 
-        // Render add form (admin only - handled inside the method)
+        // Render add form, records table, and modal (admin only - handled inside the methods)
         if ( class_exists( 'DQ_Payroll' ) ) {
+            // Render the Manage Payroll button with modal
+            DQ_Payroll::render_modal( $report, $year, $month, $quarter, $range );
+            
+            // Also render inline form and table for convenience
             DQ_Payroll::render_add_form( $report, $year, $month, $quarter );
             DQ_Payroll::render_records_table( $range['start'], $range['end'] );
         } else {
