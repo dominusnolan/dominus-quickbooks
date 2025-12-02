@@ -46,6 +46,8 @@ require_once DQQB_PATH . 'includes/class-dq-workorder-timeline.php';
 require_once DQQB_PATH . 'includes/class-dq-workorder-template.php';
 // NEW: Workorder CPT admin list table customization
 require_once DQQB_PATH . 'includes/class-dq-workorder-admin-table.php';
+// NEW: Workorder QA batch operations and WP-CLI command
+require_once DQQB_PATH . 'includes/class-dq-workorder-qa-batch.php';
 
 // NEW: Workorder single template fallback (adds single-invoice.php front-end)
 require_once DQQB_PATH . 'includes/class-qi-invoice-template.php';
@@ -112,6 +114,7 @@ add_action( 'plugins_loaded', function() {
     if ( class_exists( 'DQ_Invoices_Balance' ) ) DQ_Invoices_Balance::init(); // NEW: Public invoices balance shortcode
     
     if ( class_exists( 'DQ_Workorder_Template' ) ) DQ_Workorder_Template::init(); // NEW
+    if ( class_exists( 'DQ_Workorder_QA_Batch' ) ) DQ_Workorder_QA_Batch::init(); // NEW: Workorder QA batch operations
     if ( class_exists( 'DQ_Login_Redirect' ) ) DQ_Login_Redirect::init(); // NEW: Login redirect handler
     if ( class_exists( 'DQ_Login_Form' ) ) DQ_Login_Form::init(); // NEW: Login form shortcode
     if ( class_exists( 'DQ_Financial_Reports_Shortcode' ) ) DQ_Financial_Reports_Shortcode::init(); // NEW: Frontend financial reports shortcode

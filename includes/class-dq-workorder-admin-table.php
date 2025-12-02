@@ -270,52 +270,31 @@ class DQ_Workorder_Admin_Table {
     }
 
     /**
-     * Try common QA keys to determine if QA is done.
-     * Adjust order or pin to your canonical key if needed.
+     * Check if quality_assurance is done.
+     * Uses canonical ACF true/false field 'quality_assurance'.
      *
-     * @param int $post_id
-     * @return bool
+     * @param int $post_id Post ID.
+     * @return bool True if QA is done.
      */
-     private static function is_quality_assurance_done( $post_id ) {
+    public static function is_quality_assurance_done( $post_id ) {
         if ( function_exists( 'get_field' ) ) {
             $val = get_field( 'quality_assurance', $post_id );
-            // ACF true/false returns 1 or 0 (or falsey empty)
-            return ( $val === 1 || $val === '1' );
+            // ACF true/false returns 1, '1', or true (boolean)
+            return ( $val === 1 || $val === '1' || $val === true );
         }
         // Fallback to meta if ACF not loaded
         $raw = get_post_meta( $post_id, 'quality_assurance', true );
-        return ( $raw === '1' || $raw === 1 );
+        return ( $raw === '1' || $raw === 1 || $raw === true );
     }
 
     /**
-     * Decide which meta/ACF key to use for updating QA.
-     * Prefers an existing ACF field or existing meta, else falls back to "quality_assurance".
+     * Get the canonical meta key for QA field.
+     * Uses only 'quality_assurance' as the canonical ACF true/false field.
      *
-     * @param int $post_id
-     * @return string
+     * @param int $post_id Post ID (unused, kept for compatibility).
+     * @return string The canonical field key.
      */
     private static function determine_qa_key( $post_id ) {
-        $candidates = [ 'quality_assurance', 'wo_quality_assurance', 'qa_done', 'quality_assurance_done' ];
-
-        // Prefer an actual ACF field if present
-        if ( function_exists( 'get_field_object' ) ) {
-            foreach ( $candidates as $key ) {
-                $obj = get_field_object( $key, $post_id );
-                if ( $obj && is_array( $obj ) ) {
-                    return $key;
-                }
-            }
-        }
-
-        // Otherwise prefer an existing meta key with any value (including "0")
-        foreach ( $candidates as $key ) {
-            $meta = get_post_meta( $post_id, $key, true );
-            if ( $meta !== '' ) {
-                return $key;
-            }
-        }
-
-        // Default
         return 'quality_assurance';
     }
 
