@@ -547,3 +547,165 @@ You can override styles by targeting these CSS classes:
 ```
 [dq_login]
 ```
+
+---
+
+## Financial Reports Shortcode
+
+### Basic Usage
+
+Display a button that opens the unpaid invoices modal on any page or post:
+
+```
+[dq-financial-reports]
+```
+
+### Features
+
+- **Popup Modal**: Same UI as the admin Financial Reports unpaid invoices modal
+- **Summary Stats**: Shows Total Overdue and Total Incoming amounts
+- **Filter Buttons**: Show All, Overdue, or Incoming invoices
+- **Sortable Columns**: Click column headers to sort by Invoice Date, Due Date, or Remaining Days
+- **Pagination**: Navigate through large invoice lists (50 per page)
+- **CSV Download**: Export currently filtered data to CSV file
+- **REST API**: Secure nonce-protected endpoint for fetching data client-side
+- **Accessibility**: Focus trap in modal, ESC to close, screen reader friendly
+- **Mobile Responsive**: Works on all device sizes
+- **Capability Check**: Only users with `view_financial_reports` or `manage_options` capability can view
+
+### Shortcode Attributes
+
+| Attribute | Values | Default | Description |
+|-----------|--------|---------|-------------|
+| `button_text` | string | "View Unpaid Invoices" | Custom text for the trigger button |
+| `inline` | `true` or `false` | `false` | When `true`, shows inline summary instead of just button |
+| `class` | string | empty | Additional CSS class(es) for the wrapper |
+
+#### Custom Button Text
+
+```
+[dq-financial-reports button_text="Check Outstanding Balances"]
+```
+
+#### Inline Summary Mode
+
+Show a summary card with totals directly on the page:
+
+```
+[dq-financial-reports inline="true"]
+```
+
+This renders the Total Overdue and Total Incoming amounts inline with a "View Details" button to open the full modal.
+
+#### Custom CSS Class
+
+```
+[dq-financial-reports class="my-custom-class"]
+```
+
+### Permission Requirements
+
+The shortcode checks user permissions before displaying any data:
+
+- **Logged-in users**: Must have `view_financial_reports` capability or be an administrator (`manage_options`)
+- **Logged-out users**: Shown a login prompt with a link to the login page
+
+The `view_financial_reports` capability is automatically granted to:
+- Administrators
+- Engineer role (custom role added by this plugin)
+
+### Display Format
+
+The modal displays an interactive data table with the following columns:
+
+| Column | Description |
+|--------|-------------|
+| **Invoice #** | Invoice number linked to the invoice page |
+| **Amount** | Total billed amount (`qi_total_billed`) |
+| **Balance** | Balance due amount (`qi_balance_due`) in red |
+| **Invoice Date** | Date invoice was created (`qi_invoice_date`) |
+| **Due Date** | Payment due date (`qi_due_date`) |
+| **Remaining Days** | Days until due (green) or days overdue (red) |
+
+### Filters
+
+The modal includes three filter buttons:
+
+- **Show All**: Display all unpaid invoices
+- **Overdue**: Only invoices past due date (red)
+- **Incoming**: Only invoices not yet due (green)
+
+### Sorting
+
+Click any sortable column header to sort:
+- Click once for ascending order (↑)
+- Click again for descending order (↓)
+
+Sortable columns:
+- Invoice Date
+- Due Date
+- Remaining Days
+
+### CSV Export
+
+The "Download CSV" button exports the currently filtered and sorted data to a CSV file with these columns:
+- Invoice #
+- Amount
+- Balance
+- Invoice Date
+- Due Date
+- Remaining Days
+
+### Technical Notes
+
+- Uses WordPress REST API with nonce verification for secure data fetching
+- REST endpoint: `/wp-json/dq-financial-reports/v1/unpaid-invoices`
+- Assets (CSS/JS) only load on pages where shortcode is used
+- Data fetched via AJAX on modal open (no page reload)
+- Matches CSV format from admin Financial Reports page
+- Works with ACF fields (falls back to post meta):
+  - `qi_invoice_no`: Invoice number
+  - `qi_invoice_date`: Invoice date
+  - `qi_due_date`: Due date
+  - `qi_total_billed`: Total billed amount
+  - `qi_balance_due`: Balance due amount
+
+### Styling
+
+The shortcode includes built-in styling matching the admin modal. You can override styles by targeting these CSS classes:
+
+- `.dq-fr-shortcode-wrapper`: Main container
+- `.dq-fr-open-modal-btn`: Trigger button
+- `.dq-fr-modal-overlay`: Modal backdrop
+- `.dq-fr-modal-window`: Modal container
+- `.dq-fr-modal-content`: Modal content area
+- `.dq-fr-summary`: Summary stats container
+- `.dq-fr-summary-item`: Individual stat card
+- `.dq-fr-filters`: Filter buttons container
+- `.dq-fr-filter-btn`: Filter button
+- `.dq-fr-csv-btn`: CSV download button
+- `.dq-fr-table`: Data table
+- `.dq-fr-pagination`: Pagination container
+- `.dq-fr-access-denied`: Access denied message
+
+### Examples
+
+**Show button with default text:**
+```
+[dq-financial-reports]
+```
+
+**Show button with custom text:**
+```
+[dq-financial-reports button_text="Outstanding Invoices"]
+```
+
+**Show inline summary with quick stats:**
+```
+[dq-financial-reports inline="true"]
+```
+
+**Combine inline mode with custom class:**
+```
+[dq-financial-reports inline="true" class="dashboard-widget"]
+```
