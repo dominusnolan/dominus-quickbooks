@@ -408,12 +408,12 @@ class DQ_Workorder_Template {
             }
             $value = $sanitized_email;
         } elseif ( $field === 'wo_state' ) {
-            // State: validate against US states list, store uppercase code, return full name as label
-            $value = strtoupper( sanitize_text_field( $value ) );
+            // State: validate against US states list (full names), store full name
+            $value = sanitize_text_field( $value );
             $us_states = self::get_us_states();
             // Allow empty value to clear the field
             if ( $value !== '' && ! array_key_exists( $value, $us_states ) ) {
-                wp_send_json_error( 'Invalid US state code.' );
+                wp_send_json_error( 'Invalid US state name.' );
             }
             // Set label to full state name
             if ( $value !== '' && isset( $us_states[ $value ] ) ) {
