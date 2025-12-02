@@ -66,15 +66,22 @@ class DQ_Financial_Report {
      * If empty, preserve the existing password (to allow saving without re-entering).
      * If the clear checkbox is checked, return empty string to remove protection.
      *
+     * Note: This callback is invoked by the WordPress Settings API which handles
+     * nonce verification before calling sanitize callbacks.
+     *
      * @param string $value The submitted value.
      * @return string The sanitized value.
      */
     public static function sanitize_password_field( $value ) {
         $value = sanitize_text_field( $value );
         
-        // Check if user wants to clear the password
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verified by WordPress Settings API
-        if ( isset( $_POST[ self::PASSWORD_OPTION_KEY . '_clear' ] ) && $_POST[ self::PASSWORD_OPTION_KEY . '_clear' ] === '1' ) {
+        // Check if user wants to clear the password via the clear checkbox
+        // The Settings API verifies nonces before this callback is invoked
+        $clear_key = self::PASSWORD_OPTION_KEY . '_clear';
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verified by WordPress Settings API before sanitize callback
+        $should_clear = isset( $_POST[ $clear_key ] ) && sanitize_text_field( wp_unslash( $_POST[ $clear_key ] ) ) === '1';
+        
+        if ( $should_clear ) {
             return '';
         }
         
@@ -95,7 +102,7 @@ class DQ_Financial_Report {
         }
         $has_password = ! empty( get_option( self::PASSWORD_OPTION_KEY, '' ) );
         printf(
-            '<input type="password" id="%1$s" name="%1$s" value="" class="regular-text" autocomplete="new-password" placeholder="%2$s" />',
+            '<input type="password" id="%1$s" name="%1$s" value="" class="regular-text" autocomplete="off" placeholder="%2$s" />',
             esc_attr( self::PASSWORD_OPTION_KEY ),
             $has_password ? esc_attr__( '(password is set)', 'dominus-quickbooks' ) : ''
         );
