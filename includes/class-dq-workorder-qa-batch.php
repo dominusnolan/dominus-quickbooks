@@ -78,13 +78,13 @@ class DQ_Workorder_QA_Batch {
 	 * @return void
 	 */
 	public static function handle_batch_action() {
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Nonce verified below
-		if ( ! isset( $_REQUEST['dq_mark_qa_done'] ) || '1' !== $_REQUEST['dq_mark_qa_done'] ) {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verified below
+		if ( ! isset( $_POST['dq_mark_qa_done'] ) || '1' !== $_POST['dq_mark_qa_done'] ) {
 			return;
 		}
 
 		// Verify nonce.
-		$nonce = isset( $_REQUEST['dq_qa_batch_nonce'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['dq_qa_batch_nonce'] ) ) : '';
+		$nonce = isset( $_POST['dq_qa_batch_nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['dq_qa_batch_nonce'] ) ) : '';
 		if ( ! wp_verify_nonce( $nonce, self::NONCE_ACTION ) ) {
 			wp_die( esc_html__( 'Invalid security token. Please try again.', 'dqqb' ) );
 		}
@@ -216,11 +216,16 @@ class DQ_Workorder_QA_Batch {
 
 	/**
 	 * Check if quality_assurance is done.
+	 * Delegates to DQ_Workorder_Admin_Table for consistent logic.
 	 *
 	 * @param int $post_id Post ID.
 	 * @return bool True if QA is done.
 	 */
 	private static function is_quality_assurance_done( $post_id ) {
+		if ( class_exists( 'DQ_Workorder_Admin_Table' ) ) {
+			return DQ_Workorder_Admin_Table::is_quality_assurance_done( $post_id );
+		}
+		// Fallback if class not loaded (unlikely).
 		if ( function_exists( 'get_field' ) ) {
 			$val = get_field( 'quality_assurance', $post_id );
 			return ( 1 === $val || '1' === $val || true === $val );
