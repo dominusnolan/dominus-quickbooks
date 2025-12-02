@@ -359,6 +359,32 @@ class DQ_Payroll {
     }
 
     /**
+     * Render a user dropdown for payroll assignment.
+     *
+     * @param string $name      The name attribute for the select element.
+     * @param int    $selected  The currently selected user ID.
+     * @return string HTML for the dropdown.
+     */
+    public static function render_user_dropdown( $name, $selected = 0 ) {
+        $users = get_users( [
+            'orderby' => 'display_name',
+            'order'   => 'ASC',
+        ] );
+
+        $html = '<select name="' . esc_attr( $name ) . '" style="padding:6px 10px;border:1px solid #ccc;border-radius:4px;min-width:150px;">';
+        $html .= '<option value="0"' . selected( $selected, 0, false ) . '>— Unassigned —</option>';
+
+        foreach ( $users as $user ) {
+            $html .= '<option value="' . esc_attr( $user->ID ) . '"' . selected( $selected, $user->ID, false ) . '>';
+            $html .= esc_html( $user->display_name );
+            $html .= '</option>';
+        }
+
+        $html .= '</select>';
+        return $html;
+    }
+
+    /**
      * Render payroll records table for the given date range.
      *
      * @param string $start Start date (Y-m-d).
