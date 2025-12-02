@@ -740,8 +740,9 @@ class DQ_Financial_Report {
             // Controls: Summary stats, filters, CSV button
             echo '<div class="dq-fr-unpaid-modal-controls">';
             echo '  <div class="dq-fr-unpaid-summary">';
-            echo '    <div class="dq-fr-unpaid-summary-item overdue">Total Overdue<strong id="dq-unpaid-overdue-total">' . self::money($total_overdue) . '</strong></div>';
-            echo '    <div class="dq-fr-unpaid-summary-item incoming">Total Incoming<strong id="dq-unpaid-incoming-total">' . self::money($total_incoming) . '</strong></div>';
+            echo '    <div class="dq-fr-unpaid-summary-item overdue">Overdue<strong id="dq-unpaid-overdue-total">' . self::money($total_overdue) . '</strong></div>';
+            echo '    <div class="dq-fr-unpaid-summary-item incoming">Not due yet<strong id="dq-unpaid-incoming-total">' . self::money($total_incoming) . '</strong></div>';
+            echo '    <div class="dq-fr-unpaid-summary-item incoming">Total Collectables<strong id="dq-unpaid-incoming-total">' . self::money($total_incoming + $total_overdue) . '</strong></div>';
             echo '  </div>';
             echo '  <div class="dq-fr-unpaid-filters">';
             echo '    <label>Filter:</label>';
