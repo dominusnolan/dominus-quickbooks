@@ -24,7 +24,7 @@ class DQ_Invoice {
             $customer_email = get_field( 'wo_customer_email', $post_id );
         }
         if ( empty( $customer_email ) ) {
-            $customer_email = 'emdMillipore@ecn-trading.com';
+            $customer_email = 'emdMillipore@milaymechanical.com';
         }
 
         // --- Fetch or create customer in QBO --- //
