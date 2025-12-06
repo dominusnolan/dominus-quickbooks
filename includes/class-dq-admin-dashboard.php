@@ -85,12 +85,25 @@ class DQ_Admin_Dashboard
         $page = isset($_GET['dashboard_page']) ? max(1, intval($_GET['dashboard_page'])) : 1;
         $workorders_data = self::get_dashboard_workorders($page);
 
+        // Prepare action URLs
+        $manage_workorders_url = admin_url('edit.php?post_type=workorder');
+        // Import from SMAX: admin page placeholder (create page/handler later)
+        $import_smax_url = admin_url('admin.php?page=dq-import-smax');
+        $manage_invoices_url = admin_url('edit.php?post_type=quickbooks_invoice');
+
         echo '<div class="wrap dq-admin-dashboard-wrap">';
         echo '<h1>Dashboard</h1>';
 
         // Work Orders Summary Section
         echo '<div class="dq-admin-dashboard-section">';
         echo '<h2>Work Orders Summary</h2>';
+
+        // Action buttons (Manage / Import / Invoices)
+        echo '<div class="dq-admin-actions" style="margin-bottom:16px;">';
+        echo '<a href="' . esc_url($manage_workorders_url) . '" class="button">Manage Work Orders</a> ';
+        echo '<a href="' . esc_url($import_smax_url) . '" class="button">Import Work Orders from SMAX</a> ';
+        echo '<a href="' . esc_url($manage_invoices_url) . '" class="button">Manage Invoices</a>';
+        echo '</div>';
 
         // Summary Cards
         echo '<div class="dq-summary-cards">';
