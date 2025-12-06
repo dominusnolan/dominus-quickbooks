@@ -60,6 +60,9 @@ require_once DQQB_PATH . 'includes/class-dq-workorder-table.php';
 // NEW: Front-end admin dashboard
 require_once DQQB_PATH . 'includes/class-dq-dashboard.php';
 
+// NEW: WordPress Admin dashboard with Work Orders Summary
+require_once DQQB_PATH . 'includes/class-dq-admin-dashboard.php';
+
 // NEW: Login redirect handler (redirects wp-login.php and wp-admin to /access)
 require_once DQQB_PATH . 'includes/class-dq-login-redirect.php';
 
@@ -110,6 +113,7 @@ add_action( 'plugins_loaded', function() {
     if ( class_exists( 'DQ_Invoice_List' ) ) DQ_Invoice_List::init(); // NEW
     if ( class_exists( 'DQ_Workorder_Table' ) ) DQ_Workorder_Table::init(); // NEW
     if ( class_exists( 'DQ_Dashboard' ) ) DQ_Dashboard::init(); // NEW: Front-end dashboard
+    if ( class_exists( 'DQ_Admin_Dashboard' ) ) DQ_Admin_Dashboard::init(); // NEW: Admin dashboard with Work Orders Summary
     if ( class_exists( 'DQ_Invoices_Balance' ) ) DQ_Invoices_Balance::init(); // NEW: Public invoices balance shortcode
     
     if ( class_exists( 'DQ_Workorder_Template' ) ) DQ_Workorder_Template::init(); // NEW
