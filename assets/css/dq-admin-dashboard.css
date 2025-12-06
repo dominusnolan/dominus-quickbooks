@@ -1,0 +1,258 @@
+/**
+ * DQ Admin Dashboard Styles
+ * WordPress Admin dashboard for Dominus QuickBooks
+ * Matches frontend dashboard design
+ */
+
+/* Base wrapper */
+.dq-admin-dashboard-wrap {
+    background: #fff;
+    padding: 0 !important;
+}
+
+.dq-admin-dashboard-wrap h1 {
+    margin: 0 0 24px 0;
+    font-size: 23px;
+    font-weight: 400;
+    line-height: 29px;
+    padding: 0;
+}
+
+/* Dashboard Section */
+.dq-admin-dashboard-section {
+    background: #f5f7fa;
+    border-radius: 8px;
+    padding: 30px;
+    margin-top: 20px;
+}
+
+.dq-admin-dashboard-section h2 {
+    margin: 0 0 24px 0;
+    font-size: 20px;
+    font-weight: 600;
+    color: #1a1a2e;
+}
+
+.dq-admin-dashboard-section h3 {
+    margin: 30px 0 16px 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #333;
+}
+
+/* Summary Cards */
+.dq-summary-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.dq-summary-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dq-summary-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.dq-summary-card .card-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.dq-summary-card .card-icon .dashicons {
+    font-size: 28px;
+    width: 28px;
+    height: 28px;
+    color: #fff;
+}
+
+.dq-card-open .card-icon {
+    background: linear-gradient(135deg, #4ecdc4 0%, #2eb8b0 100%);
+}
+
+.dq-card-scheduled .card-icon {
+    background: linear-gradient(135deg, #667eea 0%, #5a67d8 100%);
+}
+
+.dq-card-closed .card-icon {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.dq-summary-card .card-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.dq-summary-card .card-count {
+    font-size: 32px;
+    font-weight: 700;
+    color: #1a1a2e;
+    line-height: 1.1;
+}
+
+.dq-summary-card .card-label {
+    font-size: 14px;
+    color: #666;
+    margin-top: 4px;
+}
+
+/* Work Orders Section */
+.dq-workorders-section {
+    background: #fff;
+    border-radius: 8px;
+    padding: 20px;
+}
+
+/* Dashboard Table */
+.dq-dashboard-table {
+    background: #fff;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.dq-dashboard-table th {
+    background: #0996a0 !important;
+    color: #fff !important;
+    padding: 14px 16px !important;
+    text-align: left !important;
+    font-weight: 600 !important;
+    font-size: 14px !important;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border: none !important;
+}
+
+.dq-dashboard-table td {
+    padding: 14px 16px !important;
+    font-size: 14px;
+    color: #333;
+    vertical-align: middle;
+    border-top: 1px solid #f0f0f0 !important;
+    border-bottom: none !important;
+}
+
+.dq-dashboard-table tbody tr:hover td {
+    background: #f8fafb !important;
+}
+
+.dq-dashboard-table a {
+    color: #0996a0;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.dq-dashboard-table a:hover {
+    text-decoration: underline;
+    color: #077a82;
+}
+
+/* Engineer cell with avatar */
+.dq-engineer-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.dq-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #e8e8e8;
+}
+
+/* Pagination */
+.dq-dashboard-pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    margin-top: 24px;
+    flex-wrap: wrap;
+}
+
+.dq-dashboard-pagination a,
+.dq-dashboard-pagination span {
+    display: inline-block;
+    padding: 8px 14px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    text-decoration: none;
+    color: #333;
+    background: #fff;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.dq-dashboard-pagination a:hover {
+    background: #0996a0;
+    color: #fff;
+    border-color: #0996a0;
+}
+
+.dq-dashboard-pagination .current {
+    background: #0996a0;
+    color: #fff;
+    border-color: #0996a0;
+    font-weight: 600;
+}
+
+.dq-dashboard-pagination .disabled {
+    opacity: 0.4;
+    pointer-events: none;
+    cursor: not-allowed;
+}
+
+.dq-dashboard-pagination .ellipsis {
+    border: none;
+    background: transparent;
+    color: #888;
+    padding: 8px 4px;
+}
+
+/* Empty state */
+.dq-empty-state {
+    padding: 60px 40px;
+    text-align: center;
+    color: #888;
+    font-size: 16px;
+    background: #fff;
+    border-radius: 8px;
+    font-style: italic;
+}
+
+/* Responsive styles */
+@media (max-width: 782px) {
+    .dq-admin-dashboard-section {
+        padding: 20px 15px;
+    }
+    
+    .dq-summary-cards {
+        grid-template-columns: 1fr;
+    }
+    
+    .dq-dashboard-table {
+        display: block;
+        overflow-x: auto;
+    }
+    
+    .dq-dashboard-table th,
+    .dq-dashboard-table td {
+        white-space: nowrap;
+        padding: 12px 10px !important;
+    }
+}
