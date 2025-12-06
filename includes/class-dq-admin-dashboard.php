@@ -87,8 +87,8 @@ class DQ_Admin_Dashboard
 
         // Prepare action URLs
         $manage_workorders_url = admin_url('edit.php?post_type=workorder');
-        // Import from SMAX: admin page placeholder (create page/handler later)
-        $import_smax_url = admin_url('admin.php?page=dq-import-smax');
+        // Import from SMAX: external SMAX import manager page
+        $import_smax_url = 'https://milaymechanical.com/wp-admin/admin.php?page=pmxi-admin-manage';
         $manage_invoices_url = admin_url('edit.php?post_type=quickbooks_invoice');
 
         echo '<div class="wrap dq-admin-dashboard-wrap">';
