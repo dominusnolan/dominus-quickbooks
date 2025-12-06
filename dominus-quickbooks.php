@@ -199,3 +199,18 @@ if ( defined('WP_DEBUG' ) && WP_DEBUG ) {
         echo '<!-- Dominus QuickBooks v' . esc_html( DQQB_VERSION ) . ' loaded -->';
     });
 }
+
+
+// Add this to your plugin init or a file loaded very early for admin requests.
+add_action('admin_init', function() {
+    // Only redirect the main admin dashboard index
+    if (
+        is_admin() && 
+        isset($_SERVER['SCRIPT_NAME']) && 
+        (strpos($_SERVER['SCRIPT_NAME'], '/wp-admin/index.php') !== false) &&
+        empty($_GET['page']) // Prevent infinite redirect
+    ) {
+        wp_safe_redirect(admin_url('admin.php?page=dq-admin-dashboard'));
+        exit;
+    }
+});
