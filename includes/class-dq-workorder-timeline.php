@@ -313,16 +313,10 @@ class DQ_Workorder_Timeline
 
     private static function normalize_date($raw_date)
     {
+        // Use the centralized timezone-aware helper function
         if (empty($raw_date) || !is_scalar($raw_date)) return null;
-        $raw_date = trim((string) $raw_date);
-        $timestamp = strtotime($raw_date);
-        if ($timestamp !== false) return date('Y-m-d', $timestamp);
-        $formats = ['Y-m-d', 'Y-m-d H:i:s', 'Y-m-d H:i', 'm/d/Y', 'd-m-Y', 'd/m/Y', 'n/j/Y'];
-        foreach ($formats as $format) {
-            $date = DateTime::createFromFormat($format, $raw_date);
-            if ($date && $date->format($format) === $raw_date) return $date->format('Y-m-d');
-        }
-        return null;
+        $normalized = dqqb_normalize_date_for_storage($raw_date);
+        return !empty($normalized) ? $normalized : null;
     }
 
     /**
@@ -481,7 +475,8 @@ class DQ_Workorder_Timeline
             $side = $i % 2 == 0 ? 'right' : 'left';
             $color = esc_attr($step['color']);
             $emoji = esc_html($step['emoji']);
-            $date = $step['has_date'] ? date('m/d/Y', strtotime($step['normalized'])) : '';
+            // Display date in site timezone using wp_date()
+            $date = $step['has_date'] ? wp_date('m/d/Y', dqqb_parse_date_for_comparison($step['normalized'])) : '';
 
             $output .= '<div class="dq-vtl-step ' . $side . '">';
 
