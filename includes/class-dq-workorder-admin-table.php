@@ -1352,26 +1352,13 @@ class DQ_Workorder_Admin_Table {
      * Helper: Format date for display
      *
      * Handles various date formats and returns a consistent display format.
+     * Uses the new timezone-aware helper function.
      *
      * @param string $date_value Raw date value
      * @return string Formatted date or dash for empty/invalid
      */
     private static function format_date_display( $date_value ) {
-        if ( empty( $date_value ) ) {
-            return '<span style="color:#999;">—</span>';
-        }
-
-        // Clean up any Excel artifacts
-        $date_value = trim( str_replace( '_x000D_', '', $date_value ) );
-
-        // Try to parse the date
-        $timestamp = strtotime( $date_value );
-        if ( $timestamp !== false ) {
-            return esc_html( wp_date( 'm/d/Y', $timestamp ) );
-        }
-
-        // Return as-is if parsing fails
-        return esc_html( $date_value );
+        return dqqb_format_date_display( $date_value, 'm/d/Y' );
     }
 }
 

@@ -120,12 +120,14 @@ class DQ_QI_Admin_Table {
 
             case 'invoice_date':
                 $date = function_exists('get_field') ? get_field('qi_invoice_date', $post_id) : get_post_meta($post_id, 'qi_invoice_date', true);
-                echo $date ? esc_html($date) : '<span style="color:#999;">—</span>';
+                // Display date in site timezone
+                echo dqqb_format_date_display( $date, 'm/d/Y' );
                 break;
 
             case 'due_date':
                 $date = function_exists('get_field') ? get_field('qi_due_date', $post_id) : get_post_meta($post_id, 'qi_due_date', true);
-                echo $date ? esc_html($date) : '<span style="color:#999;">—</span>';
+                // Display date in site timezone
+                echo dqqb_format_date_display( $date, 'm/d/Y' );
                 break;
 
             case 'days_remaining':
@@ -134,10 +136,17 @@ class DQ_QI_Admin_Table {
 
                 // Only show days remaining for invoices with a balance due and a due date
                 if ((float)$balance != 0 && !empty($due_date)) {
-                    $today = new DateTime('now', new DateTimeZone('UTC'));
-                    $due = DateTime::createFromFormat('Y-m-d', $due_date, new DateTimeZone('UTC'));
+                    // Use site timezone for "today" comparison
+                    $today = new DateTime('now', wp_timezone());
+                    $today->setTime(0, 0, 0); // Start of day in site timezone
+                    
+                    // Parse the due date (stored in UTC Y-m-d format) and convert to site timezone
+                    $due_timestamp = dqqb_parse_date_for_comparison( $due_date );
+                    if ( $due_timestamp !== false ) {
+                        $due = new DateTime('@' . $due_timestamp);
+                        $due->setTimezone( wp_timezone() );
+                        $due->setTime(0, 0, 0); // Start of day in site timezone
 
-                    if ($due !== false) {
                         $diff = $today->diff($due);
                         $days = (int)$diff->format('%r%a'); // %r adds sign, %a is days
 

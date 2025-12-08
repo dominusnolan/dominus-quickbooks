@@ -139,6 +139,172 @@ function dqqb_qi_date_format() {
     return $fmt;
 }
 
+/**
+ * Parse a date string to a UTC timestamp.
+ * 
+ * This function handles various date formats and returns a Unix timestamp in UTC.
+ * For ambiguous formats, assumes the input is already in site timezone.
+ *
+ * @param string $date_string The date string to parse (e.g., '2025-01-15', '01/15/2025', etc.)
+ * @return int|false Unix timestamp in UTC, or false if parsing fails
+ */
+function dqqb_parse_date_to_utc( $date_string ) {
+    if ( empty( $date_string ) ) {
+        return false;
+    }
+    
+    // Clean up Excel artifacts and whitespace
+    $date_string = trim( str_replace( '_x000D_', '', $date_string ) );
+    
+    // Try to parse with strtotime
+    $timestamp = strtotime( $date_string );
+    if ( $timestamp === false ) {
+        return false;
+    }
+    
+    // strtotime returns a timestamp in the server's timezone
+    // We need to convert it to UTC if it was parsed as local time
+    // Check if the string already has timezone info (if not, assume local)
+    if ( ! preg_match( '/[+-]\d{4}|UTC|GMT|Z$/i', $date_string ) ) {
+        // No timezone info, so strtotime interpreted it in server's local time
+        // Convert from local to UTC by getting the GMT equivalent
+        $local_date_string = date( 'Y-m-d H:i:s', $timestamp );
+        $gmt_date_string = get_gmt_from_date( $local_date_string, 'Y-m-d H:i:s' );
+        $timestamp = strtotime( $gmt_date_string . ' UTC' );
+    }
+    
+    return $timestamp;
+}
+
+/**
+ * Format a date for display using site timezone.
+ * 
+ * Always use this function for displaying dates to users in the admin or frontend.
+ * It ensures dates are shown in the WordPress site timezone.
+ *
+ * @param string|int $date Date string or Unix timestamp in UTC
+ * @param string $format Date format (default: 'm/d/Y')
+ * @return string Formatted date in site timezone, or '—' if empty/invalid
+ */
+function dqqb_format_date_display( $date, $format = 'm/d/Y' ) {
+    if ( empty( $date ) ) {
+        return '<span style="color:#999;">—</span>';
+    }
+    
+    // Convert to timestamp if it's a string
+    if ( is_string( $date ) ) {
+        $date = trim( str_replace( '_x000D_', '', $date ) );
+        $timestamp = strtotime( $date );
+        if ( $timestamp === false ) {
+            // Return the original value if we can't parse it
+            return esc_html( $date );
+        }
+    } else {
+        $timestamp = $date;
+    }
+    
+    // Use wp_date() which respects site timezone
+    return esc_html( wp_date( $format, $timestamp ) );
+}
+
+/**
+ * Normalize a date string to Y-m-d format in UTC for storage.
+ * 
+ * Always use this function when storing dates in post meta or ACF fields.
+ * Dates are normalized to UTC to ensure consistency.
+ *
+ * @param string $date_string The date string to normalize
+ * @param string $input_format Optional format hint (e.g., 'n/j/Y' for American dates)
+ * @return string Normalized date in Y-m-d format (UTC), or empty string if invalid
+ */
+function dqqb_normalize_date_for_storage( $date_string, $input_format = '' ) {
+    if ( empty( $date_string ) ) {
+        return '';
+    }
+    
+    // Clean up Excel artifacts
+    $date_string = trim( str_replace( '_x000D_', '', $date_string ) );
+    
+    // Try parsing with the input format hint if provided
+    if ( ! empty( $input_format ) ) {
+        $date_obj = DateTime::createFromFormat( $input_format, $date_string, wp_timezone() );
+        if ( $date_obj !== false ) {
+            // Convert to UTC
+            $date_obj->setTimezone( new DateTimeZone( 'UTC' ) );
+            return $date_obj->format( 'Y-m-d' );
+        }
+    }
+    
+    // Try common date formats
+    $formats = [
+        'Y-m-d',
+        'Y-m-d H:i:s',
+        'm/d/Y',
+        'n/j/Y',
+        'd/m/Y',
+        'j/n/Y',
+        'm-d-Y',
+        'd-m-Y',
+    ];
+    
+    foreach ( $formats as $fmt ) {
+        $date_obj = DateTime::createFromFormat( $fmt, $date_string, wp_timezone() );
+        if ( $date_obj !== false ) {
+            // Convert to UTC
+            $date_obj->setTimezone( new DateTimeZone( 'UTC' ) );
+            return $date_obj->format( 'Y-m-d' );
+        }
+    }
+    
+    // Fallback to strtotime
+    $timestamp = strtotime( $date_string );
+    if ( $timestamp !== false ) {
+        // Assume input is in site timezone, convert to UTC
+        $local_date = date( 'Y-m-d H:i:s', $timestamp );
+        $gmt_date = get_gmt_from_date( $local_date, 'Y-m-d H:i:s' );
+        $timestamp = strtotime( $gmt_date . ' UTC' );
+        return date( 'Y-m-d', $timestamp );
+    }
+    
+    return '';
+}
+
+/**
+ * Parse a date string and return a timestamp, handling various formats.
+ * This is a timezone-aware version specifically for chart/report date ranges.
+ * 
+ * @param string $date_string The date string to parse
+ * @return int|false Unix timestamp, or false if parsing fails
+ */
+function dqqb_parse_date_for_comparison( $date_string ) {
+    if ( empty( $date_string ) ) {
+        return false;
+    }
+    
+    // Clean up Excel artifacts
+    $date_string = trim( str_replace( '_x000D_', '', $date_string ) );
+    
+    // Try YYYY-MM-DD format first (most common in storage)
+    if ( preg_match( '/^(\d{4})-(\d{2})-(\d{2})/', $date_string, $m ) ) {
+        // Already in ISO format, parse as UTC
+        return strtotime( $date_string . ' UTC' );
+    }
+    
+    // Try MM/DD/YYYY format
+    if ( preg_match( '/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/', $date_string, $m ) ) {
+        return strtotime( "{$m[3]}-{$m[1]}-{$m[2]} UTC" );
+    }
+    
+    // Try DD-MM-YYYY format
+    if ( preg_match( '/^(\d{1,2})-(\d{1,2})-(\d{4})$/', $date_string, $m ) ) {
+        return strtotime( "{$m[3]}-{$m[2]}-{$m[1]} UTC" );
+    }
+    
+    // Fallback to strtotime, assume UTC
+    $timestamp = strtotime( $date_string . ' UTC' );
+    return $timestamp !== false ? $timestamp : false;
+}
+
 
 /**
  * After importing or updating a QuickBooks Invoice CPT,

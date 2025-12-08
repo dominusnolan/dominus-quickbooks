@@ -1254,11 +1254,8 @@ class DQ_Financial_Report {
     }
 
     private static function normalize_date( $raw ) {
-        if ( ! $raw ) return '';
-        $raw = trim( (string)$raw );
-        if ( preg_match('/^\d{4}-\d{2}-\d{2}$/', $raw ) ) return $raw;
-        $ts = strtotime( $raw );
-        return $ts ? date('Y-m-d', $ts ) : '';
+        // Use the centralized timezone-aware helper function
+        return dqqb_normalize_date_for_storage( $raw );
     }
 
     private static function num( $v ) {
