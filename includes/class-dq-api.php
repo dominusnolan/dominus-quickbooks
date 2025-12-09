@@ -311,8 +311,9 @@ class DQ_API {
 
         $invoice_id = esc_sql( (string) $invoice_id );
         
-        // First, try the direct query approach (may not work in all QB API versions)
-        $sql = "SELECT * FROM Payment WHERE Line.Any.LinkedTxn.TxnId = '{$invoice_id}'";
+        // First, try the direct query approach with LinkedTxn filter
+        // Filter by both TxnId and TxnType to ensure we only get invoice payments
+        $sql = "SELECT * FROM Payment WHERE Line.Any.LinkedTxn.TxnId = '{$invoice_id}' AND Line.Any.LinkedTxn.TxnType = 'Invoice'";
         $result = self::query( $sql );
 
         if ( is_wp_error( $result ) ) {
@@ -334,6 +335,11 @@ class DQ_API {
             ]);
             return self::get_payments_for_invoice_fallback( $invoice_id );
         }
+
+        DQ_Logger::debug( 'Found payments with direct query', [
+            'invoice_id' => $invoice_id,
+            'payment_count' => count( $payments )
+        ]);
 
         return $payments;
     }
