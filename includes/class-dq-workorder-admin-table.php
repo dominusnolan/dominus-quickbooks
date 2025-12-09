@@ -949,10 +949,10 @@ class DQ_Workorder_Admin_Table {
             .dq-dispatched-checkbox:checked::after {
                 content: "";
                 position: absolute;
-                left: 5px;
-                top: 2px;
-                width: 4px;
-                height: 8px;
+                left: 28%;
+                top: 12%;
+                width: 22%;
+                height: 44%;
                 border: solid white;
                 border-width: 0 2px 2px 0;
                 transform: rotate(45deg);
