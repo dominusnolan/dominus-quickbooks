@@ -311,8 +311,9 @@ class DQ_API {
 
         $invoice_id = esc_sql( (string) $invoice_id );
         
-        // First, try the direct query approach (may not work in all QB API versions)
-        $sql = "SELECT * FROM Payment WHERE Line.Any.LinkedTxn.TxnId = '{$invoice_id}'";
+        // First, try the direct query approach with LinkedTxn filter
+        // Filter by both TxnId and TxnType to ensure we only get invoice payments
+        $sql = "SELECT * FROM Payment WHERE Line.Any.LinkedTxn.TxnId = '{$invoice_id}' AND Line.Any.LinkedTxn.TxnType = 'Invoice'";
         $result = self::query( $sql );
 
         if ( is_wp_error( $result ) ) {
@@ -334,6 +335,11 @@ class DQ_API {
             ]);
             return self::get_payments_for_invoice_fallback( $invoice_id );
         }
+
+        DQ_Logger::debug( 'Found payments with direct query', [
+            'invoice_id' => $invoice_id,
+            'payment_count' => count( $payments )
+        ]);
 
         return $payments;
     }
@@ -535,6 +541,11 @@ class DQ_API {
             // Calculate the amount applied to THIS specific invoice
             $amount_for_invoice = self::get_payment_amount_for_invoice( $payment, $invoice_id );
 
+            // Skip if no amount applied to this invoice (using small threshold for floating-point comparison)
+            if ( $amount_for_invoice < 0.01 ) {
+                continue;
+            }
+
             // Check if payment is deposited to "Undeposited Funds"
             $account_name = '';
             if ( ! empty( $payment['DepositToAccountRef']['name'] ) ) {
@@ -542,14 +553,19 @@ class DQ_API {
             }
 
             $is_deposited = false;
+            $deposit_reason = '';
 
             // Payment is deposited if account is NOT "Undeposited Funds"
             if ( ! empty( $account_name ) && strcasecmp( $account_name, 'Undeposited Funds' ) !== 0 ) {
                 $is_deposited = true;
+                $deposit_reason = 'direct_account';
             }
             // Payment may still be deposited if it was in Undeposited Funds but later included in a Bank Deposit
-            else if ( ! empty( $payment['Id'] ) && self::is_payment_in_deposit( $payment['Id'] ) ) {
+            elseif ( ! empty( $payment['Id'] ) && self::is_payment_in_deposit( $payment['Id'] ) ) {
                 $is_deposited = true;
+                $deposit_reason = 'bank_deposit';
+            } else {
+                $deposit_reason = 'undeposited';
             }
 
             if ( $is_deposited ) {
@@ -557,6 +573,15 @@ class DQ_API {
             } else {
                 $undeposited += $amount_for_invoice;
             }
+
+            DQ_Logger::debug( 'Payment processed for deposit calculation', [
+                'invoice_id' => $invoice_id,
+                'payment_id' => $payment['Id'] ?? 'unknown',
+                'amount_for_invoice' => $amount_for_invoice,
+                'account_name' => $account_name ?: '(none)',
+                'is_deposited' => $is_deposited,
+                'reason' => $deposit_reason,
+            ]);
         }
 
         DQ_Logger::debug( 'Payment deposit totals calculated', [
