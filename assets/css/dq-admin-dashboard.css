@@ -65,7 +65,6 @@
 .dq-summary-card:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-    text-decoration: none;
 }
 
 .dq-summary-card:focus {
@@ -111,14 +110,12 @@
     font-weight: 700;
     color: #1a1a2e;
     line-height: 1.1;
-    text-decoration: none;
 }
 
 .dq-summary-card .card-label {
     font-size: 14px;
     color: #666;
     margin-top: 4px;
-    text-decoration: none;
 }
 
 /* Ensure no underlines on any state */
