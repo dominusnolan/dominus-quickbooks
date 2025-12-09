@@ -78,15 +78,21 @@ class DQ_QI_Metabox {
         // Payment deposit totals (deposited vs undeposited)
         $deposited = 0.0;
         $undeposited = 0.0;
+        $payment_error = '';
         if ( $invoice_id ) {
             $payment_totals = DQ_API::get_payment_deposit_totals( $invoice_id );
-            if ( ! is_wp_error( $payment_totals ) ) {
+            if ( is_wp_error( $payment_totals ) ) {
+                $payment_error = $payment_totals->get_error_message();
+            } else {
                 $deposited = $payment_totals['deposited'];
                 $undeposited = $payment_totals['undeposited'];
             }
         }
         echo '<p style="margin:3px 0;"><strong>Deposited:</strong> $' . number_format( $deposited, 2 ) . '</p>';
         echo '<p style="margin:3px 0;"><strong>Not deposited:</strong> $' . number_format( $undeposited, 2 ) . '</p>';
+        if ( $payment_error ) {
+            echo '<p style="margin:3px 0;color:#d63638;font-size:11px;"><em>Payment data: ' . esc_html( $payment_error ) . '</em></p>';
+        }
 
         echo '<p style="margin:3px 0;"><strong>Invoice Date:</strong> ' . esc_html( $invoice_date ) . '</p>';
         echo '<p style="margin:3px 0;"><strong>Due Date:</strong> ' . esc_html( $due_date ) . '</p>';

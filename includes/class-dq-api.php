@@ -298,7 +298,8 @@ class DQ_API {
 
     /**
      * Query payments linked to a specific invoice ID.
-     * Uses QuickBooks SQL: SELECT * FROM Payment WHERE Line.Any.LinkedTxn.TxnId = '{invoice_id}'
+     * First attempts to use QuickBooks query with LinkedTxn filter.
+     * Falls back to fetching invoice and checking its LinkedTxn references.
      *
      * @param string $invoice_id The QuickBooks Invoice ID
      * @return array|WP_Error Array of payments or WP_Error on failure
@@ -308,17 +309,120 @@ class DQ_API {
             return new WP_Error( 'dq_no_invoice_id', 'Invoice ID is required to query payments.' );
         }
 
-        // Sanitize invoice_id to prevent SQL injection
         $invoice_id = esc_sql( (string) $invoice_id );
+        
+        // First, try the direct query approach (may not work in all QB API versions)
         $sql = "SELECT * FROM Payment WHERE Line.Any.LinkedTxn.TxnId = '{$invoice_id}'";
+        $result = self::query( $sql );
+
+        if ( is_wp_error( $result ) ) {
+            DQ_Logger::debug( 'Payment query with LinkedTxn filter failed, trying alternative approach', [
+                'invoice_id' => $invoice_id,
+                'error' => $result->get_error_message()
+            ]);
+            
+            // Fallback: Get the invoice and check which payments reference it
+            return self::get_payments_for_invoice_fallback( $invoice_id );
+        }
+
+        $payments = $result['QueryResponse']['Payment'] ?? [];
+        
+        // If no payments found with the query, try the fallback approach
+        if ( empty( $payments ) ) {
+            DQ_Logger::debug( 'No payments found with direct query, trying fallback', [
+                'invoice_id' => $invoice_id
+            ]);
+            return self::get_payments_for_invoice_fallback( $invoice_id );
+        }
+
+        return $payments;
+    }
+
+    /**
+     * Fallback method to get payments for an invoice.
+     * Fetches the invoice to get customer ID, then queries all payments for that customer
+     * and filters them to find payments linked to this invoice.
+     *
+     * @param string $invoice_id The QuickBooks Invoice ID
+     * @return array|WP_Error Array of payments or WP_Error on failure
+     */
+    private static function get_payments_for_invoice_fallback( $invoice_id ) {
+        // Get the invoice to find the customer
+        $invoice_data = self::get_invoice( $invoice_id );
+        if ( is_wp_error( $invoice_data ) ) {
+            return $invoice_data;
+        }
+
+        $invoice = $invoice_data['Invoice'] ?? $invoice_data;
+        if ( empty( $invoice['CustomerRef']['value'] ) ) {
+            return new WP_Error( 'dq_no_customer', 'Invoice does not have a customer reference.' );
+        }
+
+        $customer_id = esc_sql( (string) $invoice['CustomerRef']['value'] );
+
+        // Query all payments for this customer
+        $sql = "SELECT * FROM Payment WHERE CustomerRef = '{$customer_id}'";
         $result = self::query( $sql );
 
         if ( is_wp_error( $result ) ) {
             return $result;
         }
 
-        // Return the payments array, or empty array if none found
-        return $result['QueryResponse']['Payment'] ?? [];
+        $all_payments = $result['QueryResponse']['Payment'] ?? [];
+        $total_payments = count($all_payments);
+        
+        // Filter payments to only include those linked to this invoice
+        $linked_payments = [];
+        foreach ( $all_payments as $payment ) {
+            if ( self::payment_is_linked_to_invoice( $payment, $invoice_id ) ) {
+                $linked_payments[] = $payment;
+            }
+        }
+
+        $linked_count = count($linked_payments);
+        DQ_Logger::debug( 'Fallback payment query completed', [
+            'invoice_id' => $invoice_id,
+            'customer_id' => $customer_id,
+            'total_customer_payments' => $total_payments,
+            'linked_payments' => $linked_count
+        ]);
+
+        return $linked_payments;
+    }
+
+    /**
+     * Check if a payment is linked to a specific invoice by examining its Line items.
+     * This is a helper method used in fallback scenarios.
+     *
+     * @param array $payment The payment data from QuickBooks
+     * @param string $invoice_id The invoice ID to check for
+     * @return bool True if the payment is linked to the invoice
+     */
+    private static function payment_is_linked_to_invoice( $payment, $invoice_id ) {
+        if ( empty( $payment['Line'] ) || ! is_array( $payment['Line'] ) ) {
+            return false;
+        }
+
+        $invoice_id = (string) $invoice_id;
+
+        foreach ( $payment['Line'] as $line ) {
+            // Check if this line has LinkedTxn entries
+            if ( empty( $line['LinkedTxn'] ) || ! is_array( $line['LinkedTxn'] ) ) {
+                continue;
+            }
+
+            // Check each linked transaction
+            foreach ( $line['LinkedTxn'] as $linked ) {
+                if ( isset( $linked['TxnId'] ) && (string) $linked['TxnId'] === $invoice_id ) {
+                    // Verify it's an Invoice type transaction
+                    if ( ! empty( $linked['TxnType'] ) && $linked['TxnType'] === 'Invoice' ) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -333,6 +437,10 @@ class DQ_API {
         $payments = self::get_payments_for_invoice( $invoice_id );
 
         if ( is_wp_error( $payments ) ) {
+            DQ_Logger::error( 'Failed to fetch payments for invoice', [
+                'invoice_id' => $invoice_id,
+                'error' => $payments->get_error_message()
+            ]);
             return $payments;
         }
 
@@ -345,15 +453,29 @@ class DQ_API {
             // Check if payment is deposited to "Undeposited Funds"
             $account_name = '';
             if ( ! empty( $payment['DepositToAccountRef']['name'] ) ) {
-                $account_name = (string) $payment['DepositToAccountRef']['name'];
+                $account_name = trim( (string) $payment['DepositToAccountRef']['name'] );
             }
 
-            if ( $account_name === 'Undeposited Funds' ) {
+            // Case-insensitive comparison for "Undeposited Funds"
+            if ( strcasecmp( $account_name, 'Undeposited Funds' ) === 0 ) {
                 $undeposited += $amount;
             } else {
-                $deposited += $amount;
+                // Only count as deposited if there's an actual account (not empty)
+                if ( ! empty( $account_name ) ) {
+                    $deposited += $amount;
+                } else {
+                    // Default to undeposited if no account specified
+                    $undeposited += $amount;
+                }
             }
         }
+
+        DQ_Logger::debug( 'Payment deposit totals calculated', [
+            'invoice_id' => $invoice_id,
+            'payment_count' => count($payments),
+            'deposited' => $deposited,
+            'undeposited' => $undeposited,
+        ]);
 
         return [
             'deposited'   => $deposited,
