@@ -509,9 +509,9 @@ class DQ_Workorder_Table
             return 'N/A';
         }
         // Use timezone-aware helper to prevent off-by-one errors
-        $formatted = dqqb_format_date_display($raw_date, 'm/d/Y');
-        // Remove HTML wrapper if present
-        return strip_tags($formatted);
+        // Use plain_text mode to avoid HTML wrapping overhead
+        $formatted = dqqb_format_date_display($raw_date, 'm/d/Y', true);
+        return $formatted !== '—' ? $formatted : 'N/A';
     }
 
     private static function get_distinct_states()

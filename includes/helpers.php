@@ -187,11 +187,12 @@ function dqqb_parse_date_to_utc( $date_string ) {
  *
  * @param string|int $date Date string or Unix timestamp
  * @param string $format Date format (default: 'm/d/Y')
+ * @param bool $plain_text If true, returns plain text instead of HTML-wrapped output (default: false)
  * @return string Formatted date in site timezone, or '—' if empty/invalid
  */
-function dqqb_format_date_display( $date, $format = 'm/d/Y' ) {
+function dqqb_format_date_display( $date, $format = 'm/d/Y', $plain_text = false ) {
     if ( empty( $date ) ) {
-        return '<span style="color:#999;">—</span>';
+        return $plain_text ? '—' : '<span style="color:#999;">—</span>';
     }
     
     // Convert to timestamp if it's a string
@@ -209,7 +210,7 @@ function dqqb_format_date_display( $date, $format = 'm/d/Y' ) {
             $timestamp = strtotime( $date );
             if ( $timestamp === false ) {
                 // Return the original value if we can't parse it
-                return esc_html( $date );
+                return $plain_text ? $date : esc_html( $date );
             }
         }
     } else {
@@ -217,7 +218,8 @@ function dqqb_format_date_display( $date, $format = 'm/d/Y' ) {
     }
     
     // Use wp_date() which respects site timezone
-    return esc_html( wp_date( $format, $timestamp ) );
+    $formatted = wp_date( $format, $timestamp );
+    return $plain_text ? $formatted : esc_html( $formatted );
 }
 
 /**
