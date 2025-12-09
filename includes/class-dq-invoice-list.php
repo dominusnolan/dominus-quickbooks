@@ -394,8 +394,8 @@ class DQ_Invoice_List
             $output .= '<td>$' . number_format((float)$total_billed, 2) . '</td>';
             $output .= '<td>' . $qbo_invoice_html . '</td>';
             $output .= '<td>' . $customer_html . '</td>';
-            $output .= '<td>' . esc_html($invoice_date ? date('m/d/Y', strtotime($invoice_date)) : 'N/A') . '</td>';
-            $output .= '<td>' . esc_html($due_date ? date('m/d/Y', strtotime($due_date)) : 'N/A') . '</td>';
+            $output .= '<td>' . esc_html($invoice_date ? wp_date('m/d/Y', dqqb_parse_date_for_comparison($invoice_date)) : 'N/A') . '</td>';
+            $output .= '<td>' . esc_html($due_date ? wp_date('m/d/Y', dqqb_parse_date_for_comparison($due_date)) : 'N/A') . '</td>';
             // Only display Days Remaining when unpaid; show dash otherwise
             $output .= '<td>' . ($payment_status !== 'PAID' ? esc_html($days_remaining ?: 'N/A') : '-') . '</td>';
             $output .= '<td><a href="' . esc_url($permalink) . '" class="dq-invoice-view-btn" target="_blank" rel="noopener noreferrer" aria-label="View invoice ' . esc_attr($invoice_no ?: $invoice->ID) . ' (opens in new tab)">View</a></td>';

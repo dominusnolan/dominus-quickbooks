@@ -297,12 +297,12 @@ class DQ_Admin_Dashboard
             $author_id = $workorder->post_author;
             $author_html = self::get_author_with_avatar($author_id);
 
-            // Format date using WordPress date function for proper localization
+            // Format date using timezone-aware helper function
             $date_display = 'N/A';
             if ($wo_date_received) {
-                $ts = strtotime($wo_date_received);
+                $ts = dqqb_parse_date_for_comparison($wo_date_received);
                 if ($ts) {
-                    $date_display = date_i18n('m/d/Y', $ts);
+                    $date_display = wp_date('m/d/Y', $ts);
                 }
             }
 

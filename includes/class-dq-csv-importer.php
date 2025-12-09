@@ -258,13 +258,9 @@ class DQ_CSV_InvoiceImporter {
     }
 
     private static function normalize_date($val, $format) {
-        if (!$val) return null;
-        $val = trim($val);
-        // If already YYYY-MM-DD, trust it
-        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $val)) return $val;
-        $ts = strtotime($val);
-        if ($ts === false) return null;
-        return date('Y-m-d', $ts);
+        // Use the centralized timezone-aware helper function
+        $normalized = dqqb_normalize_date_for_storage( $val, $format );
+        return !empty($normalized) ? $normalized : null;
     }
 
     private static function ensure_customer($display_name) {

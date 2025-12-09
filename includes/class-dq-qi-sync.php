@@ -166,40 +166,9 @@ class DQ_QI_Sync {
     }
 
     private static function normalize_qb_date($val) {
-        $val = trim((string)$val);
-        if ($val === '') return '';
-        // If already canonical
-        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $val)) return $val;
-
+        // Use the centralized timezone-aware helper function with the configured date format
         $fmt = dqqb_qi_date_format();
-
-        // Common slash format
-        if (preg_match('/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/', $val, $m)) {
-            $a = (int)$m[1]; $b = (int)$m[2]; $y = (int)$m[3];
-
-            if ($fmt === 'd/m/Y') {
-                return sprintf('%04d-%02d-%02d', $y, $b, $a);
-            }
-            if ($fmt === 'm/d/Y' || $fmt === 'n/j/Y') {
-                return sprintf('%04d-%02d-%02d', $y, $a, $b);
-            }
-        }
-
-        $fmt_map = [
-            'm/d/Y' => 'm/d/Y',
-            'n/j/Y' => 'n/j/Y',
-            'd/m/Y' => 'd/m/Y',
-            'Y-m-d' => 'Y-m-d',
-        ];
-        if (isset($fmt_map[$fmt])) {
-            $dt = DateTime::createFromFormat($fmt_map[$fmt], $val);
-            if ($dt instanceof DateTime) {
-                return $dt->format('Y-m-d');
-            }
-        }
-
-        $ts = strtotime($val);
-        return $ts ? date('Y-m-d', $ts) : '';
+        return dqqb_normalize_date_for_storage( $val, $fmt );
     }
 
     private static function get_or_create_customer_id($customer_name) {

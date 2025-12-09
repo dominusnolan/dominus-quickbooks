@@ -1600,30 +1600,11 @@ public static function ajax_fse_avg_workspeed()
 
     /**
      * Robust date parsing: try Y-m-d, d/m/Y, m/d/Y, fallback strtotime
+     * Uses the new timezone-aware helper function.
      */
     private static function parse_date_for_chart($raw_date)
     {
-        if (!$raw_date) return false;
-        $raw_date = trim(str_replace('_x000D_', "\n", $raw_date));
-        // Try YYYY-MM-DD
-        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $raw_date, $m)) {
-            return strtotime($raw_date);
-        }
-        // Try YYYY-MM-DD HH:MM
-        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})\s+\d{2}:\d{2}/', $raw_date, $m)) {
-            return strtotime($raw_date);
-        }
-        // Try MM/DD/YYYY
-        if (preg_match('/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/', $raw_date, $m)) {
-            return strtotime("{$m[3]}-{$m[1]}-{$m[2]}");
-        }
-        // Try DD-MM-YYYY
-        if (preg_match('/^(\d{1,2})\-(\d{1,2})\-(\d{4})$/', $raw_date, $m)) {
-            return strtotime("{$m[3]}-{$m[2]}-{$m[1]}");
-        }
-        // Fallback
-        $ts = strtotime($raw_date);
-        return $ts ? $ts : false;
+        return dqqb_parse_date_for_comparison($raw_date);
     }
 
     /**
@@ -2307,9 +2288,14 @@ public static function ajax_workorder_modal()
             // Get invoice number
             $wo_invoice_no = function_exists('get_field') ? get_field('wo_invoice_no', $pid) : get_post_meta($pid, 'wo_invoice_no', true);
 
-            // Get relevant date
+            // Get relevant date - use timezone-aware formatting
             $date_requested = function_exists('get_field') ? get_field('date_requested_by_customer', $pid) : get_post_meta($pid, 'date_requested_by_customer', true);
-            $date_display = $date_requested ? date('m/d/Y', strtotime($date_requested)) : date('m/d/Y', strtotime(get_post_field('post_date', $pid)));
+            if ( $date_requested ) {
+                $date_display = wp_date( 'm/d/Y', dqqb_parse_date_for_comparison( $date_requested ) );
+            } else {
+                $post_date_gmt = get_post_field( 'post_date_gmt', $pid );
+                $date_display = wp_date( 'm/d/Y', strtotime( $post_date_gmt . ' UTC' ) );
+            }
 
             $edit_link = admin_url('post.php?post=' . $pid . '&action=edit');
 

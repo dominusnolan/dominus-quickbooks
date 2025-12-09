@@ -180,7 +180,8 @@ class DQ_Invoices_Balance {
         $filter = $request->get_param( 'filter' );
         $data   = self::get_invoice_data( $filter );
 
-        $filename = 'unpaid-invoices-' . gmdate( 'Y-m-d' ) . '.csv';
+        // Use site timezone for filename to match user's local date
+        $filename = 'unpaid-invoices-' . wp_date( 'Y-m-d' ) . '.csv';
 
         header( 'Content-Type: text/csv; charset=utf-8' );
         header( 'Content-Disposition: attachment; filename=' . $filename );
@@ -224,7 +225,9 @@ class DQ_Invoices_Balance {
      * @return array Invoice data with totals.
      */
     public static function get_invoice_data( $filter = 'all' ) {
-        $today = gmdate( 'Y-m-d' );
+        // Use site timezone for "today" to match user expectations
+        $today_obj = new DateTime('now', wp_timezone());
+        $today = $today_obj->format('Y-m-d');
         $invoices = array();
         $total_overdue = 0.0;
         $total_incoming = 0.0;
