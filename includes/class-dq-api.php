@@ -541,8 +541,8 @@ class DQ_API {
             // Calculate the amount applied to THIS specific invoice
             $amount_for_invoice = self::get_payment_amount_for_invoice( $payment, $invoice_id );
 
-            // Skip if no amount applied to this invoice
-            if ( $amount_for_invoice <= 0.0 ) {
+            // Skip if no amount applied to this invoice (using small threshold for floating-point comparison)
+            if ( $amount_for_invoice < 0.01 ) {
                 continue;
             }
 
@@ -561,7 +561,7 @@ class DQ_API {
                 $deposit_reason = 'direct_account';
             }
             // Payment may still be deposited if it was in Undeposited Funds but later included in a Bank Deposit
-            else if ( ! empty( $payment['Id'] ) && self::is_payment_in_deposit( $payment['Id'] ) ) {
+            elseif ( ! empty( $payment['Id'] ) && self::is_payment_in_deposit( $payment['Id'] ) ) {
                 $is_deposited = true;
                 $deposit_reason = 'bank_deposit';
             } else {
