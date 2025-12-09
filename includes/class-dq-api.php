@@ -514,52 +514,63 @@ class DQ_API {
                 'deposit_ids' => array_map( function( $d ) { return $d['Id'] ?? 'unknown'; }, $deposits )
             ]);
 
-            // Now fetch full details for each deposit to log Line items and LinkedTxn arrays
-            foreach ( $deposits as $deposit_idx => $deposit ) {
-                $deposit_id = $deposit['Id'] ?? null;
-                if ( ! $deposit_id ) {
-                    continue;
-                }
-
-                // Fetch full deposit details
-                $full_deposit = self::get( "deposit/{$deposit_id}?minorversion=65", "Get Deposit #{$deposit_id}" );
-                
-                if ( is_wp_error( $full_deposit ) ) {
-                    DQ_Logger::debug( "Failed to fetch full details for Deposit #{$deposit_id}", [
-                        'error' => $full_deposit->get_error_message()
-                    ]);
-                    continue;
-                }
-
-                $deposit_data = $full_deposit['Deposit'] ?? $full_deposit;
-                
-                // Log comprehensive deposit information
-                $deposit_summary = [
-                    'deposit_index' => $deposit_idx,
-                    'deposit_id' => $deposit_data['Id'] ?? 'unknown',
-                    'txn_date' => $deposit_data['TxnDate'] ?? '',
-                    'total_amt' => $deposit_data['TotalAmt'] ?? 0,
-                    'deposit_to_account' => [
-                        'name' => $deposit_data['DepositToAccountRef']['name'] ?? null,
-                        'value' => $deposit_data['DepositToAccountRef']['value'] ?? null,
-                    ],
-                    'line_items' => [],
-                ];
-
-                // Log all Line items with their LinkedTxn details
-                if ( ! empty( $deposit_data['Line'] ) && is_array( $deposit_data['Line'] ) ) {
-                    foreach ( $deposit_data['Line'] as $line_idx => $line ) {
-                        $line_summary = [
-                            'line_index' => $line_idx,
-                            'amount' => $line['Amount'] ?? 0,
-                            'description' => $line['Description'] ?? '',
-                            'linked_txn' => $line['LinkedTxn'] ?? [],
-                        ];
-                        $deposit_summary['line_items'][] = $line_summary;
+            // Optionally fetch full deposit details for deep debugging
+            // Enable by setting: define('DQ_DEEP_DEPOSIT_DEBUG', true); in wp-config.php
+            // WARNING: This makes additional API calls and may impact performance
+            $deep_deposit_debug = defined( 'DQ_DEEP_DEPOSIT_DEBUG' ) && DQ_DEEP_DEPOSIT_DEBUG;
+            
+            if ( $deep_deposit_debug ) {
+                foreach ( $deposits as $deposit_idx => $deposit ) {
+                    $deposit_id = $deposit['Id'] ?? null;
+                    if ( ! $deposit_id ) {
+                        continue;
                     }
-                }
 
-                DQ_Logger::debug( "Deposit #{$deposit_idx} full details", $deposit_summary );
+                    // Fetch full deposit details
+                    $full_deposit = self::get( "deposit/{$deposit_id}?minorversion=65", "Get Deposit #{$deposit_id}" );
+                    
+                    if ( is_wp_error( $full_deposit ) ) {
+                        DQ_Logger::debug( "Failed to fetch full details for Deposit #{$deposit_id}", [
+                            'error' => $full_deposit->get_error_message()
+                        ]);
+                        continue;
+                    }
+
+                    $deposit_data = $full_deposit['Deposit'] ?? $full_deposit;
+                    
+                    // Log comprehensive deposit information
+                    $deposit_summary = [
+                        'deposit_index' => $deposit_idx,
+                        'deposit_id' => $deposit_data['Id'] ?? 'unknown',
+                        'txn_date' => $deposit_data['TxnDate'] ?? '',
+                        'total_amt' => $deposit_data['TotalAmt'] ?? 0,
+                        'deposit_to_account' => [
+                            'name' => $deposit_data['DepositToAccountRef']['name'] ?? null,
+                            'value' => $deposit_data['DepositToAccountRef']['value'] ?? null,
+                        ],
+                        'line_items' => [],
+                    ];
+
+                    // Log all Line items with their LinkedTxn details
+                    if ( ! empty( $deposit_data['Line'] ) && is_array( $deposit_data['Line'] ) ) {
+                        foreach ( $deposit_data['Line'] as $line_idx => $line ) {
+                            $line_summary = [
+                                'line_index' => $line_idx,
+                                'amount' => $line['Amount'] ?? 0,
+                                'description' => $line['Description'] ?? '',
+                                'linked_txn' => $line['LinkedTxn'] ?? [],
+                            ];
+                            $deposit_summary['line_items'][] = $line_summary;
+                        }
+                    }
+
+                    DQ_Logger::debug( "Deposit #{$deposit_idx} full details", $deposit_summary );
+                }
+            } else {
+                DQ_Logger::debug( 'Deposit full details not fetched (enable DQ_DEEP_DEPOSIT_DEBUG for more detail)', [
+                    'payment_id' => $payment_id,
+                    'note' => 'To enable: define(\'DQ_DEEP_DEPOSIT_DEBUG\', true); in wp-config.php'
+                ]);
             }
 
             return true;
