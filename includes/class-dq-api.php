@@ -480,32 +480,94 @@ class DQ_API {
      */
     private static function is_payment_in_deposit( $payment_id ) {
         if ( empty( $payment_id ) ) {
+            DQ_Logger::debug( 'is_payment_in_deposit: Empty payment_id provided' );
             return false;
         }
 
         $payment_id = esc_sql( (string) $payment_id );
 
-        // Query deposits that contain this payment (only need to verify existence)
+        // DEEP DEBUG: Log the deposit search attempt
         $sql = "SELECT Id FROM Deposit WHERE Line.Any.LinkedTxn.TxnId = '{$payment_id}' AND Line.Any.LinkedTxn.TxnType = 'Payment'";
+        DQ_Logger::debug( 'Searching for deposits containing payment', [
+            'payment_id' => $payment_id,
+            'query_sql' => $sql
+        ]);
+
         $result = self::query( $sql );
 
         if ( is_wp_error( $result ) ) {
             DQ_Logger::debug( 'Deposit query failed for payment', [
                 'payment_id' => $payment_id,
-                'error' => $result->get_error_message()
+                'error' => $result->get_error_message(),
+                'error_data' => $result->get_error_data()
             ]);
             return false;
         }
 
         $deposits = $result['QueryResponse']['Deposit'] ?? [];
 
+        // DEEP DEBUG: Log all found deposits with full details
         if ( ! empty( $deposits ) ) {
-            DQ_Logger::debug( 'Payment found in deposit', [
+            DQ_Logger::debug( 'Deposits found containing payment', [
                 'payment_id' => $payment_id,
-                'deposit_count' => count( $deposits )
+                'deposit_count' => count( $deposits ),
+                'deposit_ids' => array_map( function( $d ) { return $d['Id'] ?? 'unknown'; }, $deposits )
             ]);
+
+            // Now fetch full details for each deposit to log Line items and LinkedTxn arrays
+            foreach ( $deposits as $deposit_idx => $deposit ) {
+                $deposit_id = $deposit['Id'] ?? null;
+                if ( ! $deposit_id ) {
+                    continue;
+                }
+
+                // Fetch full deposit details
+                $full_deposit = self::get( "deposit/{$deposit_id}?minorversion=65", "Get Deposit #{$deposit_id}" );
+                
+                if ( is_wp_error( $full_deposit ) ) {
+                    DQ_Logger::debug( "Failed to fetch full details for Deposit #{$deposit_id}", [
+                        'error' => $full_deposit->get_error_message()
+                    ]);
+                    continue;
+                }
+
+                $deposit_data = $full_deposit['Deposit'] ?? $full_deposit;
+                
+                // Log comprehensive deposit information
+                $deposit_summary = [
+                    'deposit_index' => $deposit_idx,
+                    'deposit_id' => $deposit_data['Id'] ?? 'unknown',
+                    'txn_date' => $deposit_data['TxnDate'] ?? '',
+                    'total_amt' => $deposit_data['TotalAmt'] ?? 0,
+                    'deposit_to_account' => [
+                        'name' => $deposit_data['DepositToAccountRef']['name'] ?? null,
+                        'value' => $deposit_data['DepositToAccountRef']['value'] ?? null,
+                    ],
+                    'line_items' => [],
+                ];
+
+                // Log all Line items with their LinkedTxn details
+                if ( ! empty( $deposit_data['Line'] ) && is_array( $deposit_data['Line'] ) ) {
+                    foreach ( $deposit_data['Line'] as $line_idx => $line ) {
+                        $line_summary = [
+                            'line_index' => $line_idx,
+                            'amount' => $line['Amount'] ?? 0,
+                            'description' => $line['Description'] ?? '',
+                            'linked_txn' => $line['LinkedTxn'] ?? [],
+                        ];
+                        $deposit_summary['line_items'][] = $line_summary;
+                    }
+                }
+
+                DQ_Logger::debug( "Deposit #{$deposit_idx} full details", $deposit_summary );
+            }
+
             return true;
         }
+
+        DQ_Logger::debug( 'No deposits found containing payment', [
+            'payment_id' => $payment_id
+        ]);
 
         return false;
     }
@@ -534,15 +596,64 @@ class DQ_API {
             return $payments;
         }
 
+        // DEEP DEBUG: Log all payments found before classification
+        DQ_Logger::debug( '=== START Payment Classification for Invoice ===', [
+            'invoice_id' => $invoice_id,
+            'total_payments_found' => count($payments)
+        ]);
+
+        // Log detailed info for each payment BEFORE any classification logic
+        foreach ( $payments as $idx => $payment ) {
+            $payment_summary = [
+                'payment_index' => $idx,
+                'payment_id' => $payment['Id'] ?? 'unknown',
+                'payment_amount' => $payment['TotalAmt'] ?? 0,
+                'txn_date' => $payment['TxnDate'] ?? '',
+                'deposit_to_account' => [
+                    'name' => $payment['DepositToAccountRef']['name'] ?? null,
+                    'value' => $payment['DepositToAccountRef']['value'] ?? null,
+                ],
+                'line_items' => [],
+            ];
+
+            // Log all Line items with their LinkedTxn details
+            if ( ! empty( $payment['Line'] ) && is_array( $payment['Line'] ) ) {
+                foreach ( $payment['Line'] as $line_idx => $line ) {
+                    $line_summary = [
+                        'line_index' => $line_idx,
+                        'amount' => $line['Amount'] ?? 0,
+                        'linked_txn' => $line['LinkedTxn'] ?? [],
+                    ];
+                    $payment_summary['line_items'][] = $line_summary;
+                }
+            }
+
+            DQ_Logger::debug( "Payment #{$idx} details (before classification)", $payment_summary );
+        }
+
         $deposited = 0.0;
         $undeposited = 0.0;
 
         foreach ( $payments as $payment ) {
+            $payment_id = $payment['Id'] ?? 'unknown';
+
             // Calculate the amount applied to THIS specific invoice
             $amount_for_invoice = self::get_payment_amount_for_invoice( $payment, $invoice_id );
 
+            DQ_Logger::debug( "Processing payment for classification", [
+                'payment_id' => $payment_id,
+                'invoice_id' => $invoice_id,
+                'amount_for_invoice' => $amount_for_invoice,
+                'payment_total_amt' => $payment['TotalAmt'] ?? 0,
+            ]);
+
             // Skip if no amount applied to this invoice (using small threshold for floating-point comparison)
             if ( $amount_for_invoice < 0.01 ) {
+                DQ_Logger::debug( "Payment skipped: amount too small", [
+                    'payment_id' => $payment_id,
+                    'invoice_id' => $invoice_id,
+                    'amount_for_invoice' => $amount_for_invoice,
+                ]);
                 continue;
             }
 
@@ -554,18 +665,76 @@ class DQ_API {
 
             $is_deposited = false;
             $deposit_reason = '';
+            $deposit_details = [];
 
             // Payment is deposited if account is NOT "Undeposited Funds"
             if ( ! empty( $account_name ) && strcasecmp( $account_name, 'Undeposited Funds' ) !== 0 ) {
                 $is_deposited = true;
                 $deposit_reason = 'direct_account';
+                $deposit_details = [
+                    'explanation' => 'Payment was deposited directly to a bank account',
+                    'account_name' => $account_name,
+                    'account_ref' => $payment['DepositToAccountRef']['value'] ?? null,
+                ];
+
+                DQ_Logger::debug( "Payment classified as DEPOSITED (direct account)", [
+                    'payment_id' => $payment_id,
+                    'invoice_id' => $invoice_id,
+                    'amount' => $amount_for_invoice,
+                    'details' => $deposit_details,
+                ]);
             }
             // Payment may still be deposited if it was in Undeposited Funds but later included in a Bank Deposit
-            elseif ( ! empty( $payment['Id'] ) && self::is_payment_in_deposit( $payment['Id'] ) ) {
-                $is_deposited = true;
-                $deposit_reason = 'bank_deposit';
+            elseif ( strcasecmp( $account_name, 'Undeposited Funds' ) === 0 || empty( $account_name ) ) {
+                DQ_Logger::debug( "Payment has DepositToAccountRef = 'Undeposited Funds', checking if included in bank deposit", [
+                    'payment_id' => $payment_id,
+                    'invoice_id' => $invoice_id,
+                    'account_name' => $account_name ?: '(empty)',
+                ]);
+
+                // Check if payment appears in any Deposit transaction
+                if ( ! empty( $payment['Id'] ) && self::is_payment_in_deposit( $payment['Id'] ) ) {
+                    $is_deposited = true;
+                    $deposit_reason = 'bank_deposit';
+                    $deposit_details = [
+                        'explanation' => 'Payment was in Undeposited Funds but found in a Bank Deposit transaction',
+                        'original_account_name' => $account_name ?: '(none)',
+                    ];
+
+                    DQ_Logger::debug( "Payment classified as DEPOSITED (found in bank deposit)", [
+                        'payment_id' => $payment_id,
+                        'invoice_id' => $invoice_id,
+                        'amount' => $amount_for_invoice,
+                        'details' => $deposit_details,
+                    ]);
+                } else {
+                    $deposit_reason = 'undeposited';
+                    $deposit_details = [
+                        'explanation' => 'Payment is in Undeposited Funds and NOT found in any Bank Deposit transaction',
+                        'account_name' => $account_name ?: '(none)',
+                    ];
+
+                    DQ_Logger::debug( "Payment classified as NOT DEPOSITED (undeposited funds)", [
+                        'payment_id' => $payment_id,
+                        'invoice_id' => $invoice_id,
+                        'amount' => $amount_for_invoice,
+                        'details' => $deposit_details,
+                    ]);
+                }
             } else {
+                // Edge case: account name exists but doesn't match expected patterns
                 $deposit_reason = 'undeposited';
+                $deposit_details = [
+                    'explanation' => 'Payment classification unclear - treating as undeposited',
+                    'account_name' => $account_name,
+                ];
+
+                DQ_Logger::debug( "Payment classified as NOT DEPOSITED (edge case)", [
+                    'payment_id' => $payment_id,
+                    'invoice_id' => $invoice_id,
+                    'amount' => $amount_for_invoice,
+                    'details' => $deposit_details,
+                ]);
             }
 
             if ( $is_deposited ) {
@@ -574,21 +743,29 @@ class DQ_API {
                 $undeposited += $amount_for_invoice;
             }
 
-            DQ_Logger::debug( 'Payment processed for deposit calculation', [
+            // Summary log for this payment
+            DQ_Logger::debug( 'Payment classification summary', [
                 'invoice_id' => $invoice_id,
-                'payment_id' => $payment['Id'] ?? 'unknown',
+                'payment_id' => $payment_id,
                 'amount_for_invoice' => $amount_for_invoice,
                 'account_name' => $account_name ?: '(none)',
                 'is_deposited' => $is_deposited,
                 'reason' => $deposit_reason,
+                'details' => $deposit_details,
             ]);
         }
 
-        DQ_Logger::debug( 'Payment deposit totals calculated', [
+        // Final totals summary
+        DQ_Logger::debug( '=== FINAL Payment Classification Results ===', [
             'invoice_id' => $invoice_id,
-            'payment_count' => count($payments),
-            'deposited' => $deposited,
-            'undeposited' => $undeposited,
+            'total_payments_processed' => count($payments),
+            'deposited_total' => $deposited,
+            'undeposited_total' => $undeposited,
+            'grand_total' => $deposited + $undeposited,
+        ]);
+
+        DQ_Logger::debug( '=== END Payment Classification for Invoice ===', [
+            'invoice_id' => $invoice_id,
         ]);
 
         return [
