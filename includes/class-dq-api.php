@@ -308,6 +308,8 @@ class DQ_API {
             return new WP_Error( 'dq_no_invoice_id', 'Invoice ID is required to query payments.' );
         }
 
+        // Sanitize invoice_id to prevent SQL injection
+        $invoice_id = esc_sql( (string) $invoice_id );
         $sql = "SELECT * FROM Payment WHERE Line.Any.LinkedTxn.TxnId = '{$invoice_id}'";
         $result = self::query( $sql );
 
