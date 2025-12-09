@@ -721,21 +721,41 @@ class DQ_Workorder_Admin_Table {
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only filter, no action taken
         $selected_date = sanitize_text_field( wp_unslash( $_GET['dq_scheduled_date'] ) );
 
-        // Validate date format (YYYY-MM-DD)
+        // Validate date format (YYYY-MM-DD) and ensure it's a valid date
         if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $selected_date ) ) {
+            return;
+        }
+
+        // Verify the date is valid using DateTime
+        $date_obj = DateTime::createFromFormat( 'Y-m-d', $selected_date );
+        if ( ! $date_obj || $date_obj->format( 'Y-m-d' ) !== $selected_date ) {
             return;
         }
 
         // Get existing meta query or create new one
         $meta_query = $query->get( 'meta_query' ) ?: [];
 
-        // Add date filter to meta query
-        // This will match dates that start with the selected date (date portion only)
+        // Add date filter to meta query using date range
+        // Match dates that fall within the selected day (00:00:00 to 23:59:59)
+        $date_start = $selected_date . ' 00:00:00';
+        $date_end   = $selected_date . ' 23:59:59';
+
         $meta_query[] = [
-            'key'     => 'schedule_date_time',
-            'value'   => $selected_date,
-            'compare' => 'LIKE',
-            'type'    => 'CHAR',
+            'relation' => 'OR',
+            [
+                // Match if the field value starts with the selected date (e.g., "2024-12-09")
+                'key'     => 'schedule_date_time',
+                'value'   => $selected_date,
+                'compare' => 'LIKE',
+                'type'    => 'CHAR',
+            ],
+            [
+                // Also handle datetime format stored in ACF (e.g., "2024-12-09 15:30:00")
+                'key'     => 'schedule_date_time',
+                'value'   => [ $date_start, $date_end ],
+                'compare' => 'BETWEEN',
+                'type'    => 'DATETIME',
+            ],
         ];
 
         $query->set( 'meta_query', $meta_query );
@@ -799,13 +819,8 @@ class DQ_Workorder_Admin_Table {
         // Enqueue jQuery UI datepicker
         wp_enqueue_script( 'jquery-ui-datepicker' );
 
-        // Enqueue jQuery UI theme CSS for datepicker
-        wp_enqueue_style(
-            'jquery-ui-datepicker-style',
-            'https://code.jquery.com/ui/1.13.2/themes/smoothness/jquery-ui.css',
-            [],
-            '1.13.2'
-        );
+        // Enqueue WordPress core jQuery UI styles
+        wp_enqueue_style( 'wp-jquery-ui-dialog' );
 
         // Inline styles for the admin table
         wp_add_inline_style( 'common', self::get_admin_styles() );
