@@ -285,6 +285,23 @@ function dqqb_normalize_date_for_storage( $date_string, $input_format = '' ) {
 }
 
 /**
+ * Helper function: Create a DateTimeImmutable object from year, month, day in site timezone.
+ * 
+ * @param int $year Year (e.g., 2025)
+ * @param int $month Month (1-12)
+ * @param int $day Day (1-31)
+ * @return int|false Unix timestamp, or false if creation fails
+ */
+function dqqb_create_date_timestamp( $year, $month, $day ) {
+    try {
+        $date_obj = new DateTimeImmutable( sprintf( '%04d-%02d-%02d 00:00:00', $year, $month, $day ), wp_timezone() );
+        return $date_obj->getTimestamp();
+    } catch ( Exception $e ) {
+        return false;
+    }
+}
+
+/**
  * Parse a date string and return a timestamp, handling various formats.
  * This is a timezone-aware version specifically for chart/report date ranges.
  * 
@@ -309,12 +326,7 @@ function dqqb_parse_date_for_comparison( $date_string ) {
         $month = (int) $m[2];
         $day   = (int) $m[3];
         if ( checkdate( $month, $day, $year ) ) {
-            try {
-                $date_obj = new DateTimeImmutable( sprintf( '%04d-%02d-%02d 00:00:00', $year, $month, $day ), wp_timezone() );
-                return $date_obj->getTimestamp();
-            } catch ( Exception $e ) {
-                return false;
-            }
+            return dqqb_create_date_timestamp( $year, $month, $day );
         }
         return false;
     }
@@ -341,12 +353,7 @@ function dqqb_parse_date_for_comparison( $date_string ) {
         
         // Validate the date
         if ( checkdate( $month, $day, $year ) ) {
-            try {
-                $date_obj = new DateTimeImmutable( sprintf( '%04d-%02d-%02d 00:00:00', $year, $month, $day ), wp_timezone() );
-                return $date_obj->getTimestamp();
-            } catch ( Exception $e ) {
-                return false;
-            }
+            return dqqb_create_date_timestamp( $year, $month, $day );
         }
         return false;
     }
@@ -359,12 +366,7 @@ function dqqb_parse_date_for_comparison( $date_string ) {
         
         // Validate the date
         if ( checkdate( $month, $day, $year ) ) {
-            try {
-                $date_obj = new DateTimeImmutable( sprintf( '%04d-%02d-%02d 00:00:00', $year, $month, $day ), wp_timezone() );
-                return $date_obj->getTimestamp();
-            } catch ( Exception $e ) {
-                return false;
-            }
+            return dqqb_create_date_timestamp( $year, $month, $day );
         }
         return false;
     }
