@@ -439,16 +439,16 @@ class DQ_Workorder_Admin_Table {
 
         // Display date with inline checkbox
         echo '<div class="dq-dispatched-wrapper">';
-        echo '<span class="dq-dispatched-date" style="font-weight:bold">' . $formatted_date . '</span>';
+        echo '<span class="dq-dispatched-date">' . $formatted_date . '</span>';
         echo '<label class="dq-dispatched-label' . esc_attr( $disabled_class ) . '" title="' . esc_attr( $label ) . '">';
         printf(
-            '<input type="checkbox" style="margin-top:1px" class="dq-dispatched-checkbox" data-post-id="%1$d" %2$s %3$s aria-label="%4$s" />',
+            '<input type="checkbox" class="dq-dispatched-checkbox" data-post-id="%1$d" %2$s %3$s aria-label="%4$s" />',
             (int) $post_id,
             checked( $dispatched, true, false ),
             $disabled,
             esc_attr( $label )
         );
-        echo ' <span class="dq-dispatched-label-text" style="font-style:italic">' . esc_html__( 'Dispatched', 'dqqb' ) . '</span>';
+        echo '<span class="dq-dispatched-label-text">' . esc_html__( 'Dispatched', 'dqqb' ) . '</span>';
         echo '</label>';
         echo '</div>';
     }
@@ -897,36 +897,81 @@ class DQ_Workorder_Admin_Table {
             .dq-dispatched-wrapper {
                 display: flex;
                 flex-direction: column;
-                gap: 4px;
+                gap: 6px;
             }
             .dq-dispatched-date {
                 display: block;
+                font-weight: 600;
+                color: #2c3338;
             }
             .dq-dispatched-label {
                 display: inline-flex;
                 align-items: center;
-                gap: 4px;
+                gap: 6px;
                 cursor: pointer;
                 font-size: 12px;
                 margin: 0;
+                padding: 4px 8px;
+                border-radius: 4px;
+                transition: background-color 0.15s ease;
+            }
+            .dq-dispatched-label:hover {
+                background-color: #f6f7f7;
             }
             .dq-dispatched-label.disabled {
                 cursor: not-allowed;
                 opacity: 0.6;
             }
+            .dq-dispatched-label.disabled:hover {
+                background-color: transparent;
+            }
             .dq-dispatched-checkbox {
+                width: 18px;
+                height: 18px;
                 margin: 0;
                 cursor: pointer;
+                border-radius: 4px;
+                border: 2px solid #8c8f94;
+                appearance: none;
+                -webkit-appearance: none;
+                -moz-appearance: none;
+                background-color: #fff;
+                position: relative;
+                transition: all 0.15s ease;
+            }
+            .dq-dispatched-checkbox:hover {
+                border-color: #0996a0;
+            }
+            .dq-dispatched-checkbox:checked {
+                background-color: #0996a0;
+                border-color: #0996a0;
+            }
+            .dq-dispatched-checkbox:checked::after {
+                content: "";
+                position: absolute;
+                left: 5px;
+                top: 2px;
+                width: 4px;
+                height: 8px;
+                border: solid white;
+                border-width: 0 2px 2px 0;
+                transform: rotate(45deg);
+            }
+            .dq-dispatched-checkbox:focus {
+                outline: 2px solid #0996a0;
+                outline-offset: 2px;
             }
             .dq-dispatched-checkbox:disabled {
                 cursor: not-allowed;
+                opacity: 0.5;
             }
             .dq-dispatched-checkbox.is-loading {
                 opacity: 0.6;
                 pointer-events: none;
             }
             .dq-dispatched-label-text {
-                color: #666;
+                color: #50575e;
+                font-weight: 500;
                 user-select: none;
             }
 
