@@ -51,6 +51,9 @@ class DQ_Workorder_Admin_Table {
         // AJAX handler for inline QA toggle
         add_action( 'wp_ajax_dq_toggle_quality_assurance', [ __CLASS__, 'ajax_toggle_quality_assurance' ] );
 
+        // AJAX handler for inline dispatched toggle
+        add_action( 'wp_ajax_dq_toggle_dispatched', [ __CLASS__, 'ajax_toggle_dispatched' ] );
+
         // AJAX handler for creating/linking invoice CPT
         add_action( 'wp_ajax_dq_wo_create_invoice_cpt', [ __CLASS__, 'ajax_create_invoice_cpt' ] );
     }
@@ -347,6 +350,24 @@ class DQ_Workorder_Admin_Table {
     }
 
     /**
+     * Check if work order is dispatched.
+     * Uses canonical ACF true/false field 'wo_dispatched'.
+     *
+     * @param int $post_id Post ID.
+     * @return bool True if dispatched.
+     */
+    public static function is_dispatched( $post_id ) {
+        if ( function_exists( 'get_field' ) ) {
+            $val = get_field( 'wo_dispatched', $post_id );
+            // ACF true/false returns 1, '1', or true (boolean)
+            return ( $val === 1 || $val === '1' || $val === true );
+        }
+        // Fallback to meta if ACF not loaded
+        $raw = get_post_meta( $post_id, 'wo_dispatched', true );
+        return ( $raw === '1' || $raw === 1 || $raw === true );
+    }
+
+    /**
      * Get the canonical meta key for QA field.
      * Uses only 'quality_assurance' as the canonical ACF true/false field.
      *
@@ -387,6 +408,7 @@ class DQ_Workorder_Admin_Table {
      * Render Date Dispatched column
      *
      * Uses ACF field: wo_date_received, falls back to post_date if empty
+     * Also includes an inline checkbox for the 'wo_dispatched' ACF true/false field
      *
      * @param int $post_id Post ID
      * @return void
@@ -399,7 +421,28 @@ class DQ_Workorder_Admin_Table {
             $value = get_post_field( 'post_date', $post_id );
         }
 
-        echo self::format_date_display( $value );
+        $formatted_date = self::format_date_display( $value );
+
+        // Get dispatched checkbox state
+        $dispatched = self::is_dispatched( $post_id );
+        $can_edit = current_user_can( 'edit_post', $post_id );
+        $disabled = $can_edit ? '' : ' disabled="disabled"';
+        $label = $dispatched ? __( 'Dispatched', 'dqqb' ) : __( 'Not dispatched', 'dqqb' );
+
+        // Display date with inline checkbox
+        echo '<div class="dq-dispatched-wrapper">';
+        echo '<span class="dq-dispatched-date">' . $formatted_date . '</span>';
+        echo '<label class="dq-dispatched-label" title="' . esc_attr( $label ) . '">';
+        printf(
+            '<input type="checkbox" class="dq-dispatched-checkbox" data-post-id="%1$d" %2$s %3$s aria-label="%4$s" />',
+            (int) $post_id,
+            checked( $dispatched, true, false ),
+            $disabled,
+            esc_attr( $label )
+        );
+        echo ' <span class="dq-dispatched-label-text">' . esc_html__( 'Dispatched', 'dqqb' ) . '</span>';
+        echo '</label>';
+        echo '</div>';
     }
 
     /**
@@ -709,6 +752,43 @@ class DQ_Workorder_Admin_Table {
                 opacity: 0.8;
             }
 
+            /* Dispatched checkbox */
+            .dq-dispatched-wrapper {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+            .dq-dispatched-date {
+                display: block;
+            }
+            .dq-dispatched-label {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                cursor: pointer;
+                font-size: 12px;
+                margin: 0;
+            }
+            .dq-dispatched-label:has(input:disabled) {
+                cursor: not-allowed;
+                opacity: 0.6;
+            }
+            .dq-dispatched-checkbox {
+                margin: 0;
+                cursor: pointer;
+            }
+            .dq-dispatched-checkbox:disabled {
+                cursor: not-allowed;
+            }
+            .dq-dispatched-checkbox.is-loading {
+                opacity: 0.6;
+                pointer-events: none;
+            }
+            .dq-dispatched-label-text {
+                color: #666;
+                user-select: none;
+            }
+
             /* Expanded details row */
             .dq-wo-details-row {
                 background: #f9f9f9 !important;
@@ -866,10 +946,11 @@ class DQ_Workorder_Admin_Table {
      * @return string JavaScript code
      */
     private static function get_admin_script() {
-        $ajax_url      = admin_url( 'admin-ajax.php' );
-        $expand_nonce  = wp_create_nonce( 'dq_workorder_expand' );
-        $toggle_nonce  = wp_create_nonce( 'dq_toggle_quality_assurance' );
-        $invoice_nonce = wp_create_nonce( 'dq_wo_create_invoice_cpt' );
+        $ajax_url           = admin_url( 'admin-ajax.php' );
+        $expand_nonce       = wp_create_nonce( 'dq_workorder_expand' );
+        $toggle_nonce       = wp_create_nonce( 'dq_toggle_quality_assurance' );
+        $dispatched_nonce   = wp_create_nonce( 'dq_toggle_dispatched' );
+        $invoice_nonce      = wp_create_nonce( 'dq_wo_create_invoice_cpt' );
 
         return '
             jQuery(document).ready(function($) {
@@ -1031,6 +1112,47 @@ class DQ_Workorder_Admin_Table {
                         $btn.data("loading", false).removeClass("is-loading");
                     });
                 });
+
+                // Handle Dispatched checkbox toggle
+                $(document).on("change", ".dq-dispatched-checkbox", function(e) {
+                    var $checkbox = $(this);
+                    if ($checkbox.data("loading") || $checkbox.prop("disabled")) return;
+
+                    var postId = $checkbox.data("post-id");
+                    var dispatched = $checkbox.prop("checked") ? 1 : 0;
+
+                    $checkbox.data("loading", true).addClass("is-loading");
+
+                    $.ajax({
+                        url: "' . esc_js( $ajax_url ) . '",
+                        type: "POST",
+                        dataType: "json",
+                        data: {
+                            action: "dq_toggle_dispatched",
+                            nonce: "' . esc_js( $dispatched_nonce ) . '",
+                            post_id: postId,
+                            dispatched: dispatched
+                        }
+                    }).done(function(resp) {
+                        if (resp && resp.success && resp.data) {
+                            var newDispatched = resp.data.dispatched ? true : false;
+                            $checkbox.prop("checked", newDispatched);
+                            var label = newDispatched ? "' . esc_js( __( 'Dispatched', 'dqqb' ) ) . '" : "' . esc_js( __( 'Not dispatched', 'dqqb' ) ) . '";
+                            $checkbox.attr("aria-label", label);
+                            $checkbox.closest(".dq-dispatched-label").attr("title", label);
+                        } else {
+                            // Revert checkbox on failure
+                            $checkbox.prop("checked", !dispatched);
+                            alert("' . esc_js( __( 'Unable to update dispatched status.', 'dqqb' ) ) . '");
+                        }
+                    }).fail(function() {
+                        // Revert checkbox on error
+                        $checkbox.prop("checked", !dispatched);
+                        alert("' . esc_js( __( 'Error updating dispatched status.', 'dqqb' ) ) . '");
+                    }).always(function() {
+                        $checkbox.data("loading", false).removeClass("is-loading");
+                    });
+                });
             });
         ';
     }
@@ -1070,6 +1192,43 @@ class DQ_Workorder_Admin_Table {
         }
 
         wp_send_json_success( [ 'done' => (bool) $done ] );
+    }
+
+    /**
+     * AJAX handler: toggle dispatched status
+     */
+    public static function ajax_toggle_dispatched() {
+        if ( ! check_ajax_referer( 'dq_toggle_dispatched', 'nonce', false ) ) {
+            wp_send_json_error( [ 'message' => 'Invalid security token.' ], 403 );
+        }
+
+        $post_id = isset( $_POST['post_id'] ) ? absint( wp_unslash( $_POST['post_id'] ) ) : 0;
+        if ( $post_id <= 0 ) {
+            wp_send_json_error( [ 'message' => 'Invalid post ID.' ], 400 );
+        }
+        if ( ! current_user_can( 'edit_post', $post_id ) ) {
+            wp_send_json_error( [ 'message' => 'Permission denied.' ], 403 );
+        }
+
+        $dispatched = isset( $_POST['dispatched'] ) ? (int) wp_unslash( $_POST['dispatched'] ) : 1;
+        $dispatched = $dispatched === 1 ? 1 : 0;
+
+        $updated = false;
+        if ( function_exists( 'update_field' ) && function_exists( 'get_field_object' ) ) {
+            $obj = get_field_object( 'wo_dispatched', $post_id );
+            if ( $obj && is_array( $obj ) ) {
+                $updated = (bool) update_field( 'wo_dispatched', $dispatched, $post_id );
+            }
+        }
+        if ( ! $updated ) {
+            $updated = (bool) update_post_meta( $post_id, 'wo_dispatched', (string) $dispatched );
+        }
+
+        if ( ! $updated ) {
+            wp_send_json_error( [ 'message' => 'Failed to update.' ], 500 );
+        }
+
+        wp_send_json_success( [ 'dispatched' => (bool) $dispatched ] );
     }
 
     /**
