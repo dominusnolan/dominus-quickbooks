@@ -448,7 +448,26 @@ class DQ_API {
         $undeposited = 0.0;
 
         foreach ( $payments as $payment ) {
-            $amount = isset( $payment['TotalAmt'] ) ? (float) $payment['TotalAmt'] : 0.0;
+            // Calculate the amount applied to THIS specific invoice
+            // by summing Line.Amount values for lines linked to this invoice
+            $amount_for_invoice = 0.0;
+            
+            if ( ! empty( $payment['Line'] ) && is_array( $payment['Line'] ) ) {
+                foreach ( $payment['Line'] as $line ) {
+                    // Check if this line is linked to our invoice
+                    if ( ! empty( $line['LinkedTxn'] ) && is_array( $line['LinkedTxn'] ) ) {
+                        foreach ( $line['LinkedTxn'] as $linked ) {
+                            if ( isset( $linked['TxnId'] ) && 
+                                 (string) $linked['TxnId'] === (string) $invoice_id &&
+                                 ! empty( $linked['TxnType'] ) && 
+                                 $linked['TxnType'] === 'Invoice' ) {
+                                // This line is linked to our invoice, add its amount
+                                $amount_for_invoice += isset( $line['Amount'] ) ? (float) $line['Amount'] : 0.0;
+                            }
+                        }
+                    }
+                }
+            }
 
             // Check if payment is deposited to "Undeposited Funds"
             $account_name = '';
@@ -457,16 +476,11 @@ class DQ_API {
             }
 
             // Case-insensitive comparison for "Undeposited Funds"
+            // Anything NOT "Undeposited Funds" is considered deposited
             if ( strcasecmp( $account_name, 'Undeposited Funds' ) === 0 ) {
-                $undeposited += $amount;
+                $undeposited += $amount_for_invoice;
             } else {
-                // Only count as deposited if there's an actual account (not empty)
-                if ( ! empty( $account_name ) ) {
-                    $deposited += $amount;
-                } else {
-                    // Default to undeposited if no account specified
-                    $undeposited += $amount;
-                }
+                $deposited += $amount_for_invoice;
             }
         }
 
