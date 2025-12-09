@@ -203,7 +203,9 @@ function dqqb_format_date_display( $date, $format = 'm/d/Y', $plain_text = false
         // This prevents off-by-one errors when a date like '2025-12-31'
         // is parsed as UTC midnight and then displayed in a different timezone
         try {
-            $date_obj = new DateTimeImmutable( $date, wp_timezone() );
+            // Add explicit midnight time for date-only strings to ensure consistent parsing
+            $date_with_time = ( preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) ? $date . ' 00:00:00' : $date;
+            $date_obj = new DateTimeImmutable( $date_with_time, wp_timezone() );
             $timestamp = $date_obj->getTimestamp();
         } catch ( Exception $e ) {
             // Fallback: try parsing as-is if DateTimeImmutable fails

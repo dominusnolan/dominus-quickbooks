@@ -511,7 +511,11 @@ class DQ_Workorder_Table
         // Use timezone-aware helper to prevent off-by-one errors
         // Use plain_text mode to avoid HTML wrapping overhead
         $formatted = dqqb_format_date_display($raw_date, 'm/d/Y', true);
-        return $formatted !== '—' ? $formatted : 'N/A';
+        // If the helper returned the empty date indicator or the original value unchanged, show N/A
+        if (empty($formatted) || $formatted === '—' || $formatted === $raw_date) {
+            return 'N/A';
+        }
+        return $formatted;
     }
 
     private static function get_distinct_states()
