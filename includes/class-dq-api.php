@@ -333,6 +333,10 @@ class DQ_API {
         $payments = self::get_payments_for_invoice( $invoice_id );
 
         if ( is_wp_error( $payments ) ) {
+            DQ_Logger::error( 'Failed to fetch payments for invoice', [
+                'invoice_id' => $invoice_id,
+                'error' => $payments->get_error_message()
+            ]);
             return $payments;
         }
 
@@ -340,24 +344,77 @@ class DQ_API {
         $undeposited = 0.0;
 
         foreach ( $payments as $payment ) {
+            // Only process payments that are linked to this invoice
+            if ( ! self::payment_linked_to_invoice( $payment, $invoice_id ) ) {
+                continue;
+            }
+
             $amount = isset( $payment['TotalAmt'] ) ? (float) $payment['TotalAmt'] : 0.0;
 
             // Check if payment is deposited to "Undeposited Funds"
             $account_name = '';
             if ( ! empty( $payment['DepositToAccountRef']['name'] ) ) {
-                $account_name = (string) $payment['DepositToAccountRef']['name'];
+                $account_name = trim( (string) $payment['DepositToAccountRef']['name'] );
             }
 
-            if ( $account_name === 'Undeposited Funds' ) {
+            // Case-insensitive comparison for "Undeposited Funds"
+            if ( strcasecmp( $account_name, 'Undeposited Funds' ) === 0 ) {
                 $undeposited += $amount;
             } else {
-                $deposited += $amount;
+                // Only count as deposited if there's an actual account (not empty)
+                if ( ! empty( $account_name ) ) {
+                    $deposited += $amount;
+                } else {
+                    // Default to undeposited if no account specified
+                    $undeposited += $amount;
+                }
             }
         }
+
+        DQ_Logger::debug( 'Payment deposit totals calculated', [
+            'invoice_id' => $invoice_id,
+            'payment_count' => count($payments),
+            'deposited' => $deposited,
+            'undeposited' => $undeposited,
+        ]);
 
         return [
             'deposited'   => $deposited,
             'undeposited' => $undeposited,
         ];
+    }
+
+    /**
+     * Check if a payment is linked to a specific invoice by examining its Line items.
+     *
+     * @param array $payment The payment data from QuickBooks
+     * @param string $invoice_id The invoice ID to check for
+     * @return bool True if the payment is linked to the invoice
+     */
+    private static function payment_linked_to_invoice( $payment, $invoice_id ) {
+        if ( empty( $payment['Line'] ) || ! is_array( $payment['Line'] ) ) {
+            return false;
+        }
+
+        $invoice_id = (string) $invoice_id;
+
+        foreach ( $payment['Line'] as $line ) {
+            // Check if this line has LinkedTxn entries
+            if ( empty( $line['LinkedTxn'] ) || ! is_array( $line['LinkedTxn'] ) ) {
+                continue;
+            }
+
+            // Check each linked transaction
+            foreach ( $line['LinkedTxn'] as $linked ) {
+                if ( isset( $linked['TxnId'] ) && (string) $linked['TxnId'] === $invoice_id ) {
+                    // Also verify it's an Invoice type transaction
+                    if ( empty( $linked['TxnType'] ) || $linked['TxnType'] === 'Invoice' ) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 }
