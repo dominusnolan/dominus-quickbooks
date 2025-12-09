@@ -295,4 +295,67 @@ class DQ_API {
         $query = "SELECT * FROM Invoice WHERE DocNumber = '$docnumber'";
         return self::query($query);
     }
+
+    /**
+     * Query payments linked to a specific invoice ID.
+     * Uses QuickBooks SQL: SELECT * FROM Payment WHERE Line.Any.LinkedTxn.TxnId = '{invoice_id}'
+     *
+     * @param string $invoice_id The QuickBooks Invoice ID
+     * @return array|WP_Error Array of payments or WP_Error on failure
+     */
+    public static function get_payments_for_invoice( $invoice_id ) {
+        if ( empty( $invoice_id ) ) {
+            return new WP_Error( 'dq_no_invoice_id', 'Invoice ID is required to query payments.' );
+        }
+
+        $sql = "SELECT * FROM Payment WHERE Line.Any.LinkedTxn.TxnId = '{$invoice_id}'";
+        $result = self::query( $sql );
+
+        if ( is_wp_error( $result ) ) {
+            return $result;
+        }
+
+        // Return the payments array, or empty array if none found
+        return $result['QueryResponse']['Payment'] ?? [];
+    }
+
+    /**
+     * Calculate deposited and undeposited payment totals for an invoice.
+     * Payments with DepositToAccountRef name "Undeposited Funds" are undeposited,
+     * all others are deposited.
+     *
+     * @param string $invoice_id The QuickBooks Invoice ID
+     * @return array ['deposited' => float, 'undeposited' => float] or WP_Error
+     */
+    public static function get_payment_deposit_totals( $invoice_id ) {
+        $payments = self::get_payments_for_invoice( $invoice_id );
+
+        if ( is_wp_error( $payments ) ) {
+            return $payments;
+        }
+
+        $deposited = 0.0;
+        $undeposited = 0.0;
+
+        foreach ( $payments as $payment ) {
+            $amount = isset( $payment['TotalAmt'] ) ? (float) $payment['TotalAmt'] : 0.0;
+
+            // Check if payment is deposited to "Undeposited Funds"
+            $account_name = '';
+            if ( ! empty( $payment['DepositToAccountRef']['name'] ) ) {
+                $account_name = (string) $payment['DepositToAccountRef']['name'];
+            }
+
+            if ( $account_name === 'Undeposited Funds' ) {
+                $undeposited += $amount;
+            } else {
+                $deposited += $amount;
+            }
+        }
+
+        return [
+            'deposited'   => $deposited,
+            'undeposited' => $undeposited,
+        ];
+    }
 }
