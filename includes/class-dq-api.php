@@ -477,10 +477,10 @@ class DQ_API {
             return false;
         }
 
-        $payment_id = (string) $payment_id;
+        $payment_id = esc_sql( (string) $payment_id );
 
-        // Query deposits that contain this payment
-        $sql = "SELECT * FROM Deposit WHERE Line.Any.LinkedTxn.TxnId = '{$payment_id}' AND Line.Any.LinkedTxn.TxnType = 'Payment'";
+        // Query deposits that contain this payment (only need to verify existence)
+        $sql = "SELECT Id FROM Deposit WHERE Line.Any.LinkedTxn.TxnId = '{$payment_id}' AND Line.Any.LinkedTxn.TxnType = 'Payment'";
         $result = self::query( $sql );
 
         if ( is_wp_error( $result ) ) {
