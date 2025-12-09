@@ -427,12 +427,13 @@ class DQ_Workorder_Admin_Table {
         $dispatched = self::is_dispatched( $post_id );
         $can_edit = current_user_can( 'edit_post', $post_id );
         $disabled = $can_edit ? '' : ' disabled="disabled"';
+        $disabled_class = $can_edit ? '' : ' disabled';
         $label = $dispatched ? __( 'Dispatched', 'dqqb' ) : __( 'Not dispatched', 'dqqb' );
 
         // Display date with inline checkbox
         echo '<div class="dq-dispatched-wrapper">';
         echo '<span class="dq-dispatched-date">' . $formatted_date . '</span>';
-        echo '<label class="dq-dispatched-label" title="' . esc_attr( $label ) . '">';
+        echo '<label class="dq-dispatched-label' . esc_attr( $disabled_class ) . '" title="' . esc_attr( $label ) . '">';
         printf(
             '<input type="checkbox" class="dq-dispatched-checkbox" data-post-id="%1$d" %2$s %3$s aria-label="%4$s" />',
             (int) $post_id,
@@ -769,7 +770,7 @@ class DQ_Workorder_Admin_Table {
                 font-size: 12px;
                 margin: 0;
             }
-            .dq-dispatched-label:has(input:disabled) {
+            .dq-dispatched-label.disabled {
                 cursor: not-allowed;
                 opacity: 0.6;
             }
@@ -1142,12 +1143,12 @@ class DQ_Workorder_Admin_Table {
                             $checkbox.closest(".dq-dispatched-label").attr("title", label);
                         } else {
                             // Revert checkbox on failure
-                            $checkbox.prop("checked", !dispatched);
+                            $checkbox.prop("checked", dispatched === 0);
                             alert("' . esc_js( __( 'Unable to update dispatched status.', 'dqqb' ) ) . '");
                         }
                     }).fail(function() {
                         // Revert checkbox on error
-                        $checkbox.prop("checked", !dispatched);
+                        $checkbox.prop("checked", dispatched === 0);
                         alert("' . esc_js( __( 'Error updating dispatched status.', 'dqqb' ) ) . '");
                     }).always(function() {
                         $checkbox.data("loading", false).removeClass("is-loading");
