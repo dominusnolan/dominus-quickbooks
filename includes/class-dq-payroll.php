@@ -425,7 +425,9 @@ class DQ_Payroll {
         $total = 0.0;
         foreach ( $records as $record ) {
             $total += (float) $record['amount'];
-            $date_display = wp_date( 'M j, Y', strtotime( $record['date'] ) );
+            // Use timezone-aware parsing for date display
+            $date_ts = dqqb_parse_date_for_comparison( $record['date'] );
+            $date_display = $date_ts ? wp_date( 'M j, Y', $date_ts ) : $record['date'];
 
             // Get assigned user display
             $user_display = 'Unassigned';
@@ -673,7 +675,9 @@ class DQ_Payroll {
             echo '        </tr></thead><tbody>';
 
             foreach ( $records as $record ) {
-                $date_display = wp_date( 'M j, Y', strtotime( $record['date'] ) );
+                // Use timezone-aware parsing for date display
+                $date_ts = dqqb_parse_date_for_comparison( $record['date'] );
+                $date_display = $date_ts ? wp_date( 'M j, Y', $date_ts ) : $record['date'];
 
                 // Get assigned user display
                 $user_display = 'Unassigned';

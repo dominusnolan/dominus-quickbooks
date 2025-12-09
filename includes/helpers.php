@@ -181,30 +181,47 @@ function dqqb_parse_date_to_utc( $date_string ) {
  * 
  * Always use this function for displaying dates to users in the admin or frontend.
  * It ensures dates are shown in the WordPress site timezone.
+ * 
+ * IMPORTANT: This function parses date strings as midnight in the SITE TIMEZONE,
+ * not UTC, to prevent off-by-one errors when displaying dates.
  *
- * @param string|int $date Date string or Unix timestamp in UTC
+ * @param string|int $date Date string or Unix timestamp
  * @param string $format Date format (default: 'm/d/Y')
+ * @param bool $plain_text If true, returns plain text instead of HTML-wrapped output (default: false)
  * @return string Formatted date in site timezone, or '—' if empty/invalid
  */
-function dqqb_format_date_display( $date, $format = 'm/d/Y' ) {
+function dqqb_format_date_display( $date, $format = 'm/d/Y', $plain_text = false ) {
     if ( empty( $date ) ) {
-        return '<span style="color:#999;">—</span>';
+        return $plain_text ? '—' : '<span style="color:#999;">—</span>';
     }
     
     // Convert to timestamp if it's a string
     if ( is_string( $date ) ) {
         $date = trim( str_replace( '_x000D_', '', $date ) );
-        $timestamp = strtotime( $date );
-        if ( $timestamp === false ) {
-            // Return the original value if we can't parse it
-            return esc_html( $date );
+        
+        // Parse the date string as midnight in the site timezone
+        // This prevents off-by-one errors when a date like '2025-12-31'
+        // is parsed as UTC midnight and then displayed in a different timezone
+        try {
+            // Add explicit midnight time for date-only strings to ensure consistent parsing
+            $date_with_time = ( preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) ? $date . ' 00:00:00' : $date;
+            $date_obj = new DateTimeImmutable( $date_with_time, wp_timezone() );
+            $timestamp = $date_obj->getTimestamp();
+        } catch ( Exception $e ) {
+            // Fallback: try parsing as-is if DateTimeImmutable fails
+            $timestamp = strtotime( $date );
+            if ( $timestamp === false ) {
+                // Return the original value if we can't parse it
+                return $plain_text ? $date : esc_html( $date );
+            }
         }
     } else {
         $timestamp = $date;
     }
     
     // Use wp_date() which respects site timezone
-    return esc_html( wp_date( $format, $timestamp ) );
+    $formatted = wp_date( $format, $timestamp );
+    return $plain_text ? $formatted : esc_html( $formatted );
 }
 
 /**
@@ -270,9 +287,27 @@ function dqqb_normalize_date_for_storage( $date_string, $input_format = '' ) {
 }
 
 /**
+ * Helper function: Create a DateTimeImmutable object from year, month, day in site timezone.
+ * 
+ * @param int $year Year (e.g., 2025)
+ * @param int $month Month (1-12)
+ * @param int $day Day (1-31)
+ * @return int|false Unix timestamp, or false if creation fails
+ */
+function dqqb_create_date_timestamp( $year, $month, $day ) {
+    try {
+        $date_obj = new DateTimeImmutable( sprintf( '%04d-%02d-%02d 00:00:00', $year, $month, $day ), wp_timezone() );
+        return $date_obj->getTimestamp();
+    } catch ( Exception $e ) {
+        return false;
+    }
+}
+
+/**
  * Parse a date string and return a timestamp, handling various formats.
  * This is a timezone-aware version specifically for chart/report date ranges.
  * 
+ * IMPORTANT: Parses dates as midnight in the SITE TIMEZONE to prevent off-by-one errors.
  * Uses site's configured date format preference when available to resolve ambiguity.
  * 
  * @param string $date_string The date string to parse
@@ -288,12 +323,12 @@ function dqqb_parse_date_for_comparison( $date_string ) {
     
     // Try YYYY-MM-DD format first (most common in storage, unambiguous)
     if ( preg_match( '/^(\d{4})-(\d{2})-(\d{2})/', $date_string, $m ) ) {
-        // Already in ISO format, validate and parse as UTC
+        // Already in ISO format, validate and parse as midnight in site timezone
         $year  = (int) $m[1];
         $month = (int) $m[2];
         $day   = (int) $m[3];
         if ( checkdate( $month, $day, $year ) ) {
-            return strtotime( $date_string . ' UTC' );
+            return dqqb_create_date_timestamp( $year, $month, $day );
         }
         return false;
     }
@@ -320,7 +355,7 @@ function dqqb_parse_date_for_comparison( $date_string ) {
         
         // Validate the date
         if ( checkdate( $month, $day, $year ) ) {
-            return strtotime( sprintf( '%04d-%02d-%02d UTC', $year, $month, $day ) );
+            return dqqb_create_date_timestamp( $year, $month, $day );
         }
         return false;
     }
@@ -333,14 +368,18 @@ function dqqb_parse_date_for_comparison( $date_string ) {
         
         // Validate the date
         if ( checkdate( $month, $day, $year ) ) {
-            return strtotime( sprintf( '%04d-%02d-%02d UTC', $year, $month, $day ) );
+            return dqqb_create_date_timestamp( $year, $month, $day );
         }
         return false;
     }
     
-    // Fallback to strtotime for other formats, assume UTC
-    $timestamp = strtotime( $date_string . ' UTC' );
-    return $timestamp !== false ? $timestamp : false;
+    // Fallback: try to parse with DateTimeImmutable in site timezone
+    try {
+        $date_obj = new DateTimeImmutable( $date_string, wp_timezone() );
+        return $date_obj->getTimestamp();
+    } catch ( Exception $e ) {
+        return false;
+    }
 }
 
 

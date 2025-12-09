@@ -441,8 +441,15 @@ class DQ_Workorder_Table
 
             $client_days = '';
             if ($fsc_contact_date_raw && $date_received_raw) {
-                $diff_days = abs(round((strtotime($fsc_contact_date_raw) - strtotime($date_received_raw)) / (60 * 60 * 24)));
-                $client_days = $diff_days . ' day' . ($diff_days === 1 ? '' : 's');
+                // Use timezone-aware parsing for accurate date comparison
+                $contact_ts = dqqb_parse_date_for_comparison($fsc_contact_date_raw);
+                $received_ts = dqqb_parse_date_for_comparison($date_received_raw);
+                if ($contact_ts && $received_ts) {
+                    $diff_days = abs(round(($contact_ts - $received_ts) / (60 * 60 * 24)));
+                    $client_days = $diff_days . ' day' . ($diff_days === 1 ? '' : 's');
+                } else {
+                    $client_days = 'N/A';
+                }
             } else {
                 $client_days = 'N/A';
             }
@@ -501,11 +508,14 @@ class DQ_Workorder_Table
         if (empty($raw_date)) {
             return 'N/A';
         }
-        $timestamp = strtotime($raw_date);
-        if ($timestamp !== false) {
-            return date('m/d/Y', $timestamp);
+        // Use timezone-aware helper to prevent off-by-one errors
+        // Use plain_text mode to avoid HTML wrapping overhead
+        $formatted = dqqb_format_date_display($raw_date, 'm/d/Y', true);
+        // If the helper returned the empty date indicator or the original value unchanged, show N/A
+        if (empty($formatted) || $formatted === '—' || $formatted === $raw_date) {
+            return 'N/A';
         }
-        return $raw_date;
+        return $formatted;
     }
 
     private static function get_distinct_states()
