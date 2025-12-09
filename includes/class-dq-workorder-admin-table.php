@@ -1088,10 +1088,7 @@ class DQ_Workorder_Admin_Table {
                 display: none;
             }
             
-            /* Ensure proper z-index stacking */
-            .post-type-workorder .ui-datepicker {
-                display: none;
-            }
+            /* Multi-calendar support */
             .post-type-workorder .ui-datepicker.ui-datepicker-multi {
                 width: auto !important;
             }
