@@ -407,8 +407,9 @@ class DQ_Workorder_Admin_Table {
     /**
      * Render Date Dispatched column
      *
-     * Uses ACF field: wo_date_received, falls back to post_date if empty
-     * Also includes an inline checkbox for the 'wo_dispatched' ACF true/false field
+     * Displays the date received (from ACF field 'wo_date_received', falls back to post_date)
+     * and an inline checkbox for the 'wo_dispatched' ACF true/false field that can be toggled
+     * via AJAX. The checkbox is disabled if the user lacks 'edit_post' permission.
      *
      * @param int $post_id Post ID
      * @return void
@@ -1142,13 +1143,13 @@ class DQ_Workorder_Admin_Table {
                             $checkbox.attr("aria-label", label);
                             $checkbox.closest(".dq-dispatched-label").attr("title", label);
                         } else {
-                            // Revert checkbox on failure
-                            $checkbox.prop("checked", dispatched === 0);
+                            // Revert checkbox on failure (to the opposite of what we tried to save)
+                            $checkbox.prop("checked", dispatched !== 1);
                             alert("' . esc_js( __( 'Unable to update dispatched status.', 'dqqb' ) ) . '");
                         }
                     }).fail(function() {
-                        // Revert checkbox on error
-                        $checkbox.prop("checked", dispatched === 0);
+                        // Revert checkbox on error (to the opposite of what we tried to save)
+                        $checkbox.prop("checked", dispatched !== 1);
                         alert("' . esc_js( __( 'Error updating dispatched status.', 'dqqb' ) ) . '");
                     }).always(function() {
                         $checkbox.data("loading", false).removeClass("is-loading");
