@@ -278,9 +278,10 @@ private static function render_kpi_table($workorders)
         // Average queue days
         $fsc_contact = function_exists('get_field') ? get_field('wo_fsc_contact_date', $pid) : get_post_meta($pid, 'wo_fsc_contact_date', true);
         if ($date_received && $fsc_contact) {
-            $received_ts = strtotime($date_received);
-            $contact_ts = strtotime($fsc_contact);
-            if ($contact_ts > $received_ts && $received_ts) {
+            // Use timezone-aware parsing for accurate date comparison
+            $received_ts = dqqb_parse_date_for_comparison($date_received);
+            $contact_ts = dqqb_parse_date_for_comparison($fsc_contact);
+            if ($contact_ts && $received_ts && $contact_ts > $received_ts) {
                 $diff = ($contact_ts - $received_ts) / 86400;
                 $queue_days[] = $diff;
             }
@@ -359,17 +360,17 @@ private static function render_kpi_table($workorders)
         $completed_date = function_exists('get_field') ? get_field('schedule_date_time', $pid) : get_post_meta($pid, 'schedule_date_time', true);
         $closed_date = function_exists('get_field') ? get_field('closed_on', $pid) : get_post_meta($pid, 'closed_on', true);
 
-        // Received to Scheduled
-        $recv_ts = strtotime($received_date);
-        $sched_ts = strtotime($scheduled_date);
+        // Received to Scheduled - use timezone-aware parsing
+        $recv_ts = dqqb_parse_date_for_comparison($received_date);
+        $sched_ts = dqqb_parse_date_for_comparison($scheduled_date);
         if ($recv_ts && $sched_ts && $sched_ts > $recv_ts) {
             $days = ($sched_ts - $recv_ts) / 86400;
             $days_received_to_scheduled[] = $days;
         }
 
-        // Completed to Closed
-        $comp_ts = strtotime($completed_date);
-        $closed_ts = strtotime($closed_date);
+        // Completed to Closed - use timezone-aware parsing
+        $comp_ts = dqqb_parse_date_for_comparison($completed_date);
+        $closed_ts = dqqb_parse_date_for_comparison($closed_date);
         if ($comp_ts && $closed_ts && $closed_ts > $comp_ts) {
             $days = ($closed_ts - $comp_ts) / 86400;
             $days_completed_to_closed[] = $days;
@@ -490,10 +491,11 @@ private static function render_kpi_table($workorders)
         if (preg_match('/^(\d{1,2})\-(\d{1,2})\-(\d{4})$/', $raw_date, $m)) {
             if (intval($m[3]) == $year) return intval($m[2]);
         }
-        $ts = strtotime($raw_date);
+        // Use timezone-aware parsing
+        $ts = dqqb_parse_date_for_comparison($raw_date);
         if ($ts) {
-            $dtYear = intval(date('Y', $ts));
-            $dtMonth = intval(date('n', $ts));
+            $dtYear = intval(wp_date('Y', $ts));
+            $dtMonth = intval(wp_date('n', $ts));
             if ($dtYear == $year) return $dtMonth;
         }
         return false;
