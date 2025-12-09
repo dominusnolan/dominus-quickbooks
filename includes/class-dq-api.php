@@ -450,10 +450,12 @@ class DQ_API {
 
             // Check each linked transaction
             foreach ( $line['LinkedTxn'] as $linked ) {
-                if ( isset( $linked['TxnId'] ) && 
-                     (string) $linked['TxnId'] === $invoice_id &&
-                     ! empty( $linked['TxnType'] ) && 
-                     $linked['TxnType'] === 'Invoice' ) {
+                $is_matching_invoice = isset( $linked['TxnId'] ) 
+                    && (string) $linked['TxnId'] === $invoice_id 
+                    && ! empty( $linked['TxnType'] ) 
+                    && $linked['TxnType'] === 'Invoice';
+                
+                if ( $is_matching_invoice ) {
                     // This line is linked to our invoice, add its amount
                     $amount += isset( $line['Amount'] ) ? (float) $line['Amount'] : 0.0;
                 }
@@ -465,9 +467,13 @@ class DQ_API {
 
     /**
      * Calculate deposited and undeposited payment totals for an invoice.
-     * Payments with DepositToAccountRef name "Undeposited Funds" (case-insensitive) 
-     * are counted as undeposited. Payments with any other account name are deposited.
-     * Payments without an account name are treated as undeposited for safety.
+     * 
+     * For each payment linked to the invoice, uses get_payment_amount_for_invoice()
+     * to calculate the amount applied to this specific invoice (from Line.Amount 
+     * values), then classifies based on DepositToAccountRef.name:
+     * - "Undeposited Funds" (case-insensitive) → counted as undeposited
+     * - Any other named account → counted as deposited
+     * - Empty/missing account name → counted as undeposited (safe default)
      *
      * @param string $invoice_id The QuickBooks Invoice ID
      * @return array ['deposited' => float, 'undeposited' => float] or WP_Error
