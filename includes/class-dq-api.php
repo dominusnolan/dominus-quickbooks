@@ -466,14 +466,53 @@ class DQ_API {
     }
 
     /**
+     * Check if a payment is included in any bank deposit.
+     * Queries all Deposits and checks if the payment ID appears in any Line.LinkedTxn.
+     *
+     * @param string $payment_id The QuickBooks Payment ID
+     * @return bool True if payment is found in any deposit, false otherwise
+     */
+    private static function is_payment_in_deposit( $payment_id ) {
+        if ( empty( $payment_id ) ) {
+            return false;
+        }
+
+        $payment_id = esc_sql( (string) $payment_id );
+
+        // Query deposits that contain this payment (only need to verify existence)
+        $sql = "SELECT Id FROM Deposit WHERE Line.Any.LinkedTxn.TxnId = '{$payment_id}' AND Line.Any.LinkedTxn.TxnType = 'Payment'";
+        $result = self::query( $sql );
+
+        if ( is_wp_error( $result ) ) {
+            DQ_Logger::debug( 'Deposit query failed for payment', [
+                'payment_id' => $payment_id,
+                'error' => $result->get_error_message()
+            ]);
+            return false;
+        }
+
+        $deposits = $result['QueryResponse']['Deposit'] ?? [];
+
+        if ( ! empty( $deposits ) ) {
+            DQ_Logger::debug( 'Payment found in deposit', [
+                'payment_id' => $payment_id,
+                'deposit_count' => count( $deposits )
+            ]);
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Calculate deposited and undeposited payment totals for an invoice.
      * 
      * For each payment linked to the invoice, uses get_payment_amount_for_invoice()
      * to calculate the amount applied to this specific invoice (from Line.Amount 
-     * values), then classifies based on DepositToAccountRef.name:
-     * - "Undeposited Funds" (case-insensitive) → counted as undeposited
-     * - Any other named account → counted as deposited
-     * - Empty/missing account name → counted as undeposited (safe default)
+     * values), then classifies based on:
+     * - Payment is deposited if DepositToAccountRef.name is NOT 'Undeposited Funds'
+     * - Payment is deposited if it's in 'Undeposited Funds' but found in a Bank Deposit
+     * - Otherwise counted as not deposited
      *
      * @param string $invoice_id The QuickBooks Invoice ID
      * @return array ['deposited' => float, 'undeposited' => float] or WP_Error
@@ -502,14 +541,21 @@ class DQ_API {
                 $account_name = trim( (string) $payment['DepositToAccountRef']['name'] );
             }
 
-            // Classify payment based on deposit account:
-            // - "Undeposited Funds" (case-insensitive) → undeposited
-            // - Any other named account → deposited
-            // - No account name (empty) → undeposited (safe default)
-            if ( empty( $account_name ) || strcasecmp( $account_name, 'Undeposited Funds' ) === 0 ) {
-                $undeposited += $amount_for_invoice;
-            } else {
+            $is_deposited = false;
+
+            // Payment is deposited if account is NOT "Undeposited Funds"
+            if ( ! empty( $account_name ) && strcasecmp( $account_name, 'Undeposited Funds' ) !== 0 ) {
+                $is_deposited = true;
+            }
+            // Payment may still be deposited if it was in Undeposited Funds but later included in a Bank Deposit
+            else if ( ! empty( $payment['Id'] ) && self::is_payment_in_deposit( $payment['Id'] ) ) {
+                $is_deposited = true;
+            }
+
+            if ( $is_deposited ) {
                 $deposited += $amount_for_invoice;
+            } else {
+                $undeposited += $amount_for_invoice;
             }
         }
 
