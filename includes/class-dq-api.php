@@ -358,7 +358,7 @@ class DQ_API {
             return new WP_Error( 'dq_no_customer', 'Invoice does not have a customer reference.' );
         }
 
-        $customer_id = $invoice['CustomerRef']['value'];
+        $customer_id = esc_sql( (string) $invoice['CustomerRef']['value'] );
 
         // Query all payments for this customer
         $sql = "SELECT * FROM Payment WHERE CustomerRef = '{$customer_id}'";
@@ -369,6 +369,7 @@ class DQ_API {
         }
 
         $all_payments = $result['QueryResponse']['Payment'] ?? [];
+        $total_payments = count($all_payments);
         
         // Filter payments to only include those linked to this invoice
         $linked_payments = [];
@@ -378,11 +379,12 @@ class DQ_API {
             }
         }
 
+        $linked_count = count($linked_payments);
         DQ_Logger::debug( 'Fallback payment query completed', [
             'invoice_id' => $invoice_id,
             'customer_id' => $customer_id,
-            'total_customer_payments' => count($all_payments),
-            'linked_payments' => count($linked_payments)
+            'total_customer_payments' => $total_payments,
+            'linked_payments' => $linked_count
         ]);
 
         return $linked_payments;
@@ -412,8 +414,8 @@ class DQ_API {
             // Check each linked transaction
             foreach ( $line['LinkedTxn'] as $linked ) {
                 if ( isset( $linked['TxnId'] ) && (string) $linked['TxnId'] === $invoice_id ) {
-                    // Also verify it's an Invoice type transaction
-                    if ( empty( $linked['TxnType'] ) || $linked['TxnType'] === 'Invoice' ) {
+                    // Verify it's an Invoice type transaction
+                    if ( ! empty( $linked['TxnType'] ) && $linked['TxnType'] === 'Invoice' ) {
                         return true;
                     }
                 }
