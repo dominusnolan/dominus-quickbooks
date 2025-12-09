@@ -433,16 +433,16 @@ class DQ_Workorder_Admin_Table {
 
         // Display date with inline checkbox
         echo '<div class="dq-dispatched-wrapper">';
-        echo '<span class="dq-dispatched-date">' . $formatted_date . '</span>';
+        echo '<span class="dq-dispatched-date" style="font-weight:bold">' . $formatted_date . '</span>';
         echo '<label class="dq-dispatched-label' . esc_attr( $disabled_class ) . '" title="' . esc_attr( $label ) . '">';
         printf(
-            '<input type="checkbox" class="dq-dispatched-checkbox" data-post-id="%1$d" %2$s %3$s aria-label="%4$s" />',
+            '<input type="checkbox" style="margin-top:1px" class="dq-dispatched-checkbox" data-post-id="%1$d" %2$s %3$s aria-label="%4$s" />',
             (int) $post_id,
             checked( $dispatched, true, false ),
             $disabled,
             esc_attr( $label )
         );
-        echo ' <span class="dq-dispatched-label-text">' . esc_html__( 'Dispatched', 'dqqb' ) . '</span>';
+        echo ' <span class="dq-dispatched-label-text" style="font-style:italic">' . esc_html__( 'Dispatched', 'dqqb' ) . '</span>';
         echo '</label>';
         echo '</div>';
     }
