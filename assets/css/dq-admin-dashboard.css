@@ -119,14 +119,14 @@
 }
 
 /* Ensure no underlines on any state */
-.dq-summary-card,
-.dq-summary-card:hover,
-.dq-summary-card:focus,
-.dq-summary-card:active,
-.dq-summary-card:visited,
-.dq-summary-card .card-count,
-.dq-summary-card .card-label {
-    text-decoration: none !important;
+.dq-admin-dashboard-wrap .dq-summary-card,
+.dq-admin-dashboard-wrap .dq-summary-card:hover,
+.dq-admin-dashboard-wrap .dq-summary-card:focus,
+.dq-admin-dashboard-wrap .dq-summary-card:active,
+.dq-admin-dashboard-wrap .dq-summary-card:visited,
+.dq-admin-dashboard-wrap .dq-summary-card .card-count,
+.dq-admin-dashboard-wrap .dq-summary-card .card-label {
+    text-decoration: none;
 }
 
 /* Work Orders Section */
