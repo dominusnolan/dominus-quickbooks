@@ -108,32 +108,37 @@ class DQ_Admin_Dashboard
         // Summary Cards
         echo '<div class="dq-summary-cards">';
         
+        // URLs for each work order category
+        $open_url = 'https://milaymechanical.com/wp-admin/edit.php?s&post_status=all&post_type=workorder&action=-1&m=0&cat=37&dq_field_engineer&filter_action=Filter&paged=1&action2=-1';
+        $scheduled_url = 'https://milaymechanical.com/wp-admin/edit.php?s&post_status=all&post_type=workorder&action=-1&m=0&cat=45&dq_field_engineer&filter_action=Filter&paged=1&action2=-1';
+        $closed_url = 'https://milaymechanical.com/wp-admin/edit.php?s&post_status=all&post_type=workorder&action=-1&m=0&cat=46&dq_field_engineer&filter_action=Filter&paged=1&action2=-1';
+        
         // Open Work Orders Card
-        echo '<div class="dq-summary-card dq-card-open">';
+        echo '<a href="' . esc_url($open_url) . '" target="_blank" rel="noopener noreferrer" class="dq-summary-card dq-card-open">';
         echo '<div class="card-icon"><span class="dashicons dashicons-unlock"></span></div>';
         echo '<div class="card-content">';
         echo '<span class="card-count">' . intval($counts['open']) . '</span>';
         echo '<span class="card-label">Open Work Orders</span>';
         echo '</div>';
-        echo '</div>';
+        echo '</a>';
 
         // Scheduled Work Orders Card
-        echo '<div class="dq-summary-card dq-card-scheduled">';
+        echo '<a href="' . esc_url($scheduled_url) . '" target="_blank" rel="noopener noreferrer" class="dq-summary-card dq-card-scheduled">';
         echo '<div class="card-icon"><span class="dashicons dashicons-calendar-alt"></span></div>';
         echo '<div class="card-content">';
         echo '<span class="card-count">' . intval($counts['scheduled']) . '</span>';
         echo '<span class="card-label">Scheduled Work Orders</span>';
         echo '</div>';
-        echo '</div>';
+        echo '</a>';
 
         // Closed Work Orders Card
-        echo '<div class="dq-summary-card dq-card-closed">';
+        echo '<a href="' . esc_url($closed_url) . '" target="_blank" rel="noopener noreferrer" class="dq-summary-card dq-card-closed">';
         echo '<div class="card-icon"><span class="dashicons dashicons-lock"></span></div>';
         echo '<div class="card-content">';
         echo '<span class="card-count">' . intval($counts['closed']) . '</span>';
         echo '<span class="card-label">Closed Work Orders</span>';
         echo '</div>';
-        echo '</div>';
+        echo '</a>';
 
         echo '</div>'; // End summary cards
 
