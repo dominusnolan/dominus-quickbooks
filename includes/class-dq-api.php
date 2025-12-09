@@ -486,7 +486,7 @@ class DQ_API {
 
         $payment_id = esc_sql( (string) $payment_id );
 
-        // DEEP DEBUG: Log the deposit search attempt
+        // Log the deposit search attempt
         $sql = "SELECT Id FROM Deposit WHERE Line.Any.LinkedTxn.TxnId = '{$payment_id}' AND Line.Any.LinkedTxn.TxnType = 'Payment'";
         DQ_Logger::debug( 'Searching for deposits containing payment', [
             'payment_id' => $payment_id,
@@ -506,7 +506,7 @@ class DQ_API {
 
         $deposits = $result['QueryResponse']['Deposit'] ?? [];
 
-        // DEEP DEBUG: Log all found deposits with full details
+        // Log all found deposits with full details
         if ( ! empty( $deposits ) ) {
             DQ_Logger::debug( 'Deposits found containing payment', [
                 'payment_id' => $payment_id,
@@ -607,7 +607,7 @@ class DQ_API {
             return $payments;
         }
 
-        // DEEP DEBUG: Log all payments found before classification
+        // Log all payments found before classification
         DQ_Logger::debug( '=== START Payment Classification for Invoice ===', [
             'invoice_id' => $invoice_id,
             'total_payments_found' => count($payments)
@@ -733,7 +733,8 @@ class DQ_API {
                     ]);
                 }
             } else {
-                // Edge case: account name exists but doesn't match expected patterns
+                // Edge case: account name exists but is neither a direct deposit account nor 'Undeposited Funds'
+                // This shouldn't normally happen but we handle it defensively
                 $deposit_reason = 'undeposited';
                 $deposit_details = [
                     'explanation' => 'Payment classification unclear - treating as undeposited',
