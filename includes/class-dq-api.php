@@ -426,9 +426,48 @@ class DQ_API {
     }
 
     /**
+     * Calculate the amount from a payment that was applied to a specific invoice.
+     * Sums Line.Amount values for payment lines linked to the invoice.
+     *
+     * @param array $payment The payment data from QuickBooks
+     * @param string $invoice_id The invoice ID to calculate for
+     * @return float The amount applied to this invoice
+     */
+    private static function get_payment_amount_for_invoice( $payment, $invoice_id ) {
+        $amount = 0.0;
+
+        if ( empty( $payment['Line'] ) || ! is_array( $payment['Line'] ) ) {
+            return $amount;
+        }
+
+        $invoice_id = (string) $invoice_id;
+
+        foreach ( $payment['Line'] as $line ) {
+            // Check if this line has LinkedTxn entries
+            if ( empty( $line['LinkedTxn'] ) || ! is_array( $line['LinkedTxn'] ) ) {
+                continue;
+            }
+
+            // Check each linked transaction
+            foreach ( $line['LinkedTxn'] as $linked ) {
+                if ( isset( $linked['TxnId'] ) && 
+                     (string) $linked['TxnId'] === $invoice_id &&
+                     ! empty( $linked['TxnType'] ) && 
+                     $linked['TxnType'] === 'Invoice' ) {
+                    // This line is linked to our invoice, add its amount
+                    $amount += isset( $line['Amount'] ) ? (float) $line['Amount'] : 0.0;
+                }
+            }
+        }
+
+        return $amount;
+    }
+
+    /**
      * Calculate deposited and undeposited payment totals for an invoice.
-     * Payments with DepositToAccountRef name "Undeposited Funds" are undeposited,
-     * all others are deposited.
+     * Payments with DepositToAccountRef name "Undeposited Funds" (case-insensitive) 
+     * are counted as undeposited. Payments with any other account name are deposited.
+     * Payments without an account name are treated as undeposited for safety.
      *
      * @param string $invoice_id The QuickBooks Invoice ID
      * @return array ['deposited' => float, 'undeposited' => float] or WP_Error
@@ -449,25 +488,7 @@ class DQ_API {
 
         foreach ( $payments as $payment ) {
             // Calculate the amount applied to THIS specific invoice
-            // by summing Line.Amount values for lines linked to this invoice
-            $amount_for_invoice = 0.0;
-            
-            if ( ! empty( $payment['Line'] ) && is_array( $payment['Line'] ) ) {
-                foreach ( $payment['Line'] as $line ) {
-                    // Check if this line is linked to our invoice
-                    if ( ! empty( $line['LinkedTxn'] ) && is_array( $line['LinkedTxn'] ) ) {
-                        foreach ( $line['LinkedTxn'] as $linked ) {
-                            if ( isset( $linked['TxnId'] ) && 
-                                 (string) $linked['TxnId'] === (string) $invoice_id &&
-                                 ! empty( $linked['TxnType'] ) && 
-                                 $linked['TxnType'] === 'Invoice' ) {
-                                // This line is linked to our invoice, add its amount
-                                $amount_for_invoice += isset( $line['Amount'] ) ? (float) $line['Amount'] : 0.0;
-                            }
-                        }
-                    }
-                }
-            }
+            $amount_for_invoice = self::get_payment_amount_for_invoice( $payment, $invoice_id );
 
             // Check if payment is deposited to "Undeposited Funds"
             $account_name = '';
@@ -475,9 +496,11 @@ class DQ_API {
                 $account_name = trim( (string) $payment['DepositToAccountRef']['name'] );
             }
 
-            // Case-insensitive comparison for "Undeposited Funds"
-            // Anything NOT "Undeposited Funds" is considered deposited
-            if ( strcasecmp( $account_name, 'Undeposited Funds' ) === 0 ) {
+            // Classify payment based on deposit account:
+            // - "Undeposited Funds" (case-insensitive) → undeposited
+            // - Any other named account → deposited
+            // - No account name (empty) → undeposited (safe default)
+            if ( empty( $account_name ) || strcasecmp( $account_name, 'Undeposited Funds' ) === 0 ) {
                 $undeposited += $amount_for_invoice;
             } else {
                 $deposited += $amount_for_invoice;
