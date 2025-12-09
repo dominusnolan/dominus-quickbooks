@@ -273,6 +273,8 @@ function dqqb_normalize_date_for_storage( $date_string, $input_format = '' ) {
  * Parse a date string and return a timestamp, handling various formats.
  * This is a timezone-aware version specifically for chart/report date ranges.
  * 
+ * Uses site's configured date format preference when available to resolve ambiguity.
+ * 
  * @param string $date_string The date string to parse
  * @return int|false Unix timestamp, or false if parsing fails
  */
@@ -284,23 +286,59 @@ function dqqb_parse_date_for_comparison( $date_string ) {
     // Clean up Excel artifacts
     $date_string = trim( str_replace( '_x000D_', '', $date_string ) );
     
-    // Try YYYY-MM-DD format first (most common in storage)
+    // Try YYYY-MM-DD format first (most common in storage, unambiguous)
     if ( preg_match( '/^(\d{4})-(\d{2})-(\d{2})/', $date_string, $m ) ) {
-        // Already in ISO format, parse as UTC
-        return strtotime( $date_string . ' UTC' );
+        // Already in ISO format, validate and parse as UTC
+        $year  = (int) $m[1];
+        $month = (int) $m[2];
+        $day   = (int) $m[3];
+        if ( checkdate( $month, $day, $year ) ) {
+            return strtotime( $date_string . ' UTC' );
+        }
+        return false;
     }
     
-    // Try MM/DD/YYYY format
+    // For ambiguous formats, use site's configured date format to determine interpretation
+    $configured_format = dqqb_qi_date_format();
+    
+    // Try slash-separated format (MM/DD/YYYY or DD/MM/YYYY based on config)
     if ( preg_match( '/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/', $date_string, $m ) ) {
-        return strtotime( "{$m[3]}-{$m[1]}-{$m[2]} UTC" );
+        $a = (int) $m[1];
+        $b = (int) $m[2];
+        $year = (int) $m[3];
+        
+        // Determine which is month and which is day based on configured format
+        if ( $configured_format === 'd/m/Y' || $configured_format === 'j/n/Y' ) {
+            // Day/Month/Year format
+            $day = $a;
+            $month = $b;
+        } else {
+            // Default to Month/Day/Year (American format)
+            $month = $a;
+            $day = $b;
+        }
+        
+        // Validate the date
+        if ( checkdate( $month, $day, $year ) ) {
+            return strtotime( sprintf( '%04d-%02d-%02d UTC', $year, $month, $day ) );
+        }
+        return false;
     }
     
-    // Try DD-MM-YYYY format
+    // Try dash-separated format (prefer DD-MM-YYYY for European style)
     if ( preg_match( '/^(\d{1,2})-(\d{1,2})-(\d{4})$/', $date_string, $m ) ) {
-        return strtotime( "{$m[3]}-{$m[2]}-{$m[1]} UTC" );
+        $day = (int) $m[1];
+        $month = (int) $m[2];
+        $year = (int) $m[3];
+        
+        // Validate the date
+        if ( checkdate( $month, $day, $year ) ) {
+            return strtotime( sprintf( '%04d-%02d-%02d UTC', $year, $month, $day ) );
+        }
+        return false;
     }
     
-    // Fallback to strtotime, assume UTC
+    // Fallback to strtotime for other formats, assume UTC
     $timestamp = strtotime( $date_string . ' UTC' );
     return $timestamp !== false ? $timestamp : false;
 }
