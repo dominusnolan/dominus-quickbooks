@@ -39,8 +39,14 @@ class DQ_Workorder_Admin_Table {
         // Field Engineer (author) filter dropdown
         add_action( 'restrict_manage_posts', [ __CLASS__, 'render_engineer_filter_dropdown' ] );
 
+        // Date filter input
+        add_action( 'restrict_manage_posts', [ __CLASS__, 'render_date_filter_input' ] );
+
         // Filter query by selected engineer (author)
         add_action( 'pre_get_posts', [ __CLASS__, 'filter_by_engineer' ] );
+
+        // Filter query by scheduled date
+        add_action( 'pre_get_posts', [ __CLASS__, 'filter_by_scheduled_date' ] );
 
         // Enqueue admin assets
         add_action( 'admin_enqueue_scripts', [ __CLASS__, 'enqueue_admin_assets' ] );
@@ -588,6 +594,39 @@ class DQ_Workorder_Admin_Table {
     }
 
     /**
+     * Render Scheduled Date filter input
+     *
+     * Adds a date picker input to the workorder admin list table that allows filtering
+     * workorders by the scheduled date (`schedule_date_time` ACF field).
+     * Uses jQuery UI datepicker for date selection.
+     *
+     * @param string $post_type The current post type
+     * @return void
+     */
+    public static function render_date_filter_input( $post_type ) {
+        // Only show on workorder admin list
+        if ( $post_type !== 'workorder' ) {
+            return;
+        }
+
+        // Get currently selected date from query string
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only filter, no action taken
+        $selected_date = isset( $_GET['dq_scheduled_date'] ) ? sanitize_text_field( wp_unslash( $_GET['dq_scheduled_date'] ) ) : '';
+
+        ?>
+        <input 
+            type="text" 
+            name="dq_scheduled_date" 
+            id="dq-scheduled-date-filter" 
+            placeholder="<?php esc_attr_e( 'Scheduled Date', 'dqqb' ); ?>"
+            value="<?php echo esc_attr( $selected_date ); ?>"
+            readonly="readonly"
+            style="cursor: pointer;"
+        />
+        <?php
+    }
+
+    /**
      * Get engineers for the filter dropdown with caching
      *
      * Retrieves all users with the 'engineer' role and caches the result
@@ -651,6 +690,58 @@ class DQ_Workorder_Admin_Table {
     }
 
     /**
+     * Filter workorder query by scheduled date
+     *
+     * Modifies the main query to filter workorders by the schedule_date_time ACF field
+     * when a date is selected in the date filter input. Matches on date portion only,
+     * ignoring time component.
+     *
+     * @param WP_Query $query The query object
+     * @return void
+     */
+    public static function filter_by_scheduled_date( $query ) {
+        // Only apply in admin on main query
+        if ( ! is_admin() || ! $query->is_main_query() ) {
+            return;
+        }
+
+        // Check if we're on the workorder admin list screen
+        $screen = get_current_screen();
+        if ( ! $screen || $screen->id !== 'edit-workorder' ) {
+            return;
+        }
+
+        // Check if a date filter is selected (empty string means no filter)
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only filter, no action taken
+        if ( ! isset( $_GET['dq_scheduled_date'] ) || '' === $_GET['dq_scheduled_date'] ) {
+            return;
+        }
+
+        // Sanitize and validate the date
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only filter, no action taken
+        $selected_date = sanitize_text_field( wp_unslash( $_GET['dq_scheduled_date'] ) );
+
+        // Validate date format (YYYY-MM-DD)
+        if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $selected_date ) ) {
+            return;
+        }
+
+        // Get existing meta query or create new one
+        $meta_query = $query->get( 'meta_query' ) ?: [];
+
+        // Add date filter to meta query
+        // This will match dates that start with the selected date (date portion only)
+        $meta_query[] = [
+            'key'     => 'schedule_date_time',
+            'value'   => $selected_date,
+            'compare' => 'LIKE',
+            'type'    => 'CHAR',
+        ];
+
+        $query->set( 'meta_query', $meta_query );
+    }
+
+    /**
      * Handle custom column sorting
      *
      * Modifies the query to sort by meta values for date columns.
@@ -705,6 +796,17 @@ class DQ_Workorder_Admin_Table {
             return;
         }
 
+        // Enqueue jQuery UI datepicker
+        wp_enqueue_script( 'jquery-ui-datepicker' );
+
+        // Enqueue jQuery UI theme CSS for datepicker
+        wp_enqueue_style(
+            'jquery-ui-datepicker-style',
+            'https://code.jquery.com/ui/1.13.2/themes/smoothness/jquery-ui.css',
+            [],
+            '1.13.2'
+        );
+
         // Inline styles for the admin table
         wp_add_inline_style( 'common', self::get_admin_styles() );
 
@@ -721,6 +823,28 @@ class DQ_Workorder_Admin_Table {
     private static function get_admin_styles() {
         return '
             /* Workorder Admin Table Styles */
+            
+            /* Date filter input styling */
+            #dq-scheduled-date-filter {
+                height: 28px;
+                padding: 3px 8px;
+                vertical-align: top;
+                border: 1px solid #ddd;
+                border-radius: 3px;
+                background-color: #fff;
+                font-size: 13px;
+                line-height: 1.5;
+                margin-left: 8px;
+            }
+            #dq-scheduled-date-filter:focus {
+                border-color: #0996a0;
+                outline: none;
+                box-shadow: 0 0 0 1px #0996a0;
+            }
+            #dq-scheduled-date-filter::placeholder {
+                color: #999;
+            }
+            
             .dq-wo-expand-btn {
                 cursor: pointer;
                 white-space: nowrap;
@@ -956,6 +1080,18 @@ class DQ_Workorder_Admin_Table {
 
         return '
             jQuery(document).ready(function($) {
+                // Initialize datepicker for scheduled date filter
+                $("#dq-scheduled-date-filter").datepicker({
+                    dateFormat: "yy-mm-dd",
+                    changeMonth: true,
+                    changeYear: true,
+                    yearRange: "-5:+5",
+                    onSelect: function(dateText) {
+                        // Submit the form when a date is selected
+                        $(this).closest("form").submit();
+                    }
+                });
+
                 // Store loaded details to avoid repeated AJAX calls
                 var loadedDetails = {};
 
