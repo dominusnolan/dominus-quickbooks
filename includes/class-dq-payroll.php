@@ -912,6 +912,7 @@ class DQ_Payroll {
     var csvImportBtn = document.getElementById("dq-payroll-csv-import-btn");
     var closeBtn = document.getElementById("dq-payroll-close-modal-btn");
     
+    // Early exit if required elements are not found
     if (!modal || !closeBtn) return;
 
     function openModal() {
@@ -921,17 +922,12 @@ class DQ_Payroll {
 
     function openModalAndScrollToImport() {
         modal.style.display = "block";
-        // Use requestAnimationFrame for more reliable timing after modal display
+        // Use double requestAnimationFrame for reliable timing after modal display
         requestAnimationFrame(function() {
             requestAnimationFrame(function() {
                 var importSection = document.getElementById("dq-payroll-import-section");
                 if (importSection) {
                     importSection.scrollIntoView({behavior: "smooth", block: "start"});
-                    // Focus on file input for better UX
-                    var fileInput = document.getElementById("dq-payroll-file-input");
-                    if (fileInput) {
-                        setTimeout(function() { fileInput.focus(); }, 300);
-                    }
                 }
             });
         });
@@ -953,13 +949,14 @@ class DQ_Payroll {
         }
     }
 
-    // Attach event listeners
+    // Attach event listeners only if buttons exist
     if (manageBtn) {
         manageBtn.addEventListener("click", openModal);
     }
     if (csvImportBtn) {
         csvImportBtn.addEventListener("click", openModalAndScrollToImport);
     }
+    
     closeBtn.addEventListener("click", function(e) {
         e.preventDefault();
         closeModal();
