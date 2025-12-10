@@ -803,7 +803,7 @@ class DQ_Payroll {
         }
 
         // Import section
-        echo '    <div class="dq-payroll-modal-form" style="margin-bottom: 20px;">';
+        echo '    <div class="dq-payroll-modal-form" id="dq-payroll-import-section" style="margin-bottom: 20px;">';
         echo '      <h3>Import Payroll Records</h3>';
         echo '      <p style="margin: 5px 0 10px; color: #666;">Upload a CSV or Excel file with columns: <strong>date</strong>, <strong>amount</strong>, <strong>name</strong> (display name)</p>';
         echo '      <form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" enctype="multipart/form-data">';
@@ -812,8 +812,8 @@ class DQ_Payroll {
         echo $hidden_fields;
         echo '        <div style="display: flex; gap: 12px; align-items: flex-end;">';
         echo '          <div>';
-        echo '            <label style="font-weight: 600; display: block; margin-bottom: 4px;">CSV/Excel File</label>';
-        echo '            <input type="file" name="payroll_file" accept=".csv,.xlsx" required style="padding: 6px;">';
+        echo '            <label for="dq-payroll-file-input" style="font-weight: 600; display: block; margin-bottom: 4px;">CSV/Excel File</label>';
+        echo '            <input type="file" id="dq-payroll-file-input" name="payroll_file" accept=".csv,.xlsx" required style="padding: 6px;">';
         echo '          </div>';
         echo '          <div>';
         echo '            <input type="submit" class="button button-secondary" value="Import">';
@@ -921,12 +921,20 @@ class DQ_Payroll {
 
     function openModalAndScrollToImport() {
         modal.style.display = "block";
-        setTimeout(function() {
-            var importSection = document.querySelector("#" + modalId + " .dq-payroll-modal-form input[type=file]");
-            if (importSection) {
-                importSection.scrollIntoView({behavior: "smooth", block: "center"});
-            }
-        }, 100);
+        // Use requestAnimationFrame for more reliable timing after modal display
+        requestAnimationFrame(function() {
+            requestAnimationFrame(function() {
+                var importSection = document.getElementById("dq-payroll-import-section");
+                if (importSection) {
+                    importSection.scrollIntoView({behavior: "smooth", block: "start"});
+                    // Focus on file input for better UX
+                    var fileInput = document.getElementById("dq-payroll-file-input");
+                    if (fileInput) {
+                        setTimeout(function() { fileInput.focus(); }, 300);
+                    }
+                }
+            });
+        });
     }
 
     function closeModal() {
