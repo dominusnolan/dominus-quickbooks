@@ -303,7 +303,6 @@ class DQ_Payroll {
         $csv_data = [];
         foreach ( $xml->sheetData->row as $row ) {
             $csv_row = [];
-            $col_index = 0;
             foreach ( $row->c as $cell ) {
                 $cell_value = '';
                 $cell_type = (string) $cell['t'];
@@ -317,13 +316,12 @@ class DQ_Payroll {
                 }
                 
                 $csv_row[] = $cell_value;
-                $col_index++;
             }
             $csv_data[] = $csv_row;
         }
 
         // Write CSV file
-        $csv_path = wp_tempnam( 'payroll-import-' );
+        $csv_path = wp_tempnam( 'wp-temp-' );
         $fh = fopen( $csv_path, 'w' );
         if ( ! $fh ) {
             return new WP_Error( 'csv_write', 'Unable to create temporary CSV file.' );

@@ -316,7 +316,7 @@ class DQ_CSV_InvoiceImporter {
 
     /**
      * Import payroll records from CSV/Excel file
-     * Expected columns: date, Amount, name
+     * Expected columns: date, amount, name
      *
      * @param string $csv_path Path to CSV file
      * @param array $opts Options (delimiter, date_format)
@@ -355,7 +355,7 @@ class DQ_CSV_InvoiceImporter {
         foreach ($required as $col) {
             if (!isset($map[$col])) {
                 fclose($fh);
-                return new WP_Error('dq_csv_headers', "Missing required column: $col (need 'date', 'Amount', 'name')");
+                return new WP_Error('dq_csv_headers', "Missing required column: $col (need 'date', 'amount', 'name')");
             }
         }
 
