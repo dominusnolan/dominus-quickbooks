@@ -11,7 +11,6 @@ class DQ_QI_QBO_Customers_Taxonomy {
 
     public static function init() {
         add_action( 'init', [ __CLASS__, 'register_taxonomy' ] );
-        add_action( 'acf/init', [ __CLASS__, 'register_acf_field_group' ] );
     }
 
     /**
@@ -56,60 +55,6 @@ class DQ_QI_QBO_Customers_Taxonomy {
         register_taxonomy( 'qbo_customers', [ 'quickbooks_invoice' ], $args );
     }
 
-    /**
-     * Register ACF field group for selecting QBO Customer.
-     */
-    public static function register_acf_field_group() {
-        if ( ! function_exists( 'acf_add_local_field_group' ) ) return;
-
-        // Prevent duplicate group creation
-        if ( function_exists( 'acf_get_field_group' ) ) {
-            $existing = acf_get_field_group( 'group_dq_qi_customer' );
-            if ( $existing ) return;
-        }
-
-        acf_add_local_field_group( [
-            'key'    => 'group_dq_qi_customer',
-            'title'  => 'Invoice: QBO Customer',
-            'fields' => [
-                [
-                    'key'               => 'field_dq_qi_customer',
-                    'label'             => 'Customer',
-                    'name'              => 'qi_customer',
-                    'type'              => 'taxonomy',
-                    'taxonomy'          => 'qbo_customers',
-                    'field_type'        => 'select',     // could be 'radio' or 'multi_select'
-                    'allow_null'        => 1,
-                    'add_term'          => 1,            // allow creating new terms in selector
-                    'save_terms'        => 1,            // link term to post
-                    'load_terms'        => 1,
-                    'return_format'     => 'object',     // Return term object so we can access the name
-                    'instructions'      => 'Select a QBO Customer for this invoice. The customer name must match exactly with the DisplayName in QuickBooks Online.',
-                    'wrapper'           => [
-                        'width' => '',
-                        'class' => '',
-                        'id'    => '',
-                    ],
-                    'conditional_logic' => 0,
-                ],
-            ],
-            'location' => [
-                [
-                    [
-                        'param'    => 'post_type',
-                        'operator' => '==',
-                        'value'    => 'quickbooks_invoice',
-                    ],
-                ],
-            ],
-            'position'              => 'normal',
-            'style'                 => 'default',
-            'label_placement'       => 'top',
-            'instruction_placement' => 'label',
-            'active'                => true,
-            'description'           => '',
-        ] );
-    }
 }
 
 DQ_QI_QBO_Customers_Taxonomy::init();
