@@ -313,6 +313,183 @@ class DQ_CSV_InvoiceImporter {
         }
         return new WP_Error('dq_income_acct', 'No Income account found');
     }
+
+    /**
+     * Import payroll records from CSV/Excel file
+     * Expected columns: date, Amount, name
+     *
+     * @param string $csv_path Path to CSV file
+     * @param array $opts Options (delimiter, date_format)
+     * @return array|WP_Error Result with created, skipped counts and errors
+     */
+    public static function import_payroll($csv_path, $opts = []) {
+        $defaults = [
+            'delimiter'   => null,          // auto-detect if null
+            'date_format' => 'Y-m-d',
+        ];
+        $o = array_merge($defaults, $opts);
+
+        if (!is_readable($csv_path)) {
+            return new WP_Error('dq_csv_missing', 'CSV file not readable: '.$csv_path);
+        }
+
+        $fh = fopen($csv_path, 'r');
+        if (!$fh) {
+            return new WP_Error('dq_csv_open', 'Unable to open CSV file.');
+        }
+
+        // Read header
+        $first_line = fgets($fh);
+        if ($first_line === false) {
+            fclose($fh);
+            return new WP_Error('dq_csv_empty', 'CSV appears empty.');
+        }
+
+        // Delimiter detection if not supplied
+        $delimiter = $o['delimiter'] ?: self::detect_delimiter($first_line);
+        $headers   = str_getcsv($first_line, $delimiter);
+        $map       = self::payroll_header_map($headers);
+
+        // Required minimal columns
+        $required = ['date', 'amount', 'name'];
+        foreach ($required as $col) {
+            if (!isset($map[$col])) {
+                fclose($fh);
+                return new WP_Error('dq_csv_headers', "Missing required column: $col (need 'date', 'Amount', 'name')");
+            }
+        }
+
+        // Rewind to begin of rows
+        fseek($fh, 0);
+        // Use fgetcsv now that we know delimiter
+        $header_row = fgetcsv($fh, 0, $delimiter);
+
+        $rows = [];
+        while (($row = fgetcsv($fh, 0, $delimiter)) !== false) {
+            if (count($row) == 1 && trim(implode('', $row)) === '') { continue; }
+            $assoc = self::payroll_assoc_row($header_row, $row);
+            $rows[] = $assoc;
+        }
+        fclose($fh);
+
+        $created = 0;
+        $skipped = 0;
+        $errors  = [];
+
+        foreach ($rows as $r) {
+            $date_raw = self::pick($r, ['date']);
+            $amount_raw = self::pick($r, ['amount']);
+            $name_raw = self::pick($r, ['name']);
+
+            // Validate date
+            $date = self::normalize_date($date_raw, $o['date_format']);
+            if (!$date || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+                $skipped++;
+                $errors[] = "Row skipped: invalid date format '$date_raw'";
+                continue;
+            }
+
+            // Validate amount
+            $amount = self::to_amount($amount_raw);
+            if ($amount === null || $amount < 0) {
+                $skipped++;
+                $errors[] = "Row skipped: invalid amount '$amount_raw' for date $date";
+                continue;
+            }
+
+            // Find user by display name
+            $user_id = 0;
+            if ($name_raw) {
+                $user = self::find_user_by_display_name($name_raw);
+                if (!$user) {
+                    $skipped++;
+                    $errors[] = "Row skipped: user not found with display name '$name_raw' for date $date";
+                    continue;
+                }
+                $user_id = $user->ID;
+            }
+
+            // Create payroll post
+            $post_id = wp_insert_post([
+                'post_type'   => 'payroll',
+                'post_status' => 'publish',
+                'post_title'  => 'Payroll ' . $date,
+                'post_date'   => $date . ' 12:00:00',
+            ]);
+
+            if (is_wp_error($post_id) || !$post_id) {
+                $skipped++;
+                $errors[] = "Failed to create payroll record for date $date";
+                continue;
+            }
+
+            // Store amount - use ACF if available, fallback to post meta
+            if (function_exists('update_field')) {
+                update_field('payroll_amount', $amount, $post_id);
+            } else {
+                update_post_meta($post_id, 'payroll_amount', $amount);
+            }
+
+            // Store user ID - use ACF if available, fallback to post meta
+            if (function_exists('update_field')) {
+                update_field('payroll_user_id', $user_id, $post_id);
+            } else {
+                update_post_meta($post_id, 'payroll_user_id', $user_id);
+            }
+
+            $created++;
+        }
+
+        return [
+            'created' => $created,
+            'skipped' => $skipped,
+            'errors'  => $errors,
+        ];
+    }
+
+    /**
+     * Build header map for payroll CSV
+     */
+    private static function payroll_header_map($headers) {
+        $map = [];
+        foreach ($headers as $i => $h) {
+            $k = strtolower(trim(preg_replace('/[^a-z0-9]+/i', '', $h)));
+            $map[$k] = $i;
+        }
+        return $map;
+    }
+
+    /**
+     * Convert row to associative array for payroll
+     */
+    private static function payroll_assoc_row($header_row, $row) {
+        $assoc = [];
+        foreach ($header_row as $i => $h) {
+            $k = strtolower(trim(preg_replace('/[^a-z0-9]+/i', '', $h)));
+            $assoc[$k] = isset($row[$i]) ? trim($row[$i]) : '';
+        }
+        return $assoc;
+    }
+
+    /**
+     * Find WordPress user by display name
+     */
+    private static function find_user_by_display_name($display_name) {
+        $users = get_users([
+            'search' => $display_name,
+            'search_columns' => ['display_name'],
+            'number' => 1,
+        ]);
+        
+        // Exact match only
+        foreach ($users as $user) {
+            if ($user->display_name === $display_name) {
+                return $user;
+            }
+        }
+        
+        return null;
+    }
 }
 
 // ---- WP-CLI integration ---- //
