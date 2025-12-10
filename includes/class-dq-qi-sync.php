@@ -134,7 +134,9 @@ class DQ_QI_Sync {
             // This name should match exactly with the QBO customer DisplayName
             $customer_name = $customer_term->name;
         } elseif ( is_numeric($customer_term) ) {
-            // Fallback: if we get a term ID, fetch the term and get its name
+            // Fallback: if we get a term ID (e.g., from old data or direct meta access)
+            // This should rarely be needed since the field is configured to return objects
+            // but provides backward compatibility
             $term = get_term( (int)$customer_term, 'qbo_customers' );
             if ( $term instanceof WP_Term && ! is_wp_error($term) ) {
                 $customer_name = $term->name;
@@ -225,7 +227,9 @@ class DQ_QI_Sync {
      */
     private static function get_or_create_customer_id($customer_name) {
         // Query QBO for exact DisplayName match
-        // Note: addslashes() provides basic SQL injection protection for the QBO query string
+        // Note: QBO uses a SQL-like query language (not actual SQL) sent via REST API
+        // addslashes() provides basic escaping for single quotes in the query string
+        // The customer_name comes from trusted sources (ACF taxonomy term names)
         $sql  = "SELECT Id FROM Customer WHERE DisplayName = '".addslashes($customer_name)."' STARTPOSITION 1 MAXRESULTS 1";
         $resp = DQ_API::query($sql);
         $arr = $resp['QueryResponse']['Customer'] ?? [];
