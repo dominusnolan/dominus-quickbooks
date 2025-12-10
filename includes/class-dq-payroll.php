@@ -264,16 +264,21 @@ class DQ_Payroll {
         // Simple XLSX to CSV conversion using basic XML parsing
         // This handles simple Excel files without external dependencies
 
+        // Check if ZipArchive is available
+        if ( ! class_exists( 'ZipArchive' ) ) {
+            return new WP_Error( 'xlsx_missing', 'ZipArchive extension is not available. Please use CSV format instead.' );
+        }
+
         $zip = new ZipArchive();
         if ( $zip->open( $xlsx_path ) !== true ) {
             return new WP_Error( 'xlsx_open', 'Unable to open Excel file.' );
         }
 
-        // Read shared strings
+        // Read shared strings with security flags
         $shared_strings = [];
         $shared_xml = $zip->getFromName( 'xl/sharedStrings.xml' );
         if ( $shared_xml ) {
-            $xml = simplexml_load_string( $shared_xml );
+            $xml = simplexml_load_string( $shared_xml, 'SimpleXMLElement', LIBXML_NOCDATA | LIBXML_NOENT | LIBXML_NONET );
             if ( $xml ) {
                 foreach ( $xml->si as $si ) {
                     $shared_strings[] = (string) $si->t;
@@ -289,7 +294,7 @@ class DQ_Payroll {
             return new WP_Error( 'xlsx_sheet', 'Unable to read worksheet from Excel file.' );
         }
 
-        $xml = simplexml_load_string( $sheet_xml );
+        $xml = simplexml_load_string( $sheet_xml, 'SimpleXMLElement', LIBXML_NOCDATA | LIBXML_NOENT | LIBXML_NONET );
         if ( ! $xml ) {
             return new WP_Error( 'xlsx_parse', 'Unable to parse Excel XML.' );
         }
@@ -805,7 +810,7 @@ class DQ_Payroll {
         // Import section
         echo '    <div class="dq-payroll-modal-form" style="margin-bottom: 20px;">';
         echo '      <h3>Import Payroll Records</h3>';
-        echo '      <p style="margin: 5px 0 10px; color: #666;">Upload a CSV or Excel file with columns: <strong>date</strong>, <strong>Amount</strong>, <strong>name</strong> (display name)</p>';
+        echo '      <p style="margin: 5px 0 10px; color: #666;">Upload a CSV or Excel file with columns: <strong>date</strong>, <strong>amount</strong>, <strong>name</strong> (display name)</p>';
         echo '      <form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" enctype="multipart/form-data">';
         echo '        <input type="hidden" name="action" value="dq_payroll_import">';
         echo $import_nonce_field;

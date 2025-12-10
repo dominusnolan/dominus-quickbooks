@@ -330,7 +330,7 @@ class DQ_CSV_InvoiceImporter {
         $o = array_merge($defaults, $opts);
 
         if (!is_readable($csv_path)) {
-            return new WP_Error('dq_csv_missing', 'CSV file not readable: '.$csv_path);
+            return new WP_Error('dq_csv_missing', 'CSV file not accessible.');
         }
 
         $fh = fopen($csv_path, 'r');
@@ -472,9 +472,16 @@ class DQ_CSV_InvoiceImporter {
     }
 
     /**
-     * Find WordPress user by display name
+     * Find WordPress user by display name with caching
      */
     private static function find_user_by_display_name($display_name) {
+        static $user_cache = [];
+        
+        // Check cache first
+        if (isset($user_cache[$display_name])) {
+            return $user_cache[$display_name];
+        }
+        
         $users = get_users([
             'search' => $display_name,
             'search_columns' => ['display_name'],
@@ -482,13 +489,18 @@ class DQ_CSV_InvoiceImporter {
         ]);
         
         // Exact match only
+        $found_user = null;
         foreach ($users as $user) {
             if ($user->display_name === $display_name) {
-                return $user;
+                $found_user = $user;
+                break;
             }
         }
         
-        return null;
+        // Cache the result (even if null)
+        $user_cache[$display_name] = $found_user;
+        
+        return $found_user;
     }
 }
 
