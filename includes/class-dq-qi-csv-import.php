@@ -141,7 +141,23 @@ class DQ_QI_CSV_Import {
             };
 
             $set('qi_invoice_no',$doc);
-            if ($cust!=='') $set('qi_customer',$cust);
+            
+            // Handle customer taxonomy field
+            // The qi_customer field is a taxonomy field for qbo_customers
+            // We need to find or create the term and assign it to the post
+            if ($cust !== '') {
+                $term = term_exists($cust, 'qbo_customers');
+                if (!$term) {
+                    // Create the term if it doesn't exist
+                    $term = wp_insert_term($cust, 'qbo_customers');
+                }
+                if (!is_wp_error($term) && isset($term['term_id'])) {
+                    // Set the taxonomy term (ACF will handle this properly)
+                    wp_set_object_terms($post_id, (int)$term['term_id'], 'qbo_customers');
+                    // Also update the ACF field with term ID (ACF will return it as object based on return_format)
+                    $set('qi_customer', (int)$term['term_id']);
+                }
+            }
 
             self::set_wo_number_from_memo($post_id, $memo);
 

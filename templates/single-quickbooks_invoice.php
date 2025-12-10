@@ -17,6 +17,8 @@ $acfval = function($key) use($post_id) {
 };
 $acftext = function($key) use($acfval) {
     $v = $acfval($key);
+    // Handle WP_Term objects (e.g., from taxonomy fields like qi_customer)
+    if ($v instanceof WP_Term) return $v->name;
     if(is_array($v)) return implode(', ', array_filter($v));
     return (string)$v;
 };

@@ -122,16 +122,47 @@ class DQ_QI_Sync {
         if ( empty($lines) ) return new WP_Error('dq_qi_no_lines', 'No valid lines found in qi_invoice.');
         $payload['Line'] = $lines;
 
-        $customer_name = function_exists('get_field') ? get_field('qi_customer', $post_id) : get_post_meta($post_id, 'qi_customer', true);
-        if ($customer_name) {
+        // Retrieve the customer from the qi_customer ACF taxonomy field
+        // This field is configured to return a WP_Term object (return_format='object')
+        // so we can extract the term name to match against QBO customer DisplayName
+        $customer_term = function_exists('get_field') ? get_field('qi_customer', $post_id) : null;
+        
+        // Extract the customer name from the term object or fall back to meta
+        $customer_name = null;
+        if ( $customer_term instanceof WP_Term ) {
+            // ACF taxonomy field returned a term object - use the term name
+            // This name should match exactly with the QBO customer DisplayName
+            $customer_name = $customer_term->name;
+        } elseif ( is_numeric($customer_term) ) {
+            // Fallback: if we get a term ID, fetch the term and get its name
+            $term = get_term( (int)$customer_term, 'qbo_customers' );
+            if ( $term instanceof WP_Term && ! is_wp_error($term) ) {
+                $customer_name = $term->name;
+            }
+        } elseif ( is_string($customer_term) && $customer_term !== '' ) {
+            // Fallback: if we get a string directly, use it as-is
+            $customer_name = trim($customer_term);
+        } else {
+            // Last resort: check raw post meta
+            $raw_meta = get_post_meta($post_id, 'qi_customer', true);
+            if ( is_string($raw_meta) && $raw_meta !== '' ) {
+                $customer_name = trim($raw_meta);
+            }
+        }
+        
+        if ( $customer_name && $customer_name !== '' ) {
+            // Match the customer name against QBO customer DisplayName
+            // This uses exact matching to find or create the customer in QuickBooks
+            // Note: For sub-customers (parent:child), QBO may require special handling
+            // Future enhancement: parse parent/child DisplayName format if needed
             $customer_id = self::get_or_create_customer_id($customer_name);
             if ($customer_id) {
                 $payload['CustomerRef'] = [ 'value' => (string)$customer_id ];
             } else {
-                return new WP_Error('dq_qi_no_customer', "No QBO customer found/created for '$customer_name'");
+                return new WP_Error('dq_qi_no_customer', "No QBO customer found/created for DisplayName: '$customer_name'");
             }
         } else {
-            return new WP_Error('dq_qi_no_customer_field', "qi_customer ACF field is empty in CPT post ID $post_id");
+            return new WP_Error('dq_qi_no_customer_field', "qi_customer ACF field is empty or invalid in CPT post ID $post_id");
         }
         $payload['DocNumber'] = get_the_title($post_id);
 
@@ -171,14 +202,42 @@ class DQ_QI_Sync {
         return dqqb_normalize_date_for_storage( $val, $fmt );
     }
 
+    /**
+     * Get or create a QuickBooks customer ID by DisplayName.
+     * 
+     * This method performs exact matching against the QBO customer DisplayName field.
+     * The customer name from the ACF taxonomy term must match exactly with the 
+     * DisplayName in QuickBooks Online for the sync to work correctly.
+     * 
+     * Matching Logic:
+     * 1. Query QBO for a customer with exact DisplayName match (case-sensitive)
+     * 2. If found, return the customer ID
+     * 3. If not found, attempt to create a new customer with that DisplayName
+     * 4. Return the new customer ID or null on failure
+     * 
+     * Sub-customer Considerations:
+     * - QBO sub-customers may have DisplayName format like "ParentName:SubName"
+     * - Ensure taxonomy term names match this exact format if using sub-customers
+     * - Future enhancement: Add parent/child parsing logic if hierarchical taxonomy is used
+     * 
+     * @param string $customer_name The exact DisplayName to match in QuickBooks
+     * @return string|null Customer ID if found/created, null on failure
+     */
     private static function get_or_create_customer_id($customer_name) {
+        // Query QBO for exact DisplayName match
+        // Note: addslashes() provides basic SQL injection protection for the QBO query string
         $sql  = "SELECT Id FROM Customer WHERE DisplayName = '".addslashes($customer_name)."' STARTPOSITION 1 MAXRESULTS 1";
         $resp = DQ_API::query($sql);
         $arr = $resp['QueryResponse']['Customer'] ?? [];
+        
+        // Return existing customer ID if found
         if (!empty($arr)) return $arr[0]['Id'];
+        
+        // Customer not found - attempt to create new customer in QBO
         $payload = [ 'DisplayName' => $customer_name ];
         $resp = DQ_API::create('customer', $payload);
         if (is_wp_error($resp)) return null;
+        
         return $resp['Customer']['Id'] ?? null;
     }
 
