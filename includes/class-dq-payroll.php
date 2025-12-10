@@ -922,7 +922,9 @@ class DQ_Payroll {
 
     function openModalAndScrollToImport() {
         modal.style.display = "block";
-        // Use double requestAnimationFrame for reliable timing after modal display
+        // Use double requestAnimationFrame to ensure modal is fully rendered before scrolling
+        // First frame: browser prepares modal for display
+        // Second frame: modal is rendered and scrolling can reliably occur
         requestAnimationFrame(function() {
             requestAnimationFrame(function() {
                 var importSection = document.getElementById("dq-payroll-import-section");
