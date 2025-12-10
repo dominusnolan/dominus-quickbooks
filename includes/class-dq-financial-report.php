@@ -1693,6 +1693,7 @@ echo '<script>
         echo '<h2>Payroll Management';
         if ( $is_admin ) {
             echo ' <button type="button" class="button button-primary dq-payroll-manage-btn" onclick="document.getElementById(\'' . esc_attr( $modal_id ) . '\').style.display=\'block\'; document.querySelector(\'#' . esc_attr( $modal_id ) . ' .dq-payroll-modal-close\').focus();">Manage Payroll</button>';
+            echo ' <button type="button" class="button button-secondary dq-payroll-csv-import-btn" onclick="document.getElementById(\'' . esc_attr( $modal_id ) . '\').style.display=\'block\'; setTimeout(function(){ var importSection = document.querySelector(\'#' . esc_attr( $modal_id ) . ' .dq-payroll-modal-form input[type=file]\'); if(importSection) importSection.scrollIntoView({behavior:\'smooth\', block:\'center\'}); }, 100);" style="margin-left:8px;">CSV Import</button>';
         }
         echo '</h2>';
 

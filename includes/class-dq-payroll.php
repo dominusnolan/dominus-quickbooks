@@ -782,10 +782,7 @@ class DQ_Payroll {
 }
 </style>';
 
-        // Manage Payroll button
-        echo '<button type="button" class="dq-payroll-manage-btn" id="dq-payroll-open-modal-btn">Manage Payroll</button>';
-
-        // Modal markup
+        // Modal markup (button is rendered in DQ_Financial_Report::render_payroll_section)
         echo '<div id="' . esc_attr( $modal_id ) . '" class="dq-payroll-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="' . esc_attr( $modal_id ) . '-title">';
         echo '  <div class="dq-payroll-modal-window">';
         echo '    <button type="button" class="dq-payroll-modal-close" id="dq-payroll-close-modal-btn" aria-label="Close modal">&times;</button>';
@@ -911,15 +908,9 @@ class DQ_Payroll {
 (function(){
     var modalId = "' . esc_js( $modal_id ) . '";
     var modal = document.getElementById(modalId);
-    var openBtn = document.getElementById("dq-payroll-open-modal-btn");
     var closeBtn = document.getElementById("dq-payroll-close-modal-btn");
     
-    if (!modal || !openBtn || !closeBtn) return;
-
-    function openModal() {
-        modal.style.display = "block";
-        closeBtn.focus();
-    }
+    if (!modal || !closeBtn) return;
 
     function closeModal() {
         modal.style.display = "none";
@@ -938,7 +929,6 @@ class DQ_Payroll {
     }
 
     // Attach event listeners
-    openBtn.addEventListener("click", openModal);
     closeBtn.addEventListener("click", function(e) {
         e.preventDefault();
         closeModal();
