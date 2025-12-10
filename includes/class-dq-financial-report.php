@@ -1692,7 +1692,8 @@ echo '<script>
         echo '<div class="dq-payroll-section" style="margin-top:30px;">';
         echo '<h2>Payroll Management';
         if ( $is_admin ) {
-            echo ' <button type="button" class="button button-primary dq-payroll-manage-btn" onclick="document.getElementById(\'' . esc_attr( $modal_id ) . '\').style.display=\'block\'; document.querySelector(\'#' . esc_attr( $modal_id ) . ' .dq-payroll-modal-close\').focus();">Manage Payroll</button>';
+            echo ' <button type="button" class="button button-primary dq-payroll-manage-btn" id="dq-payroll-manage-btn">Manage Payroll</button>';
+            echo ' <button type="button" class="button button-secondary dq-payroll-csv-import-btn" id="dq-payroll-csv-import-btn" style="margin-left:8px;">CSV Import</button>';
         }
         echo '</h2>';
 

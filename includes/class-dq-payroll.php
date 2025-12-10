@@ -782,10 +782,7 @@ class DQ_Payroll {
 }
 </style>';
 
-        // Manage Payroll button
-        echo '<button type="button" class="dq-payroll-manage-btn" id="dq-payroll-open-modal-btn">Manage Payroll</button>';
-
-        // Modal markup
+        // Modal markup (button is rendered in DQ_Financial_Report::render_payroll_section)
         echo '<div id="' . esc_attr( $modal_id ) . '" class="dq-payroll-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="' . esc_attr( $modal_id ) . '-title">';
         echo '  <div class="dq-payroll-modal-window">';
         echo '    <button type="button" class="dq-payroll-modal-close" id="dq-payroll-close-modal-btn" aria-label="Close modal">&times;</button>';
@@ -806,7 +803,7 @@ class DQ_Payroll {
         }
 
         // Import section
-        echo '    <div class="dq-payroll-modal-form" style="margin-bottom: 20px;">';
+        echo '    <div class="dq-payroll-modal-form" id="dq-payroll-import-section" style="margin-bottom: 20px;">';
         echo '      <h3>Import Payroll Records</h3>';
         echo '      <p style="margin: 5px 0 10px; color: #666;">Upload a CSV or Excel file with columns: <strong>date</strong>, <strong>amount</strong>, <strong>name</strong> (display name)</p>';
         echo '      <form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" enctype="multipart/form-data">';
@@ -815,8 +812,8 @@ class DQ_Payroll {
         echo $hidden_fields;
         echo '        <div style="display: flex; gap: 12px; align-items: flex-end;">';
         echo '          <div>';
-        echo '            <label style="font-weight: 600; display: block; margin-bottom: 4px;">CSV/Excel File</label>';
-        echo '            <input type="file" name="payroll_file" accept=".csv,.xlsx" required style="padding: 6px;">';
+        echo '            <label for="dq-payroll-file-input" style="font-weight: 600; display: block; margin-bottom: 4px;">CSV/Excel File</label>';
+        echo '            <input type="file" id="dq-payroll-file-input" name="payroll_file" accept=".csv,.xlsx" required style="padding: 6px;">';
         echo '          </div>';
         echo '          <div>';
         echo '            <input type="submit" class="button button-secondary" value="Import">';
@@ -906,19 +903,36 @@ class DQ_Payroll {
         echo '  </div>';
         echo '</div>';
 
-        // JavaScript for modal behavior (ESC to close, click overlay to close)
+        // JavaScript for modal behavior (open, close, ESC key, overlay click)
         echo '<script>
 (function(){
     var modalId = "' . esc_js( $modal_id ) . '";
     var modal = document.getElementById(modalId);
-    var openBtn = document.getElementById("dq-payroll-open-modal-btn");
+    var manageBtn = document.getElementById("dq-payroll-manage-btn");
+    var csvImportBtn = document.getElementById("dq-payroll-csv-import-btn");
     var closeBtn = document.getElementById("dq-payroll-close-modal-btn");
     
-    if (!modal || !openBtn || !closeBtn) return;
+    // Early exit if required elements are not found
+    if (!modal || !closeBtn) return;
 
     function openModal() {
         modal.style.display = "block";
         closeBtn.focus();
+    }
+
+    function openModalAndScrollToImport() {
+        modal.style.display = "block";
+        // Use double requestAnimationFrame to ensure modal is fully rendered before scrolling
+        // First frame: browser prepares modal for display
+        // Second frame: modal is rendered and scrolling can reliably occur
+        requestAnimationFrame(function() {
+            requestAnimationFrame(function() {
+                var importSection = document.getElementById("dq-payroll-import-section");
+                if (importSection) {
+                    importSection.scrollIntoView({behavior: "smooth", block: "start"});
+                }
+            });
+        });
     }
 
     function closeModal() {
@@ -937,8 +951,14 @@ class DQ_Payroll {
         }
     }
 
-    // Attach event listeners
-    openBtn.addEventListener("click", openModal);
+    // Attach event listeners only if buttons exist
+    if (manageBtn) {
+        manageBtn.addEventListener("click", openModal);
+    }
+    if (csvImportBtn) {
+        csvImportBtn.addEventListener("click", openModalAndScrollToImport);
+    }
+    
     closeBtn.addEventListener("click", function(e) {
         e.preventDefault();
         closeModal();
