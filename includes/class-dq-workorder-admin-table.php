@@ -628,6 +628,7 @@ class DQ_Workorder_Admin_Table {
             id="dq-scheduled-date-reset" 
             class="button"
             title="<?php esc_attr_e( 'Reset date filter', 'dqqb' ); ?>"
+            aria-label="<?php esc_attr_e( 'Reset date filter', 'dqqb' ); ?>"
         >
             <?php esc_html_e( 'Reset', 'dqqb' ); ?>
         </button>
@@ -1407,10 +1408,13 @@ class DQ_Workorder_Admin_Table {
                 $("#dq-scheduled-date-reset").on("click", function(e) {
                     e.preventDefault();
                     var $dateInput = $("#dq-scheduled-date-filter");
-                    // Clear the date input
-                    $dateInput.val("");
-                    // Submit the form to reload with all items
-                    $dateInput.closest("form").submit();
+                    // Only submit if there is a date to clear
+                    if ($dateInput.val()) {
+                        // Clear the date input
+                        $dateInput.val("");
+                        // Submit the form to reload with all items
+                        $dateInput.closest("form").submit();
+                    }
                 });
 
                 // Store loaded details to avoid repeated AJAX calls
