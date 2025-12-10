@@ -623,6 +623,15 @@ class DQ_Workorder_Admin_Table {
             readonly="readonly"
             style="cursor: pointer;"
         />
+        <button 
+            type="button" 
+            id="dq-scheduled-date-reset" 
+            class="button"
+            title="<?php esc_attr_e( 'Reset date filter', 'dqqb' ); ?>"
+            aria-label="<?php esc_attr_e( 'Reset date filter', 'dqqb' ); ?>"
+        >
+            <?php esc_html_e( 'Reset', 'dqqb' ); ?>
+        </button>
         <?php
     }
 
@@ -858,6 +867,16 @@ class DQ_Workorder_Admin_Table {
             }
             #dq-scheduled-date-filter::placeholder {
                 color: #999;
+            }
+            
+            /* Reset button styling */
+            #dq-scheduled-date-reset {
+                height: 28px;
+                padding: 0 10px;
+                vertical-align: top;
+                margin-left: 4px;
+                font-size: 13px;
+                line-height: 26px;
             }
             
             /* jQuery UI Datepicker styling - scoped to workorder admin page */
@@ -1382,6 +1401,19 @@ class DQ_Workorder_Admin_Table {
                     onSelect: function(dateText) {
                         // Submit the form when a date is selected
                         $(this).closest("form").submit();
+                    }
+                });
+
+                // Handle Reset button click
+                $("#dq-scheduled-date-reset").on("click", function(e) {
+                    e.preventDefault();
+                    var $dateInput = $("#dq-scheduled-date-filter");
+                    // Only submit if there is a date to clear
+                    if ($dateInput.val()) {
+                        // Clear the date input
+                        $dateInput.val("");
+                        // Submit the form to reload with all items
+                        $dateInput.closest("form").submit();
                     }
                 });
 
