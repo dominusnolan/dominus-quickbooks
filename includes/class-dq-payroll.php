@@ -903,14 +903,31 @@ class DQ_Payroll {
         echo '  </div>';
         echo '</div>';
 
-        // JavaScript for modal behavior (ESC to close, click overlay to close)
+        // JavaScript for modal behavior (open, close, ESC key, overlay click)
         echo '<script>
 (function(){
     var modalId = "' . esc_js( $modal_id ) . '";
     var modal = document.getElementById(modalId);
+    var manageBtn = document.getElementById("dq-payroll-manage-btn");
+    var csvImportBtn = document.getElementById("dq-payroll-csv-import-btn");
     var closeBtn = document.getElementById("dq-payroll-close-modal-btn");
     
     if (!modal || !closeBtn) return;
+
+    function openModal() {
+        modal.style.display = "block";
+        closeBtn.focus();
+    }
+
+    function openModalAndScrollToImport() {
+        modal.style.display = "block";
+        setTimeout(function() {
+            var importSection = document.querySelector("#" + modalId + " .dq-payroll-modal-form input[type=file]");
+            if (importSection) {
+                importSection.scrollIntoView({behavior: "smooth", block: "center"});
+            }
+        }, 100);
+    }
 
     function closeModal() {
         modal.style.display = "none";
@@ -929,6 +946,12 @@ class DQ_Payroll {
     }
 
     // Attach event listeners
+    if (manageBtn) {
+        manageBtn.addEventListener("click", openModal);
+    }
+    if (csvImportBtn) {
+        csvImportBtn.addEventListener("click", openModalAndScrollToImport);
+    }
     closeBtn.addEventListener("click", function(e) {
         e.preventDefault();
         closeModal();
