@@ -74,6 +74,7 @@ require_once DQQB_PATH . 'frontend/invoices-balance/class-dq-invoices-balance.ph
 
 
 require_once DQQB_PATH . 'includes/taxonomy-purchase-order.php';
+require_once DQQB_PATH . 'includes/taxonomy-qbo-customers.php';
 
 // -----------------------------------------------------------------------------
 // Initialize Plugin
