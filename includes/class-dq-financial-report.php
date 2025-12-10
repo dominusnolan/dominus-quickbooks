@@ -230,10 +230,6 @@ class DQ_Financial_Report {
             'germaine@milay.co'
         ];
         $current_user = wp_get_current_user();
-        // Check if user is logged in and has admin capabilities
-        if ( ! $current_user || ! $current_user->ID ) {
-            return false;
-        }
         return in_array($current_user->user_email, $allowed_emails, true) && current_user_can('manage_options');
     }
 
