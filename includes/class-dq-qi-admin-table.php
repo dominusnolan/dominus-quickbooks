@@ -106,13 +106,21 @@ class DQ_QI_Admin_Table {
                 break;
 
             case 'customer':
-                $customer = function_exists('get_field') ? get_field('qi_customer', $post_id) : get_post_meta($post_id, 'qi_customer', true);
+                // Get customer from taxonomy field (returns WP_Term object)
+                $customer_term = function_exists('get_field') ? get_field('qi_customer', $post_id) : get_post_meta($post_id, 'qi_customer', true);
+                $customer_name = '';
+                if ( $customer_term instanceof WP_Term ) {
+                    $customer_name = $customer_term->name;
+                } elseif ( is_string($customer_term) ) {
+                    $customer_name = $customer_term;
+                }
+                
                 $billto   = function_exists('get_field') ? get_field('qi_bill_to', $post_id) : get_post_meta($post_id, 'qi_bill_to', true);
                 $shipto   = function_exists('get_field') ? get_field('qi_ship_to', $post_id) : get_post_meta($post_id, 'qi_ship_to', true);
 
                 echo
                     '<div style="line-height:1.5;">' .
-                    '<strong>Customer:</strong> ' . esc_html((string)$customer) . '<br>' .
+                    '<strong>Customer:</strong> ' . esc_html((string)$customer_name) . '<br>' .
                     '<strong>Bill to:</strong> ' . esc_html((string)$billto) . '<br>' .
                     '<strong>Ship to:</strong> ' . esc_html((string)$shipto) .
                     '</div>';

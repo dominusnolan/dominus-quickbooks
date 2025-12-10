@@ -353,7 +353,14 @@ class DQ_Invoice_List
                 $payment_status = 'PAID';
             }
             
-            $customer       = function_exists('get_field') ? get_field('qi_customer', $invoice->ID) : get_post_meta($invoice->ID, 'qi_customer', true);
+            // Get customer from taxonomy field (returns WP_Term object)
+            $customer_term = function_exists('get_field') ? get_field('qi_customer', $invoice->ID) : get_post_meta($invoice->ID, 'qi_customer', true);
+            $customer = '';
+            if ( $customer_term instanceof WP_Term ) {
+                $customer = $customer_term->name;
+            } elseif ( is_string($customer_term) ) {
+                $customer = $customer_term;
+            }
             $bill_to        = function_exists('get_field') ? get_field('qi_bill_to', $invoice->ID) : get_post_meta($invoice->ID, 'qi_bill_to', true);
             $ship_to        = function_exists('get_field') ? get_field('qi_ship_to', $invoice->ID) : get_post_meta($invoice->ID, 'qi_ship_to', true);
             $invoice_date   = function_exists('get_field') ? get_field('qi_invoice_date', $invoice->ID) : get_post_meta($invoice->ID, 'qi_invoice_date', true);

@@ -3,7 +3,9 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 
 /**
  * Registers the 'qbo_customers' taxonomy for CPT 'quickbooks_invoice'
- * and adds an ACF field 'qi_qbo_customers' (taxonomy select).
+ * and adds an ACF field 'qi_customer' (taxonomy select).
+ * 
+ * The field returns the term name (not ID) to match against QBO customer DisplayName.
  */
 class DQ_QI_QBO_Customers_Taxonomy {
 
@@ -62,18 +64,18 @@ class DQ_QI_QBO_Customers_Taxonomy {
 
         // Prevent duplicate group creation
         if ( function_exists( 'acf_get_field_group' ) ) {
-            $existing = acf_get_field_group( 'group_dq_qi_qbo_customers' );
+            $existing = acf_get_field_group( 'group_dq_qi_customer' );
             if ( $existing ) return;
         }
 
         acf_add_local_field_group( [
-            'key'    => 'group_dq_qi_qbo_customers',
+            'key'    => 'group_dq_qi_customer',
             'title'  => 'Invoice: QBO Customer',
             'fields' => [
                 [
-                    'key'               => 'field_dq_qi_qbo_customers',
-                    'label'             => 'QBO Customer',
-                    'name'              => 'qi_qbo_customers',
+                    'key'               => 'field_dq_qi_customer',
+                    'label'             => 'Customer',
+                    'name'              => 'qi_customer',
                     'type'              => 'taxonomy',
                     'taxonomy'          => 'qbo_customers',
                     'field_type'        => 'select',     // could be 'radio' or 'multi_select'
@@ -81,8 +83,8 @@ class DQ_QI_QBO_Customers_Taxonomy {
                     'add_term'          => 1,            // allow creating new terms in selector
                     'save_terms'        => 1,            // link term to post
                     'load_terms'        => 1,
-                    'return_format'     => 'id',         // 'id', 'object' or 'name'
-                    'instructions'      => 'Select a QBO Customer for this invoice.',
+                    'return_format'     => 'object',     // Return term object so we can access the name
+                    'instructions'      => 'Select a QBO Customer for this invoice. The customer name must match exactly with the DisplayName in QuickBooks Online.',
                     'wrapper'           => [
                         'width' => '',
                         'class' => '',
