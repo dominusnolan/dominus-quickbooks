@@ -724,8 +724,8 @@ class DQ_Workorder_Admin_Table {
     /**
      * Filter workorder query by scheduled date
      *
-     * Modifies the main query to filter workorders by the schedule_date_time ACF field
-     * when a date is selected in the date filter input. Matches on date portion only,
+     * Modifies the main query to filter workorders by the schedule_date_time or re-schedule
+     * ACF fields when a date is selected in the date filter input. Matches on date portion only,
      * ignoring time component.
      *
      * @param WP_Query $query The query object
@@ -784,6 +784,20 @@ class DQ_Workorder_Admin_Table {
             [
                 // Also handle datetime format stored in ACF (e.g., "2024-12-09 15:30:00")
                 'key'     => 'schedule_date_time',
+                'value'   => [ $date_start, $date_end ],
+                'compare' => 'BETWEEN',
+                'type'    => 'DATETIME',
+            ],
+            [
+                // Match if the re-schedule field value starts with the selected date (e.g., "2024-12-09")
+                'key'     => 're-schedule',
+                'value'   => $selected_date,
+                'compare' => 'LIKE',
+                'type'    => 'CHAR',
+            ],
+            [
+                // Also handle datetime format stored in re-schedule ACF field (e.g., "2024-12-09 15:30:00")
+                'key'     => 're-schedule',
                 'value'   => [ $date_start, $date_end ],
                 'compare' => 'BETWEEN',
                 'type'    => 'DATETIME',
