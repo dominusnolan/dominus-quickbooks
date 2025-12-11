@@ -156,15 +156,10 @@ class DQ_Workorder_REST_API {
 
         // Add status filter if provided
         if ( ! empty( $status ) ) {
+            // Try status taxonomy first (preferred)
             $args['tax_query'] = array(
-                'relation' => 'OR',
                 array(
                     'taxonomy' => 'status',
-                    'field'    => 'slug',
-                    'terms'    => $status,
-                ),
-                array(
-                    'taxonomy' => 'category',
                     'field'    => 'slug',
                     'terms'    => $status,
                 ),
@@ -332,8 +327,9 @@ class DQ_Workorder_REST_API {
      * @return bool
      */
     public static function add_cors_headers( $served ) {
-        $allowed_origin = 'https://workorder-cpt-manage--dominusnolan.github.app';
-        $origin         = isset( $_SERVER['HTTP_ORIGIN'] ) ? $_SERVER['HTTP_ORIGIN'] : '';
+        // Allow filtering the allowed origin for different environments
+        $allowed_origin = apply_filters( 'dq_workorder_api_cors_origin', 'https://workorder-cpt-manage--dominusnolan.github.app' );
+        $origin         = isset( $_SERVER['HTTP_ORIGIN'] ) ? esc_url_raw( $_SERVER['HTTP_ORIGIN'] ) : '';
 
         // Only add CORS headers if the request is from the allowed origin
         if ( $origin === $allowed_origin ) {
@@ -344,7 +340,8 @@ class DQ_Workorder_REST_API {
         }
 
         // Handle preflight requests
-        if ( 'OPTIONS' === $_SERVER['REQUEST_METHOD'] ) {
+        $request_method = isset( $_SERVER['REQUEST_METHOD'] ) ? sanitize_text_field( $_SERVER['REQUEST_METHOD'] ) : '';
+        if ( 'OPTIONS' === $request_method ) {
             status_header( 200 );
             exit;
         }
