@@ -475,7 +475,7 @@ class DQ_Workorder_Admin_Table {
                 $reschedule_reason = __( 'No reason provided', 'dqqb' );
             }
 
-            // Format the rescheduled date
+            // Format the rescheduled date (already escaped by format_date_display)
             $formatted_reschedule_date = self::format_date_display( $rescheduled_date );
 
             // Output the expandable reschedule info
@@ -1415,7 +1415,6 @@ class DQ_Workorder_Admin_Table {
                 display: inline-block;
                 user-select: none;
                 transition: background-color 0.15s ease, border-color 0.15s ease;
-                list-style: none;
             }
             .dq-reschedule-summary::-webkit-details-marker {
                 display: none;
