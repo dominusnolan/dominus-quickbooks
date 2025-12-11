@@ -72,6 +72,9 @@ require_once DQQB_PATH . 'includes/class-dq-login-form.php';
 // NEW: Public invoices balance shortcode [invoices-balance]
 require_once DQQB_PATH . 'frontend/invoices-balance/class-dq-invoices-balance.php';
 
+// NEW: JWT Authentication for Spark web app
+require_once DQQB_PATH . 'includes/class-dq-jwt-auth.php';
+
 // NEW: Workorder REST API for Spark web app
 require_once DQQB_PATH . 'includes/class-dq-workorder-rest-api.php';
 
