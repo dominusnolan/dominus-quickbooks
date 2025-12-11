@@ -504,7 +504,7 @@ class DQ_Workorder_REST_API {
      * @return bool
      */
     public static function add_cors_headers( $served ) {
-        $origin = isset( $_SERVER['HTTP_ORIGIN'] ) ? esc_url_raw( $_SERVER['HTTP_ORIGIN'] ) : '';
+        $origin = isset( $_SERVER['HTTP_ORIGIN'] ) ? esc_url_raw( wp_unslash( $_SERVER['HTTP_ORIGIN'] ) ) : '';
 
         // Define allowed origins
         $allowed_origins = array(

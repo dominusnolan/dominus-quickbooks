@@ -27,11 +27,22 @@ class DQ_JWT_Auth {
 	 * @return string
 	 */
 	private static function get_secret_key() {
-		if ( defined( 'AUTH_KEY' ) && AUTH_KEY && AUTH_KEY !== 'put your unique phrase here' ) {
+		// Check if AUTH_KEY is defined and strong enough (min 32 characters)
+		if ( defined( 'AUTH_KEY' ) && AUTH_KEY && strlen( AUTH_KEY ) >= 32 && AUTH_KEY !== 'put your unique phrase here' ) {
 			return AUTH_KEY;
 		}
-		// Fallback to a hash of site URL + DB prefix (not recommended for production)
-		return hash( 'sha256', get_site_url() . DB_NAME . DB_PREFIX );
+
+		// Check for stored JWT secret in options
+		$stored_secret = get_option( 'dq_jwt_secret_key' );
+		if ( $stored_secret && strlen( $stored_secret ) >= 32 ) {
+			return $stored_secret;
+		}
+
+		// Generate and store a new random secret (only runs once)
+		$new_secret = wp_generate_password( 64, true, true );
+		update_option( 'dq_jwt_secret_key', $new_secret, false ); // Don't autoload
+		
+		return $new_secret;
 	}
 
 	/**
