@@ -72,6 +72,8 @@ require_once DQQB_PATH . 'includes/class-dq-login-form.php';
 // NEW: Public invoices balance shortcode [invoices-balance]
 require_once DQQB_PATH . 'frontend/invoices-balance/class-dq-invoices-balance.php';
 
+// NEW: Workorder REST API for Spark web app
+require_once DQQB_PATH . 'includes/class-dq-workorder-rest-api.php';
 
 require_once DQQB_PATH . 'includes/taxonomy-purchase-order.php';
 require_once DQQB_PATH . 'includes/taxonomy-qbo-customers.php';
@@ -116,6 +118,7 @@ add_action( 'plugins_loaded', function() {
     if ( class_exists( 'DQ_Dashboard' ) ) DQ_Dashboard::init(); // NEW: Front-end dashboard
     if ( class_exists( 'DQ_Admin_Dashboard' ) ) DQ_Admin_Dashboard::init(); // NEW: Admin dashboard with Work Orders Summary
     if ( class_exists( 'DQ_Invoices_Balance' ) ) DQ_Invoices_Balance::init(); // NEW: Public invoices balance shortcode
+    if ( class_exists( 'DQ_Workorder_REST_API' ) ) DQ_Workorder_REST_API::init(); // NEW: Workorder REST API for Spark web app
     
     if ( class_exists( 'DQ_Workorder_Template' ) ) DQ_Workorder_Template::init(); // NEW
     
