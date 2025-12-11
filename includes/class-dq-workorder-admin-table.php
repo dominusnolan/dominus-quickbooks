@@ -1998,6 +1998,9 @@ class DQ_Workorder_Admin_Table {
                 <dl>
                     <dt><?php esc_html_e( 'Product ID', 'dqqb' ); ?></dt>
                     <dd><?php echo esc_html( self::get_acf_or_meta( 'installed_product_id', $post_id ) ?: '—' ); ?></dd>
+
+                    <dt><?php esc_html_e( 'Type of Work', 'dqqb' ); ?></dt>
+                    <dd><?php echo esc_html( self::get_acf_or_meta( 'wo_type_of_work', $post_id ) ?: '—' ); ?></dd>
                 </dl>
             </div>
 
