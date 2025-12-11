@@ -457,6 +457,7 @@ class DQ_Workorder_Admin_Table {
      * Render Date Scheduled column
      *
      * Uses ACF field: schedule_date_time
+     * Shows rescheduled information when re-schedule field has a value
      *
      * @param int $post_id Post ID
      * @return void
@@ -464,6 +465,28 @@ class DQ_Workorder_Admin_Table {
     private static function render_column_date_scheduled( $post_id ) {
         $value = self::get_acf_or_meta( 'schedule_date_time', $post_id );
         echo self::format_date_display( $value );
+
+        // Check for rescheduled date
+        $rescheduled_date = self::get_acf_or_meta( 're-schedule', $post_id );
+        if ( ! empty( $rescheduled_date ) ) {
+            // Get reschedule reason with fallback text
+            $reschedule_reason = self::get_acf_or_meta( 'rescheduled_reason', $post_id );
+            if ( empty( $reschedule_reason ) ) {
+                $reschedule_reason = __( 'No reason provided', 'dqqb' );
+            }
+
+            // Format the rescheduled date
+            $formatted_reschedule_date = self::format_date_display( $rescheduled_date );
+
+            // Output the expandable reschedule info
+            echo '<details class="dq-reschedule-details">';
+            echo '<summary class="dq-reschedule-summary">' . esc_html__( 'Rescheduled', 'dqqb' ) . '</summary>';
+            echo '<div class="dq-reschedule-content">';
+            echo '<div class="dq-reschedule-date"><strong>' . esc_html__( 'New Date:', 'dqqb' ) . '</strong> ' . $formatted_reschedule_date . '</div>';
+            echo '<div class="dq-reschedule-reason"><strong>' . esc_html__( 'Reason:', 'dqqb' ) . '</strong> ' . esc_html( $reschedule_reason ) . '</div>';
+            echo '</div>';
+            echo '</details>';
+        }
     }
 
     /**
@@ -1374,6 +1397,67 @@ class DQ_Workorder_Admin_Table {
                 background: #f0f0f0;
                 border-color: #bfc4c8;
                 color: #135e96;
+            }
+
+            /* Reschedule information styles */
+            .dq-reschedule-details {
+                margin-top: 8px;
+                font-size: 12px;
+            }
+            .dq-reschedule-summary {
+                cursor: pointer;
+                color: #0996a0;
+                font-weight: 600;
+                padding: 4px 8px;
+                background: #f0f6ff;
+                border: 1px solid #d0e4f5;
+                border-radius: 3px;
+                display: inline-block;
+                user-select: none;
+                transition: background-color 0.15s ease, border-color 0.15s ease;
+                list-style: none;
+            }
+            .dq-reschedule-summary::-webkit-details-marker {
+                display: none;
+            }
+            .dq-reschedule-summary::marker {
+                display: none;
+            }
+            .dq-reschedule-summary:hover {
+                background: #e3f2fd;
+                border-color: #b3d9f0;
+            }
+            .dq-reschedule-summary:focus {
+                outline: 2px solid #0996a0;
+                outline-offset: 2px;
+            }
+            .dq-reschedule-summary::before {
+                content: "▶";
+                display: inline-block;
+                margin-right: 6px;
+                transition: transform 0.2s ease;
+                font-size: 10px;
+            }
+            .dq-reschedule-details[open] .dq-reschedule-summary::before {
+                transform: rotate(90deg);
+            }
+            .dq-reschedule-content {
+                margin-top: 6px;
+                padding: 10px;
+                background: #fff;
+                border: 1px solid #d0e4f5;
+                border-radius: 3px;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            }
+            .dq-reschedule-date,
+            .dq-reschedule-reason {
+                margin: 4px 0;
+                line-height: 1.5;
+                color: #2c3338;
+            }
+            .dq-reschedule-date strong,
+            .dq-reschedule-reason strong {
+                color: #0996a0;
             }
         ';
     }
