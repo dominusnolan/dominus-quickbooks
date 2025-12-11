@@ -223,11 +223,22 @@ class DQ_Financial_Report {
     }
 
     public static function user_can_view() {
-        // Only allow admins (manage_options) for menu visibility and page access
-        return current_user_can('manage_options');
+        // List of allowed admin emails
+        $allowed_emails = [
+            'nolan.upwork@gmail.com',
+            'ramir@milay.co',
+            'germaine@milay.co'
+        ];
+        $current_user = wp_get_current_user();
+        return in_array($current_user->user_email, $allowed_emails, true) && current_user_can('manage_options');
     }
 
     public static function menu() {
+        // Only register menu items if user has permission to view
+        if ( ! self::user_can_view() ) {
+            return;
+        }
+        
         // Top-level menu
         add_menu_page(
             'Financial Reports',
