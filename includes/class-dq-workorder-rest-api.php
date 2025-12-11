@@ -505,8 +505,11 @@ class DQ_Workorder_REST_API {
      */
     public static function add_cors_headers( $served ) {
         $origin = isset( $_SERVER['HTTP_ORIGIN'] ) ? esc_url_raw( wp_unslash( $_SERVER['HTTP_ORIGIN'] ) ) : '';
+        
+        // Normalize origin by removing trailing slash to prevent CORS mismatch
+        $origin = rtrim( $origin, '/' );
 
-        // Define allowed origins
+        // Define allowed origins (without trailing slashes)
         $allowed_origins = array(
             'https://workorder-cpt-manage--dominusnolan.github.app',
             'http://localhost:5173',
