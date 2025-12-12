@@ -432,9 +432,15 @@ class DQ_Workorder_REST_API {
 
         // Add date filtering if provided
         if ( ! empty( $date_from ) || ! empty( $date_to ) ) {
-            $args['meta_query'] = array(
-                'relation' => 'AND',
-            );
+            // Initialize meta_query if it doesn't exist, or preserve existing queries
+            if ( ! isset( $args['meta_query'] ) ) {
+                $args['meta_query'] = array();
+            }
+
+            // Set relation to AND (or preserve existing relation)
+            if ( ! isset( $args['meta_query']['relation'] ) ) {
+                $args['meta_query']['relation'] = 'AND';
+            }
 
             if ( ! empty( $date_from ) ) {
                 $args['meta_query'][] = array(
