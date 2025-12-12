@@ -533,13 +533,23 @@ class DQ_Workorder_REST_API {
     }
 
     /**
-     * Send CORS headers for allowed origin.
+     * Check if origin is allowed and send CORS headers if it is.
      *
-     * @param string $origin The origin to send headers for.
-     * @param bool   $include_max_age Whether to include Access-Control-Max-Age header.
-     * @return void
+     * @param bool $include_max_age Whether to include Access-Control-Max-Age header.
+     * @return bool True if origin is allowed and headers were sent, false otherwise.
      */
-    private static function send_cors_headers( $origin, $include_max_age = false ) {
+    private static function maybe_send_cors_headers( $include_max_age = false ) {
+        $origin = self::get_request_origin();
+        $allowed_origins = self::get_allowed_origins();
+
+        // Check if the request origin is in the allowed list
+        if ( ! in_array( $origin, $allowed_origins, true ) ) {
+            return false;
+        }
+
+        // Extra security: strip any newlines to prevent header injection
+        $origin = str_replace( array( "\r", "\n" ), '', $origin );
+
         header( 'Access-Control-Allow-Origin: ' . $origin );
         header( 'Access-Control-Allow-Credentials: true' );
         header( 'Access-Control-Allow-Methods: GET, POST, OPTIONS' );
@@ -548,6 +558,8 @@ class DQ_Workorder_REST_API {
         if ( $include_max_age ) {
             header( 'Access-Control-Max-Age: 86400' );
         }
+
+        return true;
     }
 
     /**
@@ -567,14 +579,7 @@ class DQ_Workorder_REST_API {
      * @return bool
      */
     public static function add_cors_headers( $served ) {
-        $origin = self::get_request_origin();
-        $allowed_origins = self::get_allowed_origins();
-
-        // Check if the request origin is in the allowed list
-        if ( in_array( $origin, $allowed_origins, true ) ) {
-            self::send_cors_headers( $origin );
-        }
-
+        self::maybe_send_cors_headers();
         return $served;
     }
 
@@ -586,12 +591,7 @@ class DQ_Workorder_REST_API {
     public static function handle_preflight_requests() {
         add_filter( 'rest_pre_dispatch', function( $result, $server, $request ) {
             if ( 'OPTIONS' === $request->get_method() ) {
-                $origin = self::get_request_origin();
-                $allowed_origins = self::get_allowed_origins();
-                
-                if ( in_array( $origin, $allowed_origins, true ) ) {
-                    self::send_cors_headers( $origin, true );
-                }
+                self::maybe_send_cors_headers( true );
                 
                 $response = new WP_REST_Response();
                 $response->set_status( 200 );
