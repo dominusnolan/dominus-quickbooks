@@ -54,6 +54,9 @@ class DQ_Workorder_REST_API {
      * @return void
      */
     public static function init() {
+        // Handle CORS preflight very early, before REST API init
+        add_action( 'init', array( __CLASS__, 'handle_early_cors_preflight' ), 1 );
+        
         add_action( 'rest_api_init', array( __CLASS__, 'register_rest_routes' ) );
         add_action( 'rest_api_init', array( __CLASS__, 'add_cors_support' ), 15 );
         add_action( 'rest_api_init', array( __CLASS__, 'handle_preflight_requests' ) );
@@ -621,6 +624,42 @@ class DQ_Workorder_REST_API {
     }
 
     /**
+     * Handle CORS preflight requests very early in the WordPress lifecycle.
+     * This catches OPTIONS requests before they reach the REST API.
+     *
+     * @return void
+     */
+    public static function handle_early_cors_preflight() {
+        // Only handle OPTIONS requests
+        if ( ! isset( $_SERVER['REQUEST_METHOD'] ) || 'OPTIONS' !== $_SERVER['REQUEST_METHOD'] ) {
+            return;
+        }
+        
+        // Check if this is a request to our API namespace
+        $request_uri = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
+        if ( strpos( $request_uri, '/wp-json/dq-quickbooks/' ) === false ) {
+            return;
+        }
+        
+        // Get and validate origin
+        $origin = self::get_request_origin();
+        $allowed_origins = self::get_allowed_origins();
+        
+        // If origin is allowed, send CORS headers and exit
+        if ( in_array( $origin, $allowed_origins, true ) ) {
+            header( 'Access-Control-Allow-Origin: ' . $origin );
+            header( 'Access-Control-Allow-Credentials: true' );
+            header( 'Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS' );
+            header( 'Access-Control-Allow-Headers: Authorization, Content-Type, X-Requested-With' );
+            header( 'Access-Control-Max-Age: 86400' ); // Cache preflight for 24 hours
+            header( 'Content-Length: 0' );
+            header( 'Content-Type: text/plain' );
+            status_header( 200 );
+            exit;
+        }
+    }
+
+    /**
      * Check if origin is allowed and send CORS headers if it is.
      *
      * @param bool $include_max_age Whether to include Access-Control-Max-Age header.
@@ -664,23 +703,15 @@ class DQ_Workorder_REST_API {
      * @return bool
      */
     public static function add_cors_headers( $served ) {
-        // Allow filtering the allowed origin for different environments
-        $allowed_origin = apply_filters( 'dq_workorder_api_cors_origin', 'https://workorder-cpt-manage--dominusnolan.github.app' );
-        $origin         = isset( $_SERVER['HTTP_ORIGIN'] ) ? esc_url_raw( $_SERVER['HTTP_ORIGIN'] ) : '';
+        $origin = self::get_request_origin();
+        $allowed_origins = self::get_allowed_origins();
 
-        // Only add CORS headers if the request is from the allowed origin
-        if ( $origin === $allowed_origin ) {
-            header( 'Access-Control-Allow-Origin: ' . $allowed_origin );
+        // Only add CORS headers if the request is from an allowed origin
+        if ( in_array( $origin, $allowed_origins, true ) ) {
+            header( 'Access-Control-Allow-Origin: ' . $origin );
             header( 'Access-Control-Allow-Credentials: true' );
             header( 'Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS' );
-            header( 'Access-Control-Allow-Headers: Authorization, Content-Type' );
-        }
-
-        // Handle preflight requests
-        $request_method = isset( $_SERVER['REQUEST_METHOD'] ) ? sanitize_text_field( $_SERVER['REQUEST_METHOD'] ) : '';
-        if ( 'OPTIONS' === $request_method ) {
-            status_header( 200 );
-            exit;
+            header( 'Access-Control-Allow-Headers: Authorization, Content-Type, X-Requested-With' );
         }
 
         return $served;
