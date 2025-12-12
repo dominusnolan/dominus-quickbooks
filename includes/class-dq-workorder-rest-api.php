@@ -138,35 +138,13 @@ class DQ_Workorder_REST_API {
                     'type'              => 'string',
                     'default'           => '',
                     'sanitize_callback' => 'sanitize_text_field',
-                    'validate_callback' => function( $param ) {
-                        if ( empty( $param ) ) {
-                            return true;
-                        }
-                        // Validate YYYY-MM-DD format and ensure it's a valid date
-                        if ( preg_match( '/^\d{4}-\d{2}-\d{2}$/', $param ) !== 1 ) {
-                            return false;
-                        }
-                        // Check if it's a valid date
-                        $date = DateTime::createFromFormat( 'Y-m-d', $param );
-                        return $date && $date->format( 'Y-m-d' ) === $param;
-                    },
+                    'validate_callback' => array( __CLASS__, 'validate_date_param' ),
                 ),
                 'date_to' => array(
                     'type'              => 'string',
                     'default'           => '',
                     'sanitize_callback' => 'sanitize_text_field',
-                    'validate_callback' => function( $param ) {
-                        if ( empty( $param ) ) {
-                            return true;
-                        }
-                        // Validate YYYY-MM-DD format and ensure it's a valid date
-                        if ( preg_match( '/^\d{4}-\d{2}-\d{2}$/', $param ) !== 1 ) {
-                            return false;
-                        }
-                        // Check if it's a valid date
-                        $date = DateTime::createFromFormat( 'Y-m-d', $param );
-                        return $date && $date->format( 'Y-m-d' ) === $param;
-                    },
+                    'validate_callback' => array( __CLASS__, 'validate_date_param' ),
                 ),
             ),
         ) );
@@ -667,6 +645,27 @@ class DQ_Workorder_REST_API {
             return get_field( $field_name, $post_id );
         }
         return get_post_meta( $post_id, $field_name, true );
+    }
+
+    /**
+     * Validate date parameter in YYYY-MM-DD format.
+     *
+     * @param string $date_string The date string to validate.
+     * @return bool True if valid date in YYYY-MM-DD format, false otherwise.
+     */
+    private static function validate_date_param( $date_string ) {
+        if ( empty( $date_string ) ) {
+            return true;
+        }
+
+        // Validate YYYY-MM-DD format
+        if ( preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date_string ) !== 1 ) {
+            return false;
+        }
+
+        // Check if it's a valid date
+        $date = DateTime::createFromFormat( 'Y-m-d', $date_string );
+        return $date && $date->format( 'Y-m-d' ) === $date_string;
     }
 
     /**
