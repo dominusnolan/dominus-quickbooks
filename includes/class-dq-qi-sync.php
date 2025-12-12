@@ -782,7 +782,18 @@ class DQ_QI_Sync {
             return 0.0;
         }
         
+        // Validate invoice_id format (numeric only for safety)
+        if ( ! is_numeric( $invoice_id ) && ! preg_match( '/^[A-Z0-9\-]+$/i', (string)$invoice_id ) ) {
+            DQ_Logger::error( 'Invalid invoice_id format', [
+                'post_id' => $post_id,
+                'invoice_id' => $invoice_id
+            ] );
+            return 0.0;
+        }
+        
         // Query QuickBooks for Payments linked to this invoice
+        // Note: addslashes() is used here matching the pattern used throughout this codebase
+        // (see lines 493, 608, 620). The invoice_id comes from QuickBooks API response, not user input.
         $sql = "select Id, TotalAmt, UnappliedAmt, DepositToAccountRef from Payment where LinkedTxn.TxnId = '" . addslashes( $invoice_id ) . "'";
         $resp = DQ_API::query( $sql );
         
@@ -795,7 +806,12 @@ class DQ_QI_Sync {
             return 0.0;
         }
         
+        // Normalize Payment response - QuickBooks may return single object or array
         $payments = isset( $resp['QueryResponse']['Payment'] ) ? $resp['QueryResponse']['Payment'] : [];
+        if ( ! empty( $payments ) && ! isset( $payments[0] ) ) {
+            // Single payment object returned, wrap in array
+            $payments = [ $payments ];
+        }
         
         if ( empty( $payments ) ) {
             DQ_Logger::debug( 'No Payments found for invoice', [
