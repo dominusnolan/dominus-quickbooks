@@ -121,8 +121,14 @@ class DQ_QI_Sync {
                 // Normalize PO detection to accept both 'PO#' and 'Purchase Orders' (and variants)
                 $field_name = isset( $field['Name'] ) ? trim( (string) $field['Name'] ) : '';
                 
-                // Check if this is a PO field by Name
-                if ( $field_name === 'PO#' || $field_name === 'Purchase Orders' || stripos( $field_name, 'purchase order' ) !== false ) {
+                // Check if this is a PO field by Name (exact matches or case-insensitive substring)
+                // Only matches fields explicitly containing purchase order terminology
+                $is_po_field = ( $field_name === 'PO#' || 
+                                 $field_name === 'Purchase Orders' || 
+                                 $field_name === 'Purchase Order' ||
+                                 ( stripos( $field_name, 'purchase order' ) !== false && strlen( $field_name ) < 50 ) );
+                
+                if ( $is_po_field ) {
                     // Extract the value from StringValue (the expected field type for PO#)
                     if ( ! empty( $field['StringValue'] ) ) {
                         $po_value = trim( (string) $field['StringValue'] );
@@ -137,8 +143,13 @@ class DQ_QI_Sync {
             }
             
             // Fallback: check StringValue even if Name doesn't match (for edge cases)
-            // This is conservative and only activates if there's exactly one StringType CustomField
-            if ( empty( $po_value ) ) {
+            // This handles situations where:
+            // - QBO CustomField Name is missing or empty
+            // - QBO CustomField Name was changed but value remains
+            // Conservative: only activates if there's exactly one StringType CustomField
+            // Can be disabled via filter 'dqqb_enable_po_fallback_detection'
+            $enable_fallback = apply_filters( 'dqqb_enable_po_fallback_detection', true );
+            if ( empty( $po_value ) && $enable_fallback ) {
                 $string_fields = [];
                 foreach ( $invoice_obj['CustomField'] as $field ) {
                     if ( ! empty( $field['StringValue'] ) && isset( $field['Type'] ) && $field['Type'] === 'StringType' ) {
@@ -150,8 +161,8 @@ class DQ_QI_Sync {
                 if ( count( $string_fields ) === 1 ) {
                     $field = $string_fields[0];
                     $val = trim( (string) $field['StringValue'] );
-                    // Validate it looks like a PO number (alphanumeric with common separators)
-                    if ( $val !== '' && strlen( $val ) < self::MAX_PO_LENGTH && preg_match( '/^[A-Z0-9\-_#\s]+$/i', $val ) ) {
+                    // Validate it looks like a PO number (alphanumeric with common separators, no control chars)
+                    if ( $val !== '' && strlen( $val ) < self::MAX_PO_LENGTH && preg_match( '/^[A-Z0-9\-_#]+$/i', $val ) ) {
                         $po_value = $val;
                         DQ_Logger::info( 'Found PO CustomField by StringValue fallback (single field)', [
                             'post_id' => $post_id,
