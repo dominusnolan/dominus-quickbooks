@@ -152,15 +152,21 @@ class DQ_QI_Sync {
 
             if ( ! empty( $po_value ) ) {
                 // Get or create the term in the purchase_order taxonomy
-                // term_exists returns array with 'term_id' and 'term_taxonomy_id' keys (or 0/null if not found)
+                // term_exists returns array or integer (depending on context and WordPress version)
                 $term = term_exists( $po_value, 'purchase_order' );
                 $term_id = null;
                 
                 if ( $term ) {
                     // Correctly extract term_id from term_exists return value
-                    // term_exists returns array like ['term_id' => X, 'term_taxonomy_id' => Y] or integer term_id
-                    if ( is_array( $term ) && isset( $term['term_id'] ) ) {
-                        $term_id = (int) $term['term_id'];
+                    // Modern WordPress (5.x+): array with 'term_id' and 'term_taxonomy_id' keys
+                    // Legacy WordPress (4.x): indexed array [term_id, term_taxonomy_id]
+                    // By ID lookup: integer term_id
+                    if ( is_array( $term ) ) {
+                        if ( isset( $term['term_id'] ) ) {
+                            $term_id = (int) $term['term_id'];
+                        } elseif ( isset( $term[0] ) ) {
+                            $term_id = (int) $term[0];
+                        }
                     } elseif ( is_numeric( $term ) ) {
                         $term_id = (int) $term;
                     }
