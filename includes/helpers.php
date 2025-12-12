@@ -536,3 +536,19 @@ add_action('save_post_workorder', function( $post_id ) {
         ] );
     }
 }, 20);
+
+/**
+ * Enable Application Passwords for authentication with external apps.
+ * Required for Spark web app integration (fallback option).
+ */
+add_filter( 'wp_is_application_passwords_available', '__return_true' );
+
+add_filter( 'wp_is_application_passwords_available_for_user', function( $available, $user ) {
+    if ( in_array( 'engineer', (array) $user->roles, true ) ) {
+        return true;
+    }
+    if ( in_array( 'administrator', (array) $user->roles, true ) ) {
+        return true;
+    }
+    return $available;
+}, 10, 2 );
