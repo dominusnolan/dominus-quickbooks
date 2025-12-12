@@ -433,7 +433,7 @@ class DQ_Workorder_REST_API {
             if ( ! isset( $args['tax_query'] ) ) {
                 $args['tax_query'] = array();
             }
-            
+
             // Add exclusion for 'closed' category
             $args['tax_query'][] = array(
                 'taxonomy' => 'category',
