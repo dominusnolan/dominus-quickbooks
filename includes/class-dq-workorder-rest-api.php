@@ -146,7 +146,7 @@ class DQ_Workorder_REST_API {
         register_rest_route( self::REST_NAMESPACE, '/' . self::REST_ROUTE_CLOSE, array(
             'methods'             => 'POST',
             'callback'            => array( __CLASS__, 'rest_close_workorder' ),
-            'permission_callback' => array( __CLASS__, 'permission_callback' ),
+            'permission_callback' => array( __CLASS__, 'jwt_permission_callback' ),
             'args'                => array(
                 'id' => array(
                     'type'              => 'integer',
