@@ -122,7 +122,7 @@ class DQ_QI_Sync {
                 }
             }
 
-            if ( $po_value !== null && $po_value !== '' ) {
+            if ( ! empty( $po_value ) ) {
                 // Get or create the term in the purchase_order taxonomy
                 // term_exists returns indexed array [term_id, term_taxonomy_id] or 0/null if not found
                 $term = term_exists( $po_value, 'purchase_order' );
