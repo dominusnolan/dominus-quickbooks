@@ -120,10 +120,10 @@ Authorization: Bearer <token>
 - `page` (integer, optional): Page number (default: 1)
 - `per_page` (integer, optional): Items per page (default: 10, max: 100)
 - `status` (string, optional): Filter by status slug. Valid values: "open", "scheduled", "closed"
-- `orderby` (string, optional): Sort field - "date" (default) or "schedule_date"
+- `orderby` (string, optional): Sort field - "date" (default) or "schedule_date" (uses the schedule_date_time ACF field)
 - `order` (string, optional): Sort order - "ASC" or "DESC" (default: DESC)
-- `date_from` (string, optional): Filter schedule_date >= date_from (format: YYYY-MM-DD)
-- `date_to` (string, optional): Filter schedule_date <= date_to (format: YYYY-MM-DD)
+- `date_from` (string, optional): Filter by schedule date >= date_from (format: YYYY-MM-DD, filters schedule_date_time field)
+- `date_to` (string, optional): Filter by schedule date <= date_to (format: YYYY-MM-DD, filters schedule_date_time field)
 
 **Success Response (200 OK):**
 ```json

@@ -398,8 +398,8 @@ class DQ_Workorder_REST_API {
 
         // Handle orderby parameter
         if ( 'schedule_date' === $orderby ) {
-            // Order by schedule_date meta field
-            $args['meta_key'] = 'schedule_date';
+            // Order by schedule_date_time meta field
+            $args['meta_key'] = 'schedule_date_time';
             $args['orderby']  = 'meta_value';
             $args['order']    = strtoupper( $order );
         } else {
@@ -426,7 +426,7 @@ class DQ_Workorder_REST_API {
 
             if ( ! empty( $date_from ) ) {
                 $args['meta_query'][] = array(
-                    'key'     => 'schedule_date',
+                    'key'     => 'schedule_date_time',
                     'value'   => $date_from,
                     'compare' => '>=',
                     'type'    => 'DATE',
@@ -435,7 +435,7 @@ class DQ_Workorder_REST_API {
 
             if ( ! empty( $date_to ) ) {
                 $args['meta_query'][] = array(
-                    'key'     => 'schedule_date',
+                    'key'     => 'schedule_date_time',
                     'value'   => $date_to,
                     'compare' => '<=',
                     'type'    => 'DATE',
