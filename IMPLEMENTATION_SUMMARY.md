@@ -150,8 +150,10 @@ Each workorder in the API response includes:
   "date_modified": "2025-12-05 15:30:00",
   "wo_state": "CA",
   "wo_customer_email": "customer@example.com",
+  "wo_location": "Los Angeles, CA",
   "schedule_date": "2025-12-15 09:00:00",
   "closed_on": "",
+  "date_service_completed_by_fse": "",
   "permalink": "https://staging.milaymechanical.com/workorder/wo-2025-001/"
 }
 ```
@@ -160,7 +162,7 @@ Each workorder in the API response includes:
 - `id`, `title`, `date_created`, `date_modified`, `permalink` - WordPress post data
 - `status` - Retrieved from `category` taxonomy (falls back to `status` taxonomy or meta field if not found)
 - `wo_state`, `wo_customer_email` - Post meta
-- `schedule_date`, `closed_on` - ACF fields
+- `wo_location`, `schedule_date`, `closed_on`, `date_service_completed_by_fse` - ACF fields
 
 ## Query Logic
 
