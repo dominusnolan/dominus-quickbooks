@@ -50,7 +50,7 @@ class DQ_QI_Sync {
                 $customer_id = (string) $invoice_obj['CustomerRef']['value'];
                 
                 // Validate customer ID format (alphanumeric with optional internal hyphens)
-                // Pattern ensures ID starts and ends with alphanumeric, with hyphens only between chars
+                // Pattern: starts with alphanumeric, optionally followed by hyphen + alphanumeric groups
                 if ( preg_match( '/^[A-Z0-9]+(?:-[A-Z0-9]+)*$/i', $customer_id ) ) {
                     $customer_data = DQ_API::get( 'customer/' . $customer_id );
                     if ( ! is_wp_error( $customer_data ) && ! empty( $customer_data['Customer']['DisplayName'] ) ) {
@@ -283,7 +283,7 @@ class DQ_QI_Sync {
                 if ( count( $string_fields ) === 1 ) {
                     $field = $string_fields[0];
                     $val = trim( (string) $field['StringValue'] );
-                    // Validate it looks like a PO number (starts alphanumeric, allows common separators)
+                    // Validate it looks like a PO number (must start alphanumeric, then allows hyphens/underscores/hash)
                     if ( $val !== '' && strlen( $val ) < self::MAX_PO_LENGTH && preg_match( '/^[A-Z0-9][A-Z0-9\-_#]*$/i', $val ) ) {
                         $po_value = $val;
                         DQ_Logger::info( 'Found PO CustomField by StringValue fallback (single field)', [
