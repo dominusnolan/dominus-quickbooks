@@ -10,6 +10,11 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  */
 class DQ_QI_Sync {
 
+    /**
+     * Maximum length for Purchase Order number validation
+     */
+    const MAX_PO_LENGTH = 100;
+
     public static function pull_from_qbo( $post_id ) {
         if ( ! function_exists('update_field') ) {
             return new WP_Error('dq_acf_missing', 'ACF is required.');
@@ -113,24 +118,88 @@ class DQ_QI_Sync {
         if ( ! empty( $invoice_obj['CustomField'] ) && is_array( $invoice_obj['CustomField'] ) ) {
             $po_value = null;
             foreach ( $invoice_obj['CustomField'] as $field ) {
-                if ( isset( $field['Name'] ) && $field['Name'] === 'PO#' ) {
+                // Normalize PO detection to accept both 'PO#' and 'Purchase Orders' (and variants)
+                $field_name = isset( $field['Name'] ) ? trim( (string) $field['Name'] ) : '';
+                
+                // Check if this is a PO field by Name (exact matches or case-insensitive substring)
+                // Only matches fields explicitly containing purchase order terminology
+                $is_po_field = ( $field_name === 'PO#' || 
+                                 $field_name === 'Purchase Orders' || 
+                                 $field_name === 'Purchase Order' ||
+                                 ( stripos( $field_name, 'purchase order' ) !== false && strlen( $field_name ) < 50 ) );
+                
+                if ( $is_po_field ) {
                     // Extract the value from StringValue (the expected field type for PO#)
                     if ( ! empty( $field['StringValue'] ) ) {
                         $po_value = trim( (string) $field['StringValue'] );
+                        DQ_Logger::info( 'Found PO CustomField by Name', [
+                            'post_id' => $post_id,
+                            'field_name' => $field_name,
+                            'po_value' => $po_value
+                        ] );
+                        break;
                     }
-                    break;
+                }
+            }
+            
+            // Fallback: check StringValue even if Name doesn't match (for edge cases)
+            // This handles situations where:
+            // - QBO CustomField Name is missing or empty
+            // - QBO CustomField Name was changed but value remains
+            // Conservative: only activates if there's exactly one StringType CustomField
+            // Can be disabled via filter 'dqqb_enable_po_fallback_detection'
+            $enable_fallback = apply_filters( 'dqqb_enable_po_fallback_detection', true );
+            if ( empty( $po_value ) && $enable_fallback ) {
+                $string_fields = [];
+                foreach ( $invoice_obj['CustomField'] as $field ) {
+                    if ( ! empty( $field['StringValue'] ) && isset( $field['Type'] ) && $field['Type'] === 'StringType' ) {
+                        $string_fields[] = $field;
+                    }
+                }
+                
+                // Only use fallback if there's exactly one StringType field (unambiguous)
+                if ( count( $string_fields ) === 1 ) {
+                    $field = $string_fields[0];
+                    $val = trim( (string) $field['StringValue'] );
+                    // Validate it looks like a PO number (alphanumeric with common separators, no control chars)
+                    if ( $val !== '' && strlen( $val ) < self::MAX_PO_LENGTH && preg_match( '/^[A-Z0-9\-_#]+$/i', $val ) ) {
+                        $po_value = $val;
+                        DQ_Logger::info( 'Found PO CustomField by StringValue fallback (single field)', [
+                            'post_id' => $post_id,
+                            'field_name' => isset( $field['Name'] ) ? $field['Name'] : '(unnamed)',
+                            'field_type' => isset( $field['Type'] ) ? $field['Type'] : 'unknown',
+                            'po_value' => $po_value
+                        ] );
+                    }
                 }
             }
 
             if ( ! empty( $po_value ) ) {
                 // Get or create the term in the purchase_order taxonomy
-                // term_exists returns indexed array [term_id, term_taxonomy_id] or 0/null if not found
+                // term_exists returns array or integer (depending on context and WordPress version)
                 $term = term_exists( $po_value, 'purchase_order' );
                 $term_id = null;
                 
                 if ( $term ) {
-                    // term_exists returns indexed array [term_id, term_taxonomy_id]
-                    $term_id = $term[0];
+                    // Correctly extract term_id from term_exists return value
+                    // Modern WordPress (5.x+): array with 'term_id' and 'term_taxonomy_id' keys
+                    // Legacy WordPress (4.x): indexed array [term_id, term_taxonomy_id]
+                    // By ID lookup: integer term_id
+                    if ( is_array( $term ) ) {
+                        if ( isset( $term['term_id'] ) ) {
+                            $term_id = (int) $term['term_id'];
+                        } elseif ( isset( $term[0] ) ) {
+                            $term_id = (int) $term[0];
+                        }
+                    } elseif ( is_numeric( $term ) ) {
+                        $term_id = (int) $term;
+                    }
+                    
+                    DQ_Logger::info( 'Found existing purchase_order term', [
+                        'post_id' => $post_id,
+                        'po_value' => $po_value,
+                        'term_id' => $term_id
+                    ] );
                 } else {
                     // Term doesn't exist, create it
                     $term = wp_insert_term( $po_value, 'purchase_order' );
@@ -143,7 +212,7 @@ class DQ_QI_Sync {
                         $term_id = null;
                     } else {
                         // wp_insert_term returns array with 'term_id' key
-                        $term_id = $term['term_id'];
+                        $term_id = isset( $term['term_id'] ) ? (int) $term['term_id'] : null;
                         DQ_Logger::info( 'Created new purchase_order term', [
                             'post_id' => $post_id,
                             'po_value' => $po_value,
@@ -160,16 +229,29 @@ class DQ_QI_Sync {
                         DQ_Logger::info( 'Updated purchase_order taxonomy from QBO CustomField', [
                             'post_id' => $post_id,
                             'po_value' => $po_value,
-                            'term_id' => $term_id
+                            'term_id' => $term_id,
+                            'acf_field' => 'field_dq_qi_purchase_order'
                         ] );
                     } else {
                         DQ_Logger::error( 'Failed to update purchase_order ACF field', [
                             'post_id' => $post_id,
                             'po_value' => $po_value,
-                            'term_id' => $term_id
+                            'term_id' => $term_id,
+                            'acf_field' => 'field_dq_qi_purchase_order'
                         ] );
                     }
+                } else {
+                    DQ_Logger::error( 'Could not determine valid term_id for purchase_order', [
+                        'post_id' => $post_id,
+                        'po_value' => $po_value,
+                        'term_result_type' => is_array( $term ) ? 'array' : gettype( $term )
+                    ] );
                 }
+            } else {
+                DQ_Logger::debug( 'No PO CustomField found in QuickBooks invoice', [
+                    'post_id' => $post_id,
+                    'custom_field_count' => count( $invoice_obj['CustomField'] )
+                ] );
             }
         }
 
