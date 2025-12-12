@@ -49,6 +49,20 @@ class DQ_Workorder_REST_API {
     const REST_ROUTE_CLOSE = 'workorders/(?P<id>\d+)/close';
 
     /**
+     * Time component for start of day (used in date filtering).
+     *
+     * @var string
+     */
+    const TIME_START_OF_DAY = '00:00:00';
+
+    /**
+     * Time component for end of day (used in date filtering).
+     *
+     * @var string
+     */
+    const TIME_END_OF_DAY = '23:59:59';
+
+    /**
      * Initialize the class and register hooks.
      *
      * @return void
@@ -424,7 +438,7 @@ class DQ_Workorder_REST_API {
                 // Filter for dates >= date_from (start of day)
                 $args['meta_query'][] = array(
                     'key'     => 'schedule_date_time',
-                    'value'   => $date_from . ' 00:00:00',
+                    'value'   => $date_from . ' ' . self::TIME_START_OF_DAY,
                     'compare' => '>=',
                     'type'    => 'DATETIME',
                 );
@@ -434,7 +448,7 @@ class DQ_Workorder_REST_API {
                 // Filter for dates <= date_to (end of day)
                 $args['meta_query'][] = array(
                     'key'     => 'schedule_date_time',
-                    'value'   => $date_to . ' 23:59:59',
+                    'value'   => $date_to . ' ' . self::TIME_END_OF_DAY,
                     'compare' => '<=',
                     'type'    => 'DATETIME',
                 );
@@ -660,12 +674,7 @@ class DQ_Workorder_REST_API {
             return true;
         }
 
-        // Validate YYYY-MM-DD format
-        if ( preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date_string ) !== 1 ) {
-            return false;
-        }
-
-        // Check if it's a valid date
+        // Validate YYYY-MM-DD format and check if it's a valid date
         $date = DateTime::createFromFormat( 'Y-m-d', $date_string );
         return $date && $date->format( 'Y-m-d' ) === $date_string;
     }
