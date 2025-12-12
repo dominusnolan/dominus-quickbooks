@@ -109,6 +109,60 @@ class DQ_QI_Sync {
             }
         }
 
+        // Process PO# custom field from QuickBooks
+        if ( ! empty( $invoice_obj['CustomField'] ) && is_array( $invoice_obj['CustomField'] ) ) {
+            $po_value = null;
+            foreach ( $invoice_obj['CustomField'] as $field ) {
+                if ( isset( $field['Name'] ) && $field['Name'] === 'PO#' ) {
+                    // Extract the value from StringValue or other field types
+                    if ( ! empty( $field['StringValue'] ) ) {
+                        $po_value = trim( (string) $field['StringValue'] );
+                    }
+                    break;
+                }
+            }
+
+            if ( $po_value !== null && $po_value !== '' ) {
+                // Get or create the term in the purchase_order taxonomy
+                $term = term_exists( $po_value, 'purchase_order' );
+                if ( ! $term ) {
+                    $term = wp_insert_term( $po_value, 'purchase_order' );
+                    if ( is_wp_error( $term ) ) {
+                        DQ_Logger::error( 'Failed to create purchase_order term', [
+                            'post_id' => $post_id,
+                            'po_value' => $po_value,
+                            'error' => $term->get_error_message()
+                        ] );
+                    } else {
+                        DQ_Logger::info( 'Created new purchase_order term', [
+                            'post_id' => $post_id,
+                            'po_value' => $po_value,
+                            'term_id' => $term['term_id']
+                        ] );
+                    }
+                }
+
+                // If term exists or was created successfully, assign it to the post
+                if ( ! is_wp_error( $term ) && ! empty( $term['term_id'] ) ) {
+                    // Use ACF field to save the term (this will link the term to the post)
+                    $updated = update_field( 'field_dq_qi_purchase_order', $term['term_id'], $post_id );
+                    if ( $updated ) {
+                        DQ_Logger::info( 'Updated purchase_order taxonomy from QBO CustomField', [
+                            'post_id' => $post_id,
+                            'po_value' => $po_value,
+                            'term_id' => $term['term_id']
+                        ] );
+                    } else {
+                        DQ_Logger::error( 'Failed to update purchase_order ACF field', [
+                            'post_id' => $post_id,
+                            'po_value' => $po_value,
+                            'term_id' => $term['term_id']
+                        ] );
+                    }
+                }
+            }
+        }
+
         $res = self::map_lines_to_acf( $post_id, $invoice_obj );
         if ( is_wp_error($res) ) return $res;
 
