@@ -522,6 +522,12 @@ class DQ_Workorder_REST_API {
             return '';
         }
         
+        // Validate that the scheme is http or https (prevent javascript:, data:, file:, etc.)
+        $parsed_url = wp_parse_url( $origin );
+        if ( ! isset( $parsed_url['scheme'] ) || ! in_array( $parsed_url['scheme'], array( 'http', 'https' ), true ) ) {
+            return '';
+        }
+        
         // Normalize origin by removing trailing slash to prevent CORS mismatch
         return rtrim( $origin, '/' );
     }
