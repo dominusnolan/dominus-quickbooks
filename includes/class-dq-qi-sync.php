@@ -10,6 +10,11 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  */
 class DQ_QI_Sync {
 
+    /**
+     * Maximum length for Purchase Order number validation
+     */
+    const MAX_PO_LENGTH = 100;
+
     public static function pull_from_qbo( $post_id ) {
         if ( ! function_exists('update_field') ) {
             return new WP_Error('dq_acf_missing', 'ACF is required.');
@@ -146,7 +151,7 @@ class DQ_QI_Sync {
                     $field = $string_fields[0];
                     $val = trim( (string) $field['StringValue'] );
                     // Validate it looks like a PO number (alphanumeric with common separators)
-                    if ( $val !== '' && strlen( $val ) < 100 && preg_match( '/^[A-Z0-9\-_#\s]+$/i', $val ) ) {
+                    if ( $val !== '' && strlen( $val ) < self::MAX_PO_LENGTH && preg_match( '/^[A-Z0-9\-_#\s]+$/i', $val ) ) {
                         $po_value = $val;
                         DQ_Logger::info( 'Found PO CustomField by StringValue fallback (single field)', [
                             'post_id' => $post_id,
@@ -234,7 +239,7 @@ class DQ_QI_Sync {
             } else {
                 DQ_Logger::debug( 'No PO CustomField found in QuickBooks invoice', [
                     'post_id' => $post_id,
-                    'custom_fields' => $invoice_obj['CustomField']
+                    'custom_field_count' => count( $invoice_obj['CustomField'] )
                 ] );
             }
         }
