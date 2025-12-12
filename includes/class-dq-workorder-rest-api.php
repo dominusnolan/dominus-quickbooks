@@ -42,6 +42,13 @@ class DQ_Workorder_REST_API {
     const REST_ROUTE_SINGLE = 'workorders/(?P<id>\d+)';
 
     /**
+     * CORS preflight cache duration in seconds (24 hours).
+     *
+     * @var int
+     */
+    const CORS_MAX_AGE = 86400;
+
+    /**
      * Initialize the class and register hooks.
      *
      * @return void
@@ -547,16 +554,13 @@ class DQ_Workorder_REST_API {
             return false;
         }
 
-        // Extra security: strip any newlines to prevent header injection
-        $origin = str_replace( array( "\r", "\n" ), '', $origin );
-
         header( 'Access-Control-Allow-Origin: ' . $origin );
         header( 'Access-Control-Allow-Credentials: true' );
         header( 'Access-Control-Allow-Methods: GET, POST, OPTIONS' );
         header( 'Access-Control-Allow-Headers: Authorization, Content-Type' );
         
         if ( $include_max_age ) {
-            header( 'Access-Control-Max-Age: 86400' );
+            header( 'Access-Control-Max-Age: ' . self::CORS_MAX_AGE );
         }
 
         return true;
