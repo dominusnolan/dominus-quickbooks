@@ -711,6 +711,7 @@ class DQ_Workorder_REST_API {
         // Define allowed origins (without trailing slashes)
         $allowed_origins = array(
             'https://workorder-cpt-manage--dominusnolan.github.app',
+            'https://workorder-cpt-manage.vercel.app',  // ← Add this line
             'http://localhost:5173',
             'http://localhost:3000',
         );
