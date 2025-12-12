@@ -488,6 +488,36 @@ class DQ_Workorder_REST_API {
     }
 
     /**
+     * Get allowed CORS origins.
+     *
+     * @return array List of allowed origins.
+     */
+    private static function get_allowed_origins() {
+        // Define allowed origins (without trailing slashes)
+        $allowed_origins = array(
+            'https://workorder-cpt-manage--dominusnolan.github.app',
+            'http://localhost:5173',
+            'http://localhost:3000',
+        );
+
+        // Allow filtering of allowed origins
+        return apply_filters( 'dq_workorder_api_cors_origins', $allowed_origins );
+    }
+
+    /**
+     * Get sanitized origin from request.
+     *
+     * @return string The sanitized origin without trailing slash.
+     */
+    private static function get_request_origin() {
+        // Get origin without using esc_url_raw() as it adds trailing slashes
+        $origin = isset( $_SERVER['HTTP_ORIGIN'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_ORIGIN'] ) ) : '';
+        
+        // Normalize origin by removing trailing slash to prevent CORS mismatch
+        return rtrim( $origin, '/' );
+    }
+
+    /**
      * Add CORS support for the Spark app and local development.
      *
      * @return void
@@ -504,21 +534,8 @@ class DQ_Workorder_REST_API {
      * @return bool
      */
     public static function add_cors_headers( $served ) {
-        // Get origin without using esc_url_raw() as it adds trailing slashes
-        $origin = isset( $_SERVER['HTTP_ORIGIN'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_ORIGIN'] ) ) : '';
-        
-        // Normalize origin by removing trailing slash to prevent CORS mismatch
-        $origin = rtrim( $origin, '/' );
-
-        // Define allowed origins (without trailing slashes)
-        $allowed_origins = array(
-            'https://workorder-cpt-manage--dominusnolan.github.app',
-            'http://localhost:5173',
-            'http://localhost:3000',
-        );
-
-        // Allow filtering of allowed origins
-        $allowed_origins = apply_filters( 'dq_workorder_api_cors_origins', $allowed_origins );
+        $origin = self::get_request_origin();
+        $allowed_origins = self::get_allowed_origins();
 
         // Check if the request origin is in the allowed list
         if ( in_array( $origin, $allowed_origins, true ) ) {
@@ -539,17 +556,8 @@ class DQ_Workorder_REST_API {
     public static function handle_preflight_requests() {
         add_filter( 'rest_pre_dispatch', function( $result, $server, $request ) {
             if ( 'OPTIONS' === $request->get_method() ) {
-                // Get origin for preflight response
-                $origin = isset( $_SERVER['HTTP_ORIGIN'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_ORIGIN'] ) ) : '';
-                $origin = rtrim( $origin, '/' );
-                
-                $allowed_origins = array(
-                    'https://workorder-cpt-manage--dominusnolan.github.app',
-                    'http://localhost:5173',
-                    'http://localhost:3000',
-                );
-                
-                $allowed_origins = apply_filters( 'dq_workorder_api_cors_origins', $allowed_origins );
+                $origin = self::get_request_origin();
+                $allowed_origins = self::get_allowed_origins();
                 
                 if ( in_array( $origin, $allowed_origins, true ) ) {
                     header( 'Access-Control-Allow-Origin: ' . $origin );
