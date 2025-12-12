@@ -170,6 +170,12 @@ class DQ_QI_Sync {
             update_field( 'qi_total_paid', $paid, $post_id );
             update_field( 'qi_payment_status', ( $invoice_obj['Balance'] > 0 ? 'Unpaid' : 'Paid' ), $post_id );
         }
+        // Deposit mapping
+        if ( isset($invoice_obj['Deposit']) ) {
+            $deposit_amount = (float)$invoice_obj['Deposit'];
+            update_field( 'qi_deposit_amount', $deposit_amount, $post_id );
+            update_field( 'qi_deposited', ( $deposit_amount > 0 ? 1 : 0 ), $post_id );
+        }
         update_field( 'qi_last_synced', current_time('mysql'), $post_id );
 
         // Bill/Ship Address
