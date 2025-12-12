@@ -38,6 +38,128 @@ class DQ_QI_Sync {
         $lines = isset($invoice_obj['Line']) ? $invoice_obj['Line'] : [];
         DQ_Logger::info('QuickBooks invoice lines pulled', ['lines'=>$lines, 'invoice'=>$invoice_obj, 'post_id'=>$post_id]);
         
+        // Customer sync: Extract CustomerRef and sync to qbo_customers taxonomy
+        if ( ! empty( $invoice_obj['CustomerRef'] ) && is_array( $invoice_obj['CustomerRef'] ) ) {
+            $customer_name = null;
+            
+            // Prefer 'name' field (DisplayName)
+            if ( ! empty( $invoice_obj['CustomerRef']['name'] ) ) {
+                $customer_name = trim( (string) $invoice_obj['CustomerRef']['name'] );
+            } elseif ( ! empty( $invoice_obj['CustomerRef']['value'] ) ) {
+                // Fallback: if only 'value' (customer ID) is present, query QBO API for DisplayName
+                $customer_id = (string) $invoice_obj['CustomerRef']['value'];
+                
+                // Validate customer ID format (alphanumeric with optional internal hyphens)
+                // Pattern: starts with alphanumeric, optionally followed by hyphen + alphanumeric groups
+                if ( preg_match( '/^[A-Z0-9]+(?:-[A-Z0-9]+)*$/i', $customer_id ) ) {
+                    $customer_data = DQ_API::get( 'customer/' . $customer_id );
+                    if ( ! is_wp_error( $customer_data ) && ! empty( $customer_data['Customer']['DisplayName'] ) ) {
+                        $customer_name = trim( (string) $customer_data['Customer']['DisplayName'] );
+                        DQ_Logger::info( 'Resolved customer DisplayName from QBO API', [
+                            'post_id' => $post_id,
+                            'customer_id' => $customer_id,
+                            'display_name' => $customer_name
+                        ] );
+                    } else {
+                        DQ_Logger::warning( 'Could not resolve customer DisplayName from QBO API', [
+                            'post_id' => $post_id,
+                            'customer_id' => $customer_id,
+                            'error' => is_wp_error( $customer_data ) ? $customer_data->get_error_message() : 'No DisplayName in response'
+                        ] );
+                    }
+                } else {
+                    DQ_Logger::error( 'Invalid customer ID format in CustomerRef', [
+                        'post_id' => $post_id,
+                        'customer_id' => $customer_id
+                    ] );
+                }
+            }
+            
+            // If we have a customer name, sync it to taxonomy
+            if ( ! empty( $customer_name ) ) {
+                $term = term_exists( $customer_name, 'qbo_customers' );
+                $term_id = null;
+                
+                if ( $term ) {
+                    $term_id = self::extract_term_id( $term );
+                    DQ_Logger::info( 'Found existing qbo_customers term', [
+                        'post_id' => $post_id,
+                        'customer_name' => $customer_name,
+                        'term_id' => $term_id
+                    ] );
+                } else {
+                    // Term doesn't exist, create it
+                    $term = wp_insert_term( $customer_name, 'qbo_customers' );
+                    if ( is_wp_error( $term ) ) {
+                        DQ_Logger::error( 'Failed to create qbo_customers term', [
+                            'post_id' => $post_id,
+                            'customer_name' => $customer_name,
+                            'error' => $term->get_error_message()
+                        ] );
+                        $term_id = null;
+                    } else {
+                        $term_id = self::extract_term_id( $term );
+                        DQ_Logger::info( 'Created new qbo_customers term', [
+                            'post_id' => $post_id,
+                            'customer_name' => $customer_name,
+                            'term_id' => $term_id
+                        ] );
+                    }
+                }
+                
+                // If we have a valid term_id, assign it to the post
+                if ( $term_id ) {
+                    // Assign term to post (creates the taxonomy relationship)
+                    // Note: The 'false' parameter (append=false) replaces all existing terms for this taxonomy
+                    // This enforces single-customer-per-invoice constraint, matching QuickBooks Online's
+                    // data model where each invoice belongs to exactly one customer (not shared/multi-customer)
+                    $set_result = wp_set_object_terms( $post_id, $term_id, 'qbo_customers', false );
+                    
+                    if ( is_wp_error( $set_result ) ) {
+                        DQ_Logger::error( 'Failed to assign qbo_customers term to post', [
+                            'post_id' => $post_id,
+                            'customer_name' => $customer_name,
+                            'term_id' => $term_id,
+                            'error' => $set_result->get_error_message()
+                        ] );
+                    } else {
+                        // Also update the ACF taxonomy field 'qi_customer'
+                        // This field is configured to link to the qbo_customers taxonomy
+                        // ACF will return it as a WP_Term object based on the field's return_format setting
+                        $updated = update_field( 'qi_customer', $term_id, $post_id );
+                        if ( $updated ) {
+                            DQ_Logger::info( 'Updated qi_customer field from QBO CustomerRef', [
+                                'post_id' => $post_id,
+                                'customer_name' => $customer_name,
+                                'term_id' => $term_id
+                            ] );
+                        } else {
+                            DQ_Logger::error( 'Failed to update qi_customer ACF field', [
+                                'post_id' => $post_id,
+                                'customer_name' => $customer_name,
+                                'term_id' => $term_id
+                            ] );
+                        }
+                    }
+                } else {
+                    DQ_Logger::error( 'Could not determine valid term_id for qbo_customers', [
+                        'post_id' => $post_id,
+                        'customer_name' => $customer_name,
+                        'term_result_type' => is_array( $term ) ? 'array' : gettype( $term )
+                    ] );
+                }
+            } else {
+                DQ_Logger::debug( 'No customer name found in CustomerRef', [
+                    'post_id' => $post_id,
+                    'customer_ref' => $invoice_obj['CustomerRef']
+                ] );
+            }
+        } else {
+            DQ_Logger::debug( 'No CustomerRef found in QuickBooks invoice', [
+                'post_id' => $post_id
+            ] );
+        }
+        
         // Header fields
         if ( ! empty( $invoice_obj['Id'] ) ) update_field( 'qi_invoice_id', $invoice_obj['Id'], $post_id );
         if ( ! empty( $invoice_obj['DocNumber'] ) ) update_field( 'qi_invoice_no', (string)$invoice_obj['DocNumber'], $post_id );
@@ -161,8 +283,8 @@ class DQ_QI_Sync {
                 if ( count( $string_fields ) === 1 ) {
                     $field = $string_fields[0];
                     $val = trim( (string) $field['StringValue'] );
-                    // Validate it looks like a PO number (alphanumeric with common separators, no control chars)
-                    if ( $val !== '' && strlen( $val ) < self::MAX_PO_LENGTH && preg_match( '/^[A-Z0-9\-_#]+$/i', $val ) ) {
+                    // Validate it looks like a PO number (must start alphanumeric, then allows hyphens/underscores/hash)
+                    if ( $val !== '' && strlen( $val ) < self::MAX_PO_LENGTH && preg_match( '/^[A-Z0-9][A-Z0-9\-_#]*$/i', $val ) ) {
                         $po_value = $val;
                         DQ_Logger::info( 'Found PO CustomField by StringValue fallback (single field)', [
                             'post_id' => $post_id,
@@ -181,20 +303,7 @@ class DQ_QI_Sync {
                 $term_id = null;
                 
                 if ( $term ) {
-                    // Correctly extract term_id from term_exists return value
-                    // Modern WordPress (5.x+): array with 'term_id' and 'term_taxonomy_id' keys
-                    // Legacy WordPress (4.x): indexed array [term_id, term_taxonomy_id]
-                    // By ID lookup: integer term_id
-                    if ( is_array( $term ) ) {
-                        if ( isset( $term['term_id'] ) ) {
-                            $term_id = (int) $term['term_id'];
-                        } elseif ( isset( $term[0] ) ) {
-                            $term_id = (int) $term[0];
-                        }
-                    } elseif ( is_numeric( $term ) ) {
-                        $term_id = (int) $term;
-                    }
-                    
+                    $term_id = self::extract_term_id( $term );
                     DQ_Logger::info( 'Found existing purchase_order term', [
                         'post_id' => $post_id,
                         'po_value' => $po_value,
@@ -211,8 +320,7 @@ class DQ_QI_Sync {
                         ] );
                         $term_id = null;
                     } else {
-                        // wp_insert_term returns array with 'term_id' key
-                        $term_id = isset( $term['term_id'] ) ? (int) $term['term_id'] : null;
+                        $term_id = self::extract_term_id( $term );
                         DQ_Logger::info( 'Created new purchase_order term', [
                             'post_id' => $post_id,
                             'po_value' => $po_value,
@@ -606,5 +714,34 @@ class DQ_QI_Sync {
             $out[] = $t;
         }
         return $out;
+    }
+
+    /**
+     * Extract term_id from term_exists return value.
+     * 
+     * Handles multiple WordPress versions and return formats:
+     * - Modern WordPress (5.x+): array with 'term_id' and 'term_taxonomy_id' keys
+     * - Legacy WordPress (4.x): indexed array [term_id, term_taxonomy_id]
+     * - By ID lookup: integer term_id
+     * 
+     * @param mixed $term Return value from term_exists()
+     * @return int|null The term ID, or null if it cannot be determined
+     */
+    private static function extract_term_id( $term ) {
+        if ( ! $term ) {
+            return null;
+        }
+        
+        if ( is_array( $term ) ) {
+            if ( isset( $term['term_id'] ) ) {
+                return (int) $term['term_id'];
+            } elseif ( isset( $term[0] ) ) {
+                return (int) $term[0];
+            }
+        } elseif ( is_numeric( $term ) ) {
+            return (int) $term;
+        }
+        
+        return null;
     }
 }
