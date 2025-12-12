@@ -593,16 +593,6 @@ $editable_fields = [ 'installed_product_id', 'wo_type_of_work', 'wo_state', 'wo_
                     ?>
                 </div>
 
-                    <div style="margin: 15px 0;">
-                        <form method="post" action="<?php echo esc_url( admin_url('admin-post.php') ); ?>">
-                            <?php wp_nonce_field( 'dqqb_send_quotation', 'dqqb_send_quotation_nonce' ); ?>
-                            <input type="hidden" name="action" value="dqqb_send_quotation_nonajax" />
-                            <input type="hidden" name="post_id" value="<?php echo esc_attr( $post_id ); ?>" />
-                            <button type="submit" style="background:#0073aa;color:#fff;border:none;padding:10px 20px;border-radius:6px;font-weight:600;cursor:pointer;">
-                                Email to customer
-                            </button>
-                        </form>
-                    </div>
             </div>
             
        
