@@ -537,14 +537,7 @@ class DQ_Workorder_REST_API {
      * @return string The workorder status.
      */
     private static function get_workorder_status( $post_id ) {
-        // Try taxonomy first
-        $terms = get_the_terms( $post_id, 'status' );
-        if ( ! is_wp_error( $terms ) && ! empty( $terms ) && is_array( $terms ) ) {
-            $term = array_shift( $terms );
-            return ! empty( $term->slug ) ? $term->slug : '';
-        }
-
-        // Try category taxonomy
+        // Try category taxonomy first (primary source)
         $cats = get_the_terms( $post_id, 'category' );
         if ( ! is_wp_error( $cats ) && ! empty( $cats ) && is_array( $cats ) ) {
             foreach ( $cats as $cat ) {
@@ -555,7 +548,14 @@ class DQ_Workorder_REST_API {
             }
         }
 
-        // Try ACF/meta field
+        // Try status taxonomy (fallback)
+        $terms = get_the_terms( $post_id, 'status' );
+        if ( ! is_wp_error( $terms ) && ! empty( $terms ) && is_array( $terms ) ) {
+            $term = array_shift( $terms );
+            return ! empty( $term->slug ) ? $term->slug : '';
+        }
+
+        // Try ACF/meta field (final fallback)
         $wo_status = self::get_acf_or_meta( $post_id, 'wo_status' );
         if ( $wo_status ) {
             return strtolower( trim( $wo_status ) );
