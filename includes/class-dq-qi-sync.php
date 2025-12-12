@@ -171,11 +171,23 @@ class DQ_QI_Sync {
             update_field( 'qi_payment_status', ( $invoice_obj['Balance'] > 0 ? 'Unpaid' : 'Paid' ), $post_id );
         }
         // Deposit mapping
-        if ( isset($invoice_obj['Deposit']) ) {
+        $deposit_amount = 0.0;
+        
+        // First, check if Invoice has a Deposit field
+        if ( isset($invoice_obj['Deposit']) && (float)$invoice_obj['Deposit'] > 0 ) {
             $deposit_amount = (float)$invoice_obj['Deposit'];
-            update_field( 'qi_deposit_amount', $deposit_amount, $post_id );
-            update_field( 'qi_deposited', ( $deposit_amount > 0 ? 1 : 0 ), $post_id );
+            DQ_Logger::debug( 'Deposit from Invoice Deposit field', [
+                'post_id' => $post_id,
+                'invoice_id' => $invoice_obj['Id'],
+                'deposit_amount' => $deposit_amount
+            ] );
+        } else {
+            // If Invoice Deposit is 0 or missing, check linked Payments
+            $deposit_amount = self::calculate_deposited_from_payments( $invoice_obj['Id'], $post_id );
         }
+        
+        update_field( 'qi_deposit_amount', $deposit_amount, $post_id );
+        update_field( 'qi_deposited', ( $deposit_amount > 0 ? 1 : 0 ), $post_id );
         update_field( 'qi_last_synced', current_time('mysql'), $post_id );
 
         // Bill/Ship Address
@@ -749,5 +761,100 @@ class DQ_QI_Sync {
         }
         
         return null;
+    }
+
+    /**
+     * Calculate deposited amount from linked Payments.
+     * 
+     * Queries QuickBooks for Payments linked to the invoice and sums the TotalAmt
+     * of payments that have been deposited (DepositToAccountRef is set and not
+     * "Undeposited Funds").
+     * 
+     * @param string $invoice_id QuickBooks invoice ID
+     * @param int $post_id WordPress post ID (for logging)
+     * @return float Total deposited amount from linked Payments
+     */
+    private static function calculate_deposited_from_payments( $invoice_id, $post_id ) {
+        if ( empty( $invoice_id ) ) {
+            DQ_Logger::debug( 'Cannot fetch Payments: invoice_id is empty', [
+                'post_id' => $post_id
+            ] );
+            return 0.0;
+        }
+        
+        // Query QuickBooks for Payments linked to this invoice
+        $sql = "select Id, TotalAmt, UnappliedAmt, DepositToAccountRef from Payment where LinkedTxn.TxnId = '" . addslashes( $invoice_id ) . "'";
+        $resp = DQ_API::query( $sql );
+        
+        if ( is_wp_error( $resp ) ) {
+            DQ_Logger::debug( 'Failed to query Payments from QuickBooks', [
+                'post_id' => $post_id,
+                'invoice_id' => $invoice_id,
+                'error' => $resp->get_error_message()
+            ] );
+            return 0.0;
+        }
+        
+        $payments = isset( $resp['QueryResponse']['Payment'] ) ? $resp['QueryResponse']['Payment'] : [];
+        
+        if ( empty( $payments ) ) {
+            DQ_Logger::debug( 'No Payments found for invoice', [
+                'post_id' => $post_id,
+                'invoice_id' => $invoice_id
+            ] );
+            return 0.0;
+        }
+        
+        $deposit_amt = 0.0;
+        $deposited_count = 0;
+        $undeposited_count = 0;
+        
+        foreach ( $payments as $payment ) {
+            $payment_id = isset( $payment['Id'] ) ? $payment['Id'] : 'unknown';
+            $total_amt = isset( $payment['TotalAmt'] ) ? (float)$payment['TotalAmt'] : 0.0;
+            
+            // Check if payment has been deposited
+            $is_deposited = false;
+            if ( ! empty( $payment['DepositToAccountRef'] ) && is_array( $payment['DepositToAccountRef'] ) ) {
+                $account_name = isset( $payment['DepositToAccountRef']['name'] ) ? trim( $payment['DepositToAccountRef']['name'] ) : '';
+                
+                // Payment is deposited if DepositToAccountRef is set and name is NOT "Undeposited Funds"
+                if ( $account_name !== '' && strcasecmp( $account_name, 'Undeposited Funds' ) !== 0 ) {
+                    $is_deposited = true;
+                    $deposit_amt += $total_amt;
+                    $deposited_count++;
+                    
+                    DQ_Logger::debug( 'Payment marked as deposited', [
+                        'post_id' => $post_id,
+                        'invoice_id' => $invoice_id,
+                        'payment_id' => $payment_id,
+                        'total_amt' => $total_amt,
+                        'account_name' => $account_name
+                    ] );
+                }
+            }
+            
+            if ( ! $is_deposited ) {
+                $undeposited_count++;
+                DQ_Logger::debug( 'Payment not deposited', [
+                    'post_id' => $post_id,
+                    'invoice_id' => $invoice_id,
+                    'payment_id' => $payment_id,
+                    'total_amt' => $total_amt,
+                    'deposit_to_account_ref' => isset( $payment['DepositToAccountRef'] ) ? $payment['DepositToAccountRef'] : null
+                ] );
+            }
+        }
+        
+        DQ_Logger::debug( 'Deposit calculation from Payments complete', [
+            'post_id' => $post_id,
+            'invoice_id' => $invoice_id,
+            'total_payments' => count( $payments ),
+            'deposited_count' => $deposited_count,
+            'undeposited_count' => $undeposited_count,
+            'deposit_amt' => $deposit_amt
+        ] );
+        
+        return $deposit_amt;
     }
 }
