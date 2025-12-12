@@ -122,6 +122,42 @@ class DQ_Workorder_REST_API {
                     'default'           => '',
                     'sanitize_callback' => 'sanitize_text_field',
                 ),
+                'orderby' => array(
+                    'type'              => 'string',
+                    'default'           => 'date',
+                    'enum'              => array( 'date', 'schedule_date' ),
+                    'sanitize_callback' => 'sanitize_text_field',
+                ),
+                'order' => array(
+                    'type'              => 'string',
+                    'default'           => 'DESC',
+                    'enum'              => array( 'ASC', 'DESC' ),
+                    'sanitize_callback' => 'sanitize_text_field',
+                ),
+                'date_from' => array(
+                    'type'              => 'string',
+                    'default'           => '',
+                    'sanitize_callback' => 'sanitize_text_field',
+                    'validate_callback' => function( $param ) {
+                        if ( empty( $param ) ) {
+                            return true;
+                        }
+                        // Validate YYYY-MM-DD format
+                        return preg_match( '/^\d{4}-\d{2}-\d{2}$/', $param ) === 1;
+                    },
+                ),
+                'date_to' => array(
+                    'type'              => 'string',
+                    'default'           => '',
+                    'sanitize_callback' => 'sanitize_text_field',
+                    'validate_callback' => function( $param ) {
+                        if ( empty( $param ) ) {
+                            return true;
+                        }
+                        // Validate YYYY-MM-DD format
+                        return preg_match( '/^\d{4}-\d{2}-\d{2}$/', $param ) === 1;
+                    },
+                ),
             ),
         ) );
 
@@ -341,9 +377,13 @@ class DQ_Workorder_REST_API {
      * @return WP_REST_Response|WP_Error The response containing workorder data.
      */
     public static function rest_get_workorders( $request ) {
-        $page     = $request->get_param( 'page' );
-        $per_page = $request->get_param( 'per_page' );
-        $status   = $request->get_param( 'status' );
+        $page      = $request->get_param( 'page' );
+        $per_page  = $request->get_param( 'per_page' );
+        $status    = $request->get_param( 'status' );
+        $orderby   = $request->get_param( 'orderby' );
+        $order     = $request->get_param( 'order' );
+        $date_from = $request->get_param( 'date_from' );
+        $date_to   = $request->get_param( 'date_to' );
 
         $user = wp_get_current_user();
 
@@ -353,10 +393,20 @@ class DQ_Workorder_REST_API {
             'post_status'    => array( 'publish', 'draft', 'pending', 'private' ),
             'posts_per_page' => $per_page,
             'paged'          => $page,
-            'orderby'        => 'date',
-            'order'          => 'DESC',
             'author'         => $user->ID, // Only workorders authored by this engineer
         );
+
+        // Handle orderby parameter
+        if ( 'schedule_date' === $orderby ) {
+            // Order by schedule_date meta field
+            $args['meta_key'] = 'schedule_date';
+            $args['orderby']  = 'meta_value';
+            $args['order']    = strtoupper( $order );
+        } else {
+            // Default: order by post date
+            $args['orderby'] = 'date';
+            $args['order']   = strtoupper( $order );
+        }
 
         // Add status filter if provided
         if ( ! empty( $status ) ) {
@@ -368,6 +418,34 @@ class DQ_Workorder_REST_API {
                     'terms'    => $status,
                 ),
             );
+        }
+
+        // Add date filtering if provided
+        if ( ! empty( $date_from ) || ! empty( $date_to ) ) {
+            $args['meta_query'] = array();
+
+            if ( ! empty( $date_from ) ) {
+                $args['meta_query'][] = array(
+                    'key'     => 'schedule_date',
+                    'value'   => $date_from,
+                    'compare' => '>=',
+                    'type'    => 'DATE',
+                );
+            }
+
+            if ( ! empty( $date_to ) ) {
+                $args['meta_query'][] = array(
+                    'key'     => 'schedule_date',
+                    'value'   => $date_to,
+                    'compare' => '<=',
+                    'type'    => 'DATE',
+                );
+            }
+
+            // If both date_from and date_to are provided, use AND relation
+            if ( ! empty( $date_from ) && ! empty( $date_to ) ) {
+                $args['meta_query']['relation'] = 'AND';
+            }
         }
 
         $query = new WP_Query( $args );

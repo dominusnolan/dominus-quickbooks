@@ -120,6 +120,10 @@ Authorization: Bearer <token>
 - `page` (integer, optional): Page number (default: 1)
 - `per_page` (integer, optional): Items per page (default: 10, max: 100)
 - `status` (string, optional): Filter by status slug. Valid values: "open", "scheduled", "closed"
+- `orderby` (string, optional): Sort field - "date" (default) or "schedule_date"
+- `order` (string, optional): Sort order - "ASC" or "DESC" (default: DESC)
+- `date_from` (string, optional): Filter schedule_date >= date_from (format: YYYY-MM-DD)
+- `date_to` (string, optional): Filter schedule_date <= date_to (format: YYYY-MM-DD)
 
 **Success Response (200 OK):**
 ```json
@@ -147,6 +151,28 @@ Authorization: Bearer <token>
 **Error Responses:**
 - `401 Unauthorized`: Missing or invalid token
 - `403 Forbidden`: User does not have permission
+
+**Example Use Cases:**
+
+1. **Get scheduled workorders with upcoming dates (from today onwards), sorted by nearest date first:**
+```
+GET /workorders?status=scheduled&orderby=schedule_date&order=ASC&date_from=2025-12-12
+```
+
+2. **Get all workorders scheduled between two dates:**
+```
+GET /workorders?status=scheduled&orderby=schedule_date&order=ASC&date_from=2025-12-01&date_to=2025-12-31
+```
+
+3. **Get open workorders sorted by creation date (descending - most recent first):**
+```
+GET /workorders?status=open&orderby=date&order=DESC
+```
+
+4. **Get all scheduled workorders sorted by schedule date (ascending - nearest first):**
+```
+GET /workorders?status=scheduled&orderby=schedule_date&order=ASC
+```
 
 ### Get Single Workorder
 
@@ -312,6 +338,12 @@ curl -X POST https://staging.milaymechanical.com/wp-json/dq-quickbooks/v1/auth/l
 **List Workorders:**
 ```bash
 curl https://staging.milaymechanical.com/wp-json/dq-quickbooks/v1/workorders \
+  -H "Authorization: Bearer <your-token>"
+```
+
+**List Scheduled Workorders with Upcoming Dates:**
+```bash
+curl "https://staging.milaymechanical.com/wp-json/dq-quickbooks/v1/workorders?status=scheduled&orderby=schedule_date&order=ASC&date_from=2025-12-12" \
   -H "Authorization: Bearer <your-token>"
 ```
 
