@@ -114,7 +114,7 @@ class DQ_QI_Sync {
             $po_value = null;
             foreach ( $invoice_obj['CustomField'] as $field ) {
                 if ( isset( $field['Name'] ) && $field['Name'] === 'PO#' ) {
-                    // Extract the value from StringValue or other field types
+                    // Extract the value from StringValue (the expected field type for PO#)
                     if ( ! empty( $field['StringValue'] ) ) {
                         $po_value = trim( (string) $field['StringValue'] );
                     }
@@ -129,8 +129,8 @@ class DQ_QI_Sync {
                 $term_id = null;
                 
                 if ( $term ) {
-                    // term_exists returns indexed array with term_id at index 0
-                    $term_id = is_array( $term ) ? $term[0] : $term;
+                    // term_exists returns indexed array [term_id, term_taxonomy_id]
+                    $term_id = $term[0];
                 } else {
                     // Term doesn't exist, create it
                     $term = wp_insert_term( $po_value, 'purchase_order' );
