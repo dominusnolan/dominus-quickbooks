@@ -124,14 +124,13 @@ class DQ_QI_Sync {
 
             if ( $po_value !== null && $po_value !== '' ) {
                 // Get or create the term in the purchase_order taxonomy
-                // term_exists returns array with term_id or 0/null if not found
+                // term_exists returns indexed array [term_id, term_taxonomy_id] or 0/null if not found
                 $term = term_exists( $po_value, 'purchase_order' );
                 $term_id = null;
                 
-                if ( $term && ! is_wp_error( $term ) ) {
-                    // term_exists returns an array with 'term_id' as the first element (indexed)
-                    // or associative array with 'term_id' key depending on WordPress version
-                    $term_id = is_array( $term ) ? ( $term['term_id'] ?? reset( $term ) ) : $term;
+                if ( $term ) {
+                    // term_exists returns indexed array with term_id at index 0
+                    $term_id = is_array( $term ) ? $term[0] : $term;
                 } else {
                     // Term doesn't exist, create it
                     $term = wp_insert_term( $po_value, 'purchase_order' );
