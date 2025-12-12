@@ -38,6 +38,127 @@ class DQ_QI_Sync {
         $lines = isset($invoice_obj['Line']) ? $invoice_obj['Line'] : [];
         DQ_Logger::info('QuickBooks invoice lines pulled', ['lines'=>$lines, 'invoice'=>$invoice_obj, 'post_id'=>$post_id]);
         
+        // Customer sync: Extract CustomerRef and sync to qbo_customers taxonomy
+        if ( ! empty( $invoice_obj['CustomerRef'] ) && is_array( $invoice_obj['CustomerRef'] ) ) {
+            $customer_name = null;
+            
+            // Prefer 'name' field (DisplayName)
+            if ( ! empty( $invoice_obj['CustomerRef']['name'] ) ) {
+                $customer_name = trim( (string) $invoice_obj['CustomerRef']['name'] );
+            } elseif ( ! empty( $invoice_obj['CustomerRef']['value'] ) ) {
+                // Fallback: if only 'value' (customer ID) is present, query QBO API for DisplayName
+                $customer_id = (string) $invoice_obj['CustomerRef']['value'];
+                $customer_data = DQ_API::get( 'customer/' . $customer_id );
+                if ( ! is_wp_error( $customer_data ) && ! empty( $customer_data['Customer']['DisplayName'] ) ) {
+                    $customer_name = trim( (string) $customer_data['Customer']['DisplayName'] );
+                    DQ_Logger::info( 'Resolved customer DisplayName from QBO API', [
+                        'post_id' => $post_id,
+                        'customer_id' => $customer_id,
+                        'display_name' => $customer_name
+                    ] );
+                } else {
+                    DQ_Logger::warning( 'Could not resolve customer DisplayName from QBO API', [
+                        'post_id' => $post_id,
+                        'customer_id' => $customer_id,
+                        'error' => is_wp_error( $customer_data ) ? $customer_data->get_error_message() : 'No DisplayName in response'
+                    ] );
+                }
+            }
+            
+            // If we have a customer name, sync it to taxonomy
+            if ( ! empty( $customer_name ) ) {
+                $term = term_exists( $customer_name, 'qbo_customers' );
+                $term_id = null;
+                
+                if ( $term ) {
+                    // Extract term_id from term_exists return value
+                    // Modern WordPress (5.x+): array with 'term_id' key
+                    // Legacy WordPress (4.x): indexed array [term_id, term_taxonomy_id]
+                    // By ID lookup: integer term_id
+                    if ( is_array( $term ) ) {
+                        if ( isset( $term['term_id'] ) ) {
+                            $term_id = (int) $term['term_id'];
+                        } elseif ( isset( $term[0] ) ) {
+                            $term_id = (int) $term[0];
+                        }
+                    } elseif ( is_numeric( $term ) ) {
+                        $term_id = (int) $term;
+                    }
+                    
+                    DQ_Logger::info( 'Found existing qbo_customers term', [
+                        'post_id' => $post_id,
+                        'customer_name' => $customer_name,
+                        'term_id' => $term_id
+                    ] );
+                } else {
+                    // Term doesn't exist, create it
+                    $term = wp_insert_term( $customer_name, 'qbo_customers' );
+                    if ( is_wp_error( $term ) ) {
+                        DQ_Logger::error( 'Failed to create qbo_customers term', [
+                            'post_id' => $post_id,
+                            'customer_name' => $customer_name,
+                            'error' => $term->get_error_message()
+                        ] );
+                        $term_id = null;
+                    } else {
+                        // wp_insert_term returns array with 'term_id' key
+                        $term_id = isset( $term['term_id'] ) ? (int) $term['term_id'] : null;
+                        DQ_Logger::info( 'Created new qbo_customers term', [
+                            'post_id' => $post_id,
+                            'customer_name' => $customer_name,
+                            'term_id' => $term_id
+                        ] );
+                    }
+                }
+                
+                // If we have a valid term_id, assign it to the post
+                if ( $term_id ) {
+                    // Assign term to post (creates the taxonomy relationship)
+                    $set_result = wp_set_object_terms( $post_id, $term_id, 'qbo_customers', false );
+                    
+                    if ( is_wp_error( $set_result ) ) {
+                        DQ_Logger::error( 'Failed to assign qbo_customers term to post', [
+                            'post_id' => $post_id,
+                            'customer_name' => $customer_name,
+                            'term_id' => $term_id,
+                            'error' => $set_result->get_error_message()
+                        ] );
+                    } else {
+                        // Also update the ACF field (ACF will return it as term object based on return_format)
+                        $updated = update_field( 'qi_customer', $term_id, $post_id );
+                        if ( $updated ) {
+                            DQ_Logger::info( 'Updated qi_customer field from QBO CustomerRef', [
+                                'post_id' => $post_id,
+                                'customer_name' => $customer_name,
+                                'term_id' => $term_id
+                            ] );
+                        } else {
+                            DQ_Logger::error( 'Failed to update qi_customer ACF field', [
+                                'post_id' => $post_id,
+                                'customer_name' => $customer_name,
+                                'term_id' => $term_id
+                            ] );
+                        }
+                    }
+                } else {
+                    DQ_Logger::error( 'Could not determine valid term_id for qbo_customers', [
+                        'post_id' => $post_id,
+                        'customer_name' => $customer_name,
+                        'term_result_type' => is_array( $term ) ? 'array' : gettype( $term )
+                    ] );
+                }
+            } else {
+                DQ_Logger::debug( 'No customer name found in CustomerRef', [
+                    'post_id' => $post_id,
+                    'customer_ref' => $invoice_obj['CustomerRef']
+                ] );
+            }
+        } else {
+            DQ_Logger::debug( 'No CustomerRef found in QuickBooks invoice', [
+                'post_id' => $post_id
+            ] );
+        }
+        
         // Header fields
         if ( ! empty( $invoice_obj['Id'] ) ) update_field( 'qi_invoice_id', $invoice_obj['Id'], $post_id );
         if ( ! empty( $invoice_obj['DocNumber'] ) ) update_field( 'qi_invoice_no', (string)$invoice_obj['DocNumber'], $post_id );
