@@ -119,7 +119,7 @@ Authorization: Bearer <token>
 **Query Parameters:**
 - `page` (integer, optional): Page number (default: 1)
 - `per_page` (integer, optional): Items per page (default: 10, max: 100)
-- `status` (string, optional): Filter by status slug. Valid values: "open", "scheduled", "closed", "uncategorized"
+- `status` (string, optional): Filter by status slug. Valid values: "open", "scheduled", "closed"
 
 **Success Response (200 OK):**
 ```json
