@@ -576,8 +576,8 @@ class DQ_Workorder_REST_API {
             );
         }
 
-        // Update status taxonomy term to "closed"
-        $result = wp_set_object_terms( $post_id, 'closed', 'status' );
+        // Update category taxonomy term to "closed" (workorder status)
+        $result = wp_set_object_terms( $post_id, 'closed', 'category' );
         if ( is_wp_error( $result ) ) {
             return new WP_Error(
                 'rest_status_update_failed',
