@@ -138,6 +138,7 @@ Authorization: Bearer <token>
       "date_modified": "2025-12-05 15:30:00",
       "wo_state": "CA",
       "wo_customer_email": "customer@example.com",
+      "wo_location": "Los Angeles, CA",
       "schedule_date": "2025-12-15 09:00:00",
       "closed_on": "",
       "permalink": "https://staging.milaymechanical.com/workorder/wo-2025-001/"
@@ -210,6 +211,7 @@ Authorization: Bearer <token>
   "date_modified": "2025-12-05 15:30:00",
   "wo_state": "CA",
   "wo_customer_email": "customer@example.com",
+  "wo_location": "Los Angeles, CA",
   "schedule_date": "2025-12-15 09:00:00",
   "closed_on": "",
   "permalink": "https://staging.milaymechanical.com/workorder/wo-2025-001/"
