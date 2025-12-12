@@ -158,7 +158,7 @@ Each workorder in the API response includes:
 
 **Data Sources:**
 - `id`, `title`, `date_created`, `date_modified`, `permalink` - WordPress post data
-- `status` - From `status` or `category` taxonomy
+- `status` - From `category` taxonomy (falls back to `status` taxonomy or meta field if not found)
 - `wo_state`, `wo_customer_email` - Post meta
 - `schedule_date`, `closed_on` - ACF fields
 
@@ -196,7 +196,8 @@ $args = array(
 
 ## Filtering
 
-- Status filter: `?status=open` (uses taxonomy slug)
+- Status filter: `?status=open` (uses `category` taxonomy slug)
+- Valid status values: `open`, `scheduled`, `closed`, `uncategorized`
 - Filters are optional
 - Empty filters return all workorders
 

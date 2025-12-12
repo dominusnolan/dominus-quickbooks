@@ -360,10 +360,10 @@ class DQ_Workorder_REST_API {
 
         // Add status filter if provided
         if ( ! empty( $status ) ) {
-            // Try status taxonomy first (preferred)
+            // Use category taxonomy for workorder status
             $args['tax_query'] = array(
                 array(
-                    'taxonomy' => 'status',
+                    'taxonomy' => 'category',
                     'field'    => 'slug',
                     'terms'    => $status,
                 ),
