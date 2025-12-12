@@ -510,11 +510,38 @@ class DQ_Workorder_REST_API {
      * @return string The sanitized origin without trailing slash.
      */
     private static function get_request_origin() {
+        if ( ! isset( $_SERVER['HTTP_ORIGIN'] ) ) {
+            return '';
+        }
+
         // Get origin without using esc_url_raw() as it adds trailing slashes
-        $origin = isset( $_SERVER['HTTP_ORIGIN'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_ORIGIN'] ) ) : '';
+        $origin = sanitize_text_field( wp_unslash( $_SERVER['HTTP_ORIGIN'] ) );
+        
+        // Validate URL structure
+        if ( ! filter_var( $origin, FILTER_VALIDATE_URL ) ) {
+            return '';
+        }
         
         // Normalize origin by removing trailing slash to prevent CORS mismatch
         return rtrim( $origin, '/' );
+    }
+
+    /**
+     * Send CORS headers for allowed origin.
+     *
+     * @param string $origin The origin to send headers for.
+     * @param bool   $include_max_age Whether to include Access-Control-Max-Age header.
+     * @return void
+     */
+    private static function send_cors_headers( $origin, $include_max_age = false ) {
+        header( 'Access-Control-Allow-Origin: ' . $origin );
+        header( 'Access-Control-Allow-Credentials: true' );
+        header( 'Access-Control-Allow-Methods: GET, POST, OPTIONS' );
+        header( 'Access-Control-Allow-Headers: Authorization, Content-Type' );
+        
+        if ( $include_max_age ) {
+            header( 'Access-Control-Max-Age: 86400' );
+        }
     }
 
     /**
@@ -539,10 +566,7 @@ class DQ_Workorder_REST_API {
 
         // Check if the request origin is in the allowed list
         if ( in_array( $origin, $allowed_origins, true ) ) {
-            header( 'Access-Control-Allow-Origin: ' . $origin );
-            header( 'Access-Control-Allow-Credentials: true' );
-            header( 'Access-Control-Allow-Methods: GET, POST, OPTIONS' );
-            header( 'Access-Control-Allow-Headers: Authorization, Content-Type' );
+            self::send_cors_headers( $origin );
         }
 
         return $served;
@@ -560,11 +584,7 @@ class DQ_Workorder_REST_API {
                 $allowed_origins = self::get_allowed_origins();
                 
                 if ( in_array( $origin, $allowed_origins, true ) ) {
-                    header( 'Access-Control-Allow-Origin: ' . $origin );
-                    header( 'Access-Control-Allow-Credentials: true' );
-                    header( 'Access-Control-Allow-Methods: GET, POST, OPTIONS' );
-                    header( 'Access-Control-Allow-Headers: Authorization, Content-Type' );
-                    header( 'Access-Control-Max-Age: 86400' );
+                    self::send_cors_headers( $origin, true );
                 }
                 
                 $response = new WP_REST_Response();
