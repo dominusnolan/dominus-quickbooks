@@ -504,7 +504,8 @@ class DQ_Workorder_REST_API {
      * @return bool
      */
     public static function add_cors_headers( $served ) {
-        $origin = isset( $_SERVER['HTTP_ORIGIN'] ) ? esc_url_raw( wp_unslash( $_SERVER['HTTP_ORIGIN'] ) ) : '';
+        // Get origin without using esc_url_raw() as it adds trailing slashes
+        $origin = isset( $_SERVER['HTTP_ORIGIN'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_ORIGIN'] ) ) : '';
         
         // Normalize origin by removing trailing slash to prevent CORS mismatch
         $origin = rtrim( $origin, '/' );
@@ -538,6 +539,26 @@ class DQ_Workorder_REST_API {
     public static function handle_preflight_requests() {
         add_filter( 'rest_pre_dispatch', function( $result, $server, $request ) {
             if ( 'OPTIONS' === $request->get_method() ) {
+                // Get origin for preflight response
+                $origin = isset( $_SERVER['HTTP_ORIGIN'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_ORIGIN'] ) ) : '';
+                $origin = rtrim( $origin, '/' );
+                
+                $allowed_origins = array(
+                    'https://workorder-cpt-manage--dominusnolan.github.app',
+                    'http://localhost:5173',
+                    'http://localhost:3000',
+                );
+                
+                $allowed_origins = apply_filters( 'dq_workorder_api_cors_origins', $allowed_origins );
+                
+                if ( in_array( $origin, $allowed_origins, true ) ) {
+                    header( 'Access-Control-Allow-Origin: ' . $origin );
+                    header( 'Access-Control-Allow-Credentials: true' );
+                    header( 'Access-Control-Allow-Methods: GET, POST, OPTIONS' );
+                    header( 'Access-Control-Allow-Headers: Authorization, Content-Type' );
+                    header( 'Access-Control-Max-Age: 86400' );
+                }
+                
                 $response = new WP_REST_Response();
                 $response->set_status( 200 );
                 return $response;
