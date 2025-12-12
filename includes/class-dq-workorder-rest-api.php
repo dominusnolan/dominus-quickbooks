@@ -42,6 +42,13 @@ class DQ_Workorder_REST_API {
     const REST_ROUTE_SINGLE = 'workorders/(?P<id>\d+)';
 
     /**
+     * REST API route for closing workorder.
+     *
+     * @var string
+     */
+    const REST_ROUTE_CLOSE = 'workorders/(?P<id>\d+)/close';
+
+    /**
      * Initialize the class and register hooks.
      *
      * @return void
@@ -88,6 +95,23 @@ class DQ_Workorder_REST_API {
         register_rest_route( self::REST_NAMESPACE, '/' . self::REST_ROUTE_SINGLE, array(
             'methods'             => 'GET',
             'callback'            => array( __CLASS__, 'rest_get_single_workorder' ),
+            'permission_callback' => array( __CLASS__, 'permission_callback' ),
+            'args'                => array(
+                'id' => array(
+                    'type'              => 'integer',
+                    'required'          => true,
+                    'sanitize_callback' => 'absint',
+                    'validate_callback' => function( $param ) {
+                        return is_numeric( $param );
+                    },
+                ),
+            ),
+        ) );
+
+        // Close workorder endpoint
+        register_rest_route( self::REST_NAMESPACE, '/' . self::REST_ROUTE_CLOSE, array(
+            'methods'             => 'POST',
+            'callback'            => array( __CLASS__, 'rest_close_workorder' ),
             'permission_callback' => array( __CLASS__, 'permission_callback' ),
             'args'                => array(
                 'id' => array(
@@ -229,6 +253,69 @@ class DQ_Workorder_REST_API {
     }
 
     /**
+     * REST API callback to close a workorder.
+     *
+     * @param WP_REST_Request $request The REST request object.
+     * @return WP_REST_Response|WP_Error The response containing updated workorder data.
+     */
+    public static function rest_close_workorder( $request ) {
+        $post_id = $request->get_param( 'id' );
+        $user    = wp_get_current_user();
+
+        // Validate post exists
+        $post = get_post( $post_id );
+        if ( ! $post ) {
+            return new WP_Error(
+                'rest_post_not_found',
+                __( 'Workorder not found.', 'dominus-quickbooks' ),
+                array( 'status' => 404 )
+            );
+        }
+
+        // Validate post is a workorder
+        if ( 'workorder' !== $post->post_type ) {
+            return new WP_Error(
+                'rest_invalid_post_type',
+                __( 'Invalid post type. Expected workorder.', 'dominus-quickbooks' ),
+                array( 'status' => 400 )
+            );
+        }
+
+        // Verify the logged-in engineer is the author of the workorder
+        if ( (int) $post->post_author !== (int) $user->ID ) {
+            return new WP_Error(
+                'rest_forbidden',
+                __( 'You do not have permission to close this workorder.', 'dominus-quickbooks' ),
+                array( 'status' => 403 )
+            );
+        }
+
+        // Update status taxonomy term to "closed"
+        $result = wp_set_object_terms( $post_id, 'closed', 'status' );
+        if ( is_wp_error( $result ) ) {
+            return new WP_Error(
+                'rest_status_update_failed',
+                __( 'Failed to update workorder status.', 'dominus-quickbooks' ),
+                array( 'status' => 500 )
+            );
+        }
+
+        // Update ACF field date_service_completed_by_fse
+        $completed_date = current_time( 'Y-m-d H:i:s' );
+        if ( function_exists( 'update_field' ) ) {
+            update_field( 'date_service_completed_by_fse', $completed_date, $post_id );
+        } else {
+            update_post_meta( $post_id, 'date_service_completed_by_fse', $completed_date );
+        }
+
+        // Get updated workorder data
+        $post = get_post( $post_id ); // Refresh post data
+        $workorder_data = self::format_workorder_data( $post );
+
+        return rest_ensure_response( $workorder_data );
+    }
+
+    /**
      * Format workorder data for API response.
      *
      * @param WP_Post $post The workorder post object.
@@ -247,18 +334,20 @@ class DQ_Workorder_REST_API {
         // Get ACF fields
         $schedule_date = self::get_acf_or_meta( $post_id, 'schedule_date_time' );
         $closed_on     = self::get_acf_or_meta( $post_id, 'closed_on' );
+        $date_service_completed_by_fse = self::get_acf_or_meta( $post_id, 'date_service_completed_by_fse' );
 
         return array(
-            'id'                => $post_id,
-            'title'             => get_the_title( $post_id ),
-            'status'            => $status,
-            'date_created'      => $post->post_date,
-            'date_modified'     => $post->post_modified,
-            'wo_state'          => $wo_state ? $wo_state : '',
-            'wo_customer_email' => $wo_customer_email ? $wo_customer_email : '',
-            'schedule_date'     => $schedule_date ? $schedule_date : '',
-            'closed_on'         => $closed_on ? $closed_on : '',
-            'permalink'         => get_permalink( $post_id ),
+            'id'                              => $post_id,
+            'title'                           => get_the_title( $post_id ),
+            'status'                          => $status,
+            'date_created'                    => $post->post_date,
+            'date_modified'                   => $post->post_modified,
+            'wo_state'                        => $wo_state ? $wo_state : '',
+            'wo_customer_email'               => $wo_customer_email ? $wo_customer_email : '',
+            'schedule_date'                   => $schedule_date ? $schedule_date : '',
+            'closed_on'                       => $closed_on ? $closed_on : '',
+            'date_service_completed_by_fse'   => $date_service_completed_by_fse ? $date_service_completed_by_fse : '',
+            'permalink'                       => get_permalink( $post_id ),
         );
     }
 
@@ -335,7 +424,7 @@ class DQ_Workorder_REST_API {
         if ( $origin === $allowed_origin ) {
             header( 'Access-Control-Allow-Origin: ' . $allowed_origin );
             header( 'Access-Control-Allow-Credentials: true' );
-            header( 'Access-Control-Allow-Methods: GET, POST, OPTIONS' );
+            header( 'Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS' );
             header( 'Access-Control-Allow-Headers: Authorization, Content-Type' );
         }
 
