@@ -524,14 +524,14 @@ class DQ_Workorder_REST_API {
         // Get origin without using esc_url_raw() as it adds trailing slashes
         $origin = sanitize_text_field( wp_unslash( $_SERVER['HTTP_ORIGIN'] ) );
         
-        // Validate URL structure
-        if ( ! filter_var( $origin, FILTER_VALIDATE_URL ) ) {
+        // Validate that the scheme is http or https first (prevent javascript:, data:, file:, etc.)
+        $parsed_url = wp_parse_url( $origin );
+        if ( ! isset( $parsed_url['scheme'] ) || ! in_array( $parsed_url['scheme'], array( 'http', 'https' ), true ) ) {
             return '';
         }
         
-        // Validate that the scheme is http or https (prevent javascript:, data:, file:, etc.)
-        $parsed_url = wp_parse_url( $origin );
-        if ( ! isset( $parsed_url['scheme'] ) || ! in_array( $parsed_url['scheme'], array( 'http', 'https' ), true ) ) {
+        // Validate URL structure
+        if ( ! filter_var( $origin, FILTER_VALIDATE_URL ) ) {
             return '';
         }
         
@@ -596,7 +596,6 @@ class DQ_Workorder_REST_API {
         add_filter( 'rest_pre_dispatch', function( $result, $server, $request ) {
             if ( 'OPTIONS' === $request->get_method() ) {
                 self::maybe_send_cors_headers( true );
-                
                 $response = new WP_REST_Response();
                 $response->set_status( 200 );
                 return $response;
