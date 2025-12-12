@@ -174,6 +174,12 @@ GET /workorders?status=open&orderby=date&order=DESC
 GET /workorders?status=scheduled&orderby=schedule_date&order=ASC
 ```
 
+**Important Notes:**
+
+- When using `orderby=schedule_date`, only workorders with a `schedule_date_time` value will be returned. Workorders without this field will be excluded from results.
+- When using `date_from` or `date_to` filters, only workorders with a `schedule_date_time` value will be included in the filtered results.
+- The `schedule_date_time` field stores datetime values (e.g., "2025-12-15 09:00:00"), but date filtering uses date-only values (YYYY-MM-DD) and includes the entire day (00:00:00 to 23:59:59).
+
 ### Get Single Workorder
 
 **Endpoint:** `GET /workorders/{id}`

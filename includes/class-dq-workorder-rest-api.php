@@ -421,20 +421,22 @@ class DQ_Workorder_REST_API {
             }
 
             if ( ! empty( $date_from ) ) {
+                // Filter for dates >= date_from (start of day)
                 $args['meta_query'][] = array(
                     'key'     => 'schedule_date_time',
-                    'value'   => $date_from,
+                    'value'   => $date_from . ' 00:00:00',
                     'compare' => '>=',
-                    'type'    => 'DATE',
+                    'type'    => 'DATETIME',
                 );
             }
 
             if ( ! empty( $date_to ) ) {
+                // Filter for dates <= date_to (end of day)
                 $args['meta_query'][] = array(
                     'key'     => 'schedule_date_time',
-                    'value'   => $date_to,
+                    'value'   => $date_to . ' 23:59:59',
                     'compare' => '<=',
-                    'type'    => 'DATE',
+                    'type'    => 'DATETIME',
                 );
             }
         }
