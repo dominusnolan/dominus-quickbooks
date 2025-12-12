@@ -142,8 +142,13 @@ class DQ_Workorder_REST_API {
                         if ( empty( $param ) ) {
                             return true;
                         }
-                        // Validate YYYY-MM-DD format
-                        return preg_match( '/^\d{4}-\d{2}-\d{2}$/', $param ) === 1;
+                        // Validate YYYY-MM-DD format and ensure it's a valid date
+                        if ( preg_match( '/^\d{4}-\d{2}-\d{2}$/', $param ) !== 1 ) {
+                            return false;
+                        }
+                        // Check if it's a valid date
+                        $date = DateTime::createFromFormat( 'Y-m-d', $param );
+                        return $date && $date->format( 'Y-m-d' ) === $param;
                     },
                 ),
                 'date_to' => array(
@@ -154,8 +159,13 @@ class DQ_Workorder_REST_API {
                         if ( empty( $param ) ) {
                             return true;
                         }
-                        // Validate YYYY-MM-DD format
-                        return preg_match( '/^\d{4}-\d{2}-\d{2}$/', $param ) === 1;
+                        // Validate YYYY-MM-DD format and ensure it's a valid date
+                        if ( preg_match( '/^\d{4}-\d{2}-\d{2}$/', $param ) !== 1 ) {
+                            return false;
+                        }
+                        // Check if it's a valid date
+                        $date = DateTime::createFromFormat( 'Y-m-d', $param );
+                        return $date && $date->format( 'Y-m-d' ) === $param;
                     },
                 ),
             ),
@@ -398,9 +408,9 @@ class DQ_Workorder_REST_API {
 
         // Handle orderby parameter
         if ( 'schedule_date' === $orderby ) {
-            // Order by schedule_date_time meta field
+            // Order by schedule_date_time meta field (datetime field)
             $args['meta_key'] = 'schedule_date_time';
-            $args['orderby']  = 'meta_value';
+            $args['orderby']  = 'meta_value_datetime';
             $args['order']    = strtoupper( $order );
         } else {
             // Default: order by post date
@@ -422,7 +432,9 @@ class DQ_Workorder_REST_API {
 
         // Add date filtering if provided
         if ( ! empty( $date_from ) || ! empty( $date_to ) ) {
-            $args['meta_query'] = array();
+            $args['meta_query'] = array(
+                'relation' => 'AND',
+            );
 
             if ( ! empty( $date_from ) ) {
                 $args['meta_query'][] = array(
@@ -440,11 +452,6 @@ class DQ_Workorder_REST_API {
                     'compare' => '<=',
                     'type'    => 'DATE',
                 );
-            }
-
-            // If both date_from and date_to are provided, use AND relation
-            if ( ! empty( $date_from ) && ! empty( $date_to ) ) {
-                $args['meta_query']['relation'] = 'AND';
             }
         }
 
