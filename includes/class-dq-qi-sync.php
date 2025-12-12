@@ -132,20 +132,28 @@ class DQ_QI_Sync {
             }
             
             // Fallback: check StringValue even if Name doesn't match (for edge cases)
+            // This is conservative and only activates if there's exactly one StringType CustomField
             if ( empty( $po_value ) ) {
+                $string_fields = [];
                 foreach ( $invoice_obj['CustomField'] as $field ) {
                     if ( ! empty( $field['StringValue'] ) && isset( $field['Type'] ) && $field['Type'] === 'StringType' ) {
-                        $val = trim( (string) $field['StringValue'] );
-                        // Only use if it looks like a PO number (not empty and reasonable length)
-                        if ( $val !== '' && strlen( $val ) < 100 ) {
-                            $po_value = $val;
-                            DQ_Logger::info( 'Found PO CustomField by StringValue fallback', [
-                                'post_id' => $post_id,
-                                'field' => $field,
-                                'po_value' => $po_value
-                            ] );
-                            break;
-                        }
+                        $string_fields[] = $field;
+                    }
+                }
+                
+                // Only use fallback if there's exactly one StringType field (unambiguous)
+                if ( count( $string_fields ) === 1 ) {
+                    $field = $string_fields[0];
+                    $val = trim( (string) $field['StringValue'] );
+                    // Validate it looks like a PO number (alphanumeric with common separators)
+                    if ( $val !== '' && strlen( $val ) < 100 && preg_match( '/^[A-Z0-9\-_#\s]+$/i', $val ) ) {
+                        $po_value = $val;
+                        DQ_Logger::info( 'Found PO CustomField by StringValue fallback (single field)', [
+                            'post_id' => $post_id,
+                            'field_name' => isset( $field['Name'] ) ? $field['Name'] : '(unnamed)',
+                            'field_type' => isset( $field['Type'] ) ? $field['Type'] : 'unknown',
+                            'po_value' => $po_value
+                        ] );
                     }
                 }
             }
@@ -220,7 +228,7 @@ class DQ_QI_Sync {
                     DQ_Logger::error( 'Could not determine valid term_id for purchase_order', [
                         'post_id' => $post_id,
                         'po_value' => $po_value,
-                        'term_result' => $term
+                        'term_result_type' => is_array( $term ) ? 'array' : gettype( $term )
                     ] );
                 }
             } else {
