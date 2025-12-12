@@ -308,8 +308,7 @@ class DQ_Workorder_REST_API {
             update_post_meta( $post_id, 'date_service_completed_by_fse', $completed_date );
         }
 
-        // Get updated workorder data
-        $post = get_post( $post_id ); // Refresh post data
+        // Return updated workorder data
         $workorder_data = self::format_workorder_data( $post );
 
         return rest_ensure_response( $workorder_data );
