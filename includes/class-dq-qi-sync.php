@@ -782,7 +782,7 @@ class DQ_QI_Sync {
             return 0.0;
         }
         
-        // Validate invoice_id format (numeric only for safety)
+        // Validate invoice_id format (alphanumeric with optional hyphens for safety)
         if ( ! is_numeric( $invoice_id ) && ! preg_match( '/^[A-Z0-9\-]+$/i', (string)$invoice_id ) ) {
             DQ_Logger::error( 'Invalid invoice_id format', [
                 'post_id' => $post_id,
