@@ -49,6 +49,20 @@ class DQ_Workorder_REST_API {
     const REST_ROUTE_CLOSE = 'workorders/(?P<id>\d+)/close';
 
     /**
+     * Time component for start of day (used in date filtering).
+     *
+     * @var string
+     */
+    const TIME_START_OF_DAY = '00:00:00';
+
+    /**
+     * Time component for end of day (used in date filtering).
+     *
+     * @var string
+     */
+    const TIME_END_OF_DAY = '23:59:59';
+
+    /**
      * Initialize the class and register hooks.
      *
      * @return void
@@ -121,6 +135,30 @@ class DQ_Workorder_REST_API {
                     'type'              => 'string',
                     'default'           => '',
                     'sanitize_callback' => 'sanitize_text_field',
+                ),
+                'orderby' => array(
+                    'type'              => 'string',
+                    'default'           => 'date',
+                    'enum'              => array( 'date', 'schedule_date' ),
+                    'sanitize_callback' => 'sanitize_text_field',
+                ),
+                'order' => array(
+                    'type'              => 'string',
+                    'default'           => 'DESC',
+                    'enum'              => array( 'ASC', 'DESC' ),
+                    'sanitize_callback' => 'sanitize_text_field',
+                ),
+                'date_from' => array(
+                    'type'              => 'string',
+                    'default'           => '',
+                    'sanitize_callback' => 'sanitize_text_field',
+                    'validate_callback' => array( __CLASS__, 'validate_date_param' ),
+                ),
+                'date_to' => array(
+                    'type'              => 'string',
+                    'default'           => '',
+                    'sanitize_callback' => 'sanitize_text_field',
+                    'validate_callback' => array( __CLASS__, 'validate_date_param' ),
                 ),
             ),
         ) );
@@ -341,9 +379,13 @@ class DQ_Workorder_REST_API {
      * @return WP_REST_Response|WP_Error The response containing workorder data.
      */
     public static function rest_get_workorders( $request ) {
-        $page     = $request->get_param( 'page' );
-        $per_page = $request->get_param( 'per_page' );
-        $status   = $request->get_param( 'status' );
+        $page      = $request->get_param( 'page' );
+        $per_page  = $request->get_param( 'per_page' );
+        $status    = $request->get_param( 'status' );
+        $orderby   = $request->get_param( 'orderby' );
+        $order     = $request->get_param( 'order' );
+        $date_from = $request->get_param( 'date_from' );
+        $date_to   = $request->get_param( 'date_to' );
 
         $user = wp_get_current_user();
 
@@ -353,10 +395,20 @@ class DQ_Workorder_REST_API {
             'post_status'    => array( 'publish', 'draft', 'pending', 'private' ),
             'posts_per_page' => $per_page,
             'paged'          => $page,
-            'orderby'        => 'date',
-            'order'          => 'DESC',
             'author'         => $user->ID, // Only workorders authored by this engineer
         );
+
+        // Handle orderby parameter
+        if ( 'schedule_date' === $orderby ) {
+            // Order by schedule_date_time meta field (datetime field)
+            $args['meta_key'] = 'schedule_date_time';
+            $args['orderby']  = 'meta_value_datetime';
+            $args['order']    = strtoupper( $order );
+        } else {
+            // Default: order by post date
+            $args['orderby'] = 'date';
+            $args['order']   = strtoupper( $order );
+        }
 
         // Add status filter if provided
         if ( ! empty( $status ) ) {
@@ -368,6 +420,39 @@ class DQ_Workorder_REST_API {
                     'terms'    => $status,
                 ),
             );
+        }
+
+        // Add date filtering if provided
+        if ( ! empty( $date_from ) || ! empty( $date_to ) ) {
+            // Initialize meta_query if it doesn't exist, or preserve existing queries
+            if ( ! isset( $args['meta_query'] ) ) {
+                $args['meta_query'] = array();
+            }
+
+            // Set relation to AND (or preserve existing relation)
+            if ( ! isset( $args['meta_query']['relation'] ) ) {
+                $args['meta_query']['relation'] = 'AND';
+            }
+
+            if ( ! empty( $date_from ) ) {
+                // Filter for dates >= date_from (start of day)
+                $args['meta_query'][] = array(
+                    'key'     => 'schedule_date_time',
+                    'value'   => $date_from . ' ' . self::TIME_START_OF_DAY,
+                    'compare' => '>=',
+                    'type'    => 'DATETIME',
+                );
+            }
+
+            if ( ! empty( $date_to ) ) {
+                // Filter for dates <= date_to (end of day)
+                $args['meta_query'][] = array(
+                    'key'     => 'schedule_date_time',
+                    'value'   => $date_to . ' ' . self::TIME_END_OF_DAY,
+                    'compare' => '<=',
+                    'type'    => 'DATETIME',
+                );
+            }
         }
 
         $query = new WP_Query( $args );
@@ -576,6 +661,22 @@ class DQ_Workorder_REST_API {
             return get_field( $field_name, $post_id );
         }
         return get_post_meta( $post_id, $field_name, true );
+    }
+
+    /**
+     * Validate date parameter in YYYY-MM-DD format.
+     *
+     * @param string $date_string The date string to validate.
+     * @return bool True if valid date in YYYY-MM-DD format, false otherwise.
+     */
+    public static function validate_date_param( $date_string ) {
+        if ( empty( $date_string ) ) {
+            return true;
+        }
+
+        // Validate YYYY-MM-DD format and check if it's a valid date
+        $date = DateTime::createFromFormat( 'Y-m-d', $date_string );
+        return $date && $date->format( 'Y-m-d' ) === $date_string;
     }
 
     /**

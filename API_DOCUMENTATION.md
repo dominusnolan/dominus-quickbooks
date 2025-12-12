@@ -120,6 +120,10 @@ Authorization: Bearer <token>
 - `page` (integer, optional): Page number (default: 1)
 - `per_page` (integer, optional): Items per page (default: 10, max: 100)
 - `status` (string, optional): Filter by status slug. Valid values: "open", "scheduled", "closed"
+- `orderby` (string, optional): Sort field - "date" (default) or "schedule_date" (uses the schedule_date_time ACF field)
+- `order` (string, optional): Sort order - "ASC" or "DESC" (default: DESC)
+- `date_from` (string, optional): Filter by schedule date >= date_from (format: YYYY-MM-DD, filters schedule_date_time field)
+- `date_to` (string, optional): Filter by schedule date <= date_to (format: YYYY-MM-DD, filters schedule_date_time field)
 
 **Success Response (200 OK):**
 ```json
@@ -147,6 +151,34 @@ Authorization: Bearer <token>
 **Error Responses:**
 - `401 Unauthorized`: Missing or invalid token
 - `403 Forbidden`: User does not have permission
+
+**Example Use Cases:**
+
+1. **Get scheduled workorders with upcoming dates (from today onwards), sorted by nearest date first:**
+```
+GET /workorders?status=scheduled&orderby=schedule_date&order=ASC&date_from=2025-12-12
+```
+
+2. **Get all workorders scheduled between two dates:**
+```
+GET /workorders?status=scheduled&orderby=schedule_date&order=ASC&date_from=2025-12-01&date_to=2025-12-31
+```
+
+3. **Get open workorders sorted by creation date (descending - most recent first):**
+```
+GET /workorders?status=open&orderby=date&order=DESC
+```
+
+4. **Get all scheduled workorders sorted by schedule date (ascending - nearest first):**
+```
+GET /workorders?status=scheduled&orderby=schedule_date&order=ASC
+```
+
+**Important Notes:**
+
+- When using `orderby=schedule_date`, only workorders with a `schedule_date_time` value will be returned. Workorders without this field will be excluded from results.
+- When using `date_from` or `date_to` filters, only workorders with a `schedule_date_time` value will be included in the filtered results.
+- The `schedule_date_time` field stores datetime values (e.g., "2025-12-15 09:00:00"), but date filtering uses date-only values (YYYY-MM-DD) and includes the entire day (00:00:00 to 23:59:59).
 
 ### Get Single Workorder
 
@@ -312,6 +344,12 @@ curl -X POST https://staging.milaymechanical.com/wp-json/dq-quickbooks/v1/auth/l
 **List Workorders:**
 ```bash
 curl https://staging.milaymechanical.com/wp-json/dq-quickbooks/v1/workorders \
+  -H "Authorization: Bearer <your-token>"
+```
+
+**List Scheduled Workorders with Upcoming Dates:**
+```bash
+curl "https://staging.milaymechanical.com/wp-json/dq-quickbooks/v1/workorders?status=scheduled&orderby=schedule_date&order=ASC&date_from=2025-12-12" \
   -H "Authorization: Bearer <your-token>"
 ```
 
