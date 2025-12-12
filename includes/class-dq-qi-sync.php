@@ -49,8 +49,9 @@ class DQ_QI_Sync {
                 // Fallback: if only 'value' (customer ID) is present, query QBO API for DisplayName
                 $customer_id = (string) $invoice_obj['CustomerRef']['value'];
                 
-                // Validate customer ID format (alphanumeric and hyphens only)
-                if ( preg_match( '/^[A-Z0-9\-]+$/i', $customer_id ) ) {
+                // Validate customer ID format (alphanumeric with optional internal hyphens)
+                // Pattern ensures ID starts and ends with alphanumeric, with hyphens only between chars
+                if ( preg_match( '/^[A-Z0-9]+(?:-[A-Z0-9]+)*$/i', $customer_id ) ) {
                     $customer_data = DQ_API::get( 'customer/' . $customer_id );
                     if ( ! is_wp_error( $customer_data ) && ! empty( $customer_data['Customer']['DisplayName'] ) ) {
                         $customer_name = trim( (string) $customer_data['Customer']['DisplayName'] );
@@ -109,8 +110,9 @@ class DQ_QI_Sync {
                 // If we have a valid term_id, assign it to the post
                 if ( $term_id ) {
                     // Assign term to post (creates the taxonomy relationship)
-                    // Note: The 'false' parameter replaces all existing terms for this taxonomy
-                    // This ensures only one customer per invoice (consistent with QBO behavior)
+                    // Note: The 'false' parameter (append=false) replaces all existing terms for this taxonomy
+                    // This enforces single-customer-per-invoice constraint, matching QuickBooks Online's
+                    // data model where each invoice belongs to exactly one customer (not shared/multi-customer)
                     $set_result = wp_set_object_terms( $post_id, $term_id, 'qbo_customers', false );
                     
                     if ( is_wp_error( $set_result ) ) {
@@ -281,8 +283,8 @@ class DQ_QI_Sync {
                 if ( count( $string_fields ) === 1 ) {
                     $field = $string_fields[0];
                     $val = trim( (string) $field['StringValue'] );
-                    // Validate it looks like a PO number (alphanumeric with common separators, no control chars)
-                    if ( $val !== '' && strlen( $val ) < self::MAX_PO_LENGTH && preg_match( '/^[A-Z0-9\-_#]+$/i', $val ) ) {
+                    // Validate it looks like a PO number (starts alphanumeric, allows common separators)
+                    if ( $val !== '' && strlen( $val ) < self::MAX_PO_LENGTH && preg_match( '/^[A-Z0-9][A-Z0-9\-_#]*$/i', $val ) ) {
                         $po_value = $val;
                         DQ_Logger::info( 'Found PO CustomField by StringValue fallback (single field)', [
                             'post_id' => $post_id,
