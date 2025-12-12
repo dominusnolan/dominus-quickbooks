@@ -653,7 +653,7 @@ class DQ_Workorder_REST_API {
      * @param string $date_string The date string to validate.
      * @return bool True if valid date in YYYY-MM-DD format, false otherwise.
      */
-    private static function validate_date_param( $date_string ) {
+    public static function validate_date_param( $date_string ) {
         if ( empty( $date_string ) ) {
             return true;
         }
