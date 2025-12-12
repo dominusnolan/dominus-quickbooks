@@ -48,19 +48,28 @@ class DQ_QI_Sync {
             } elseif ( ! empty( $invoice_obj['CustomerRef']['value'] ) ) {
                 // Fallback: if only 'value' (customer ID) is present, query QBO API for DisplayName
                 $customer_id = (string) $invoice_obj['CustomerRef']['value'];
-                $customer_data = DQ_API::get( 'customer/' . $customer_id );
-                if ( ! is_wp_error( $customer_data ) && ! empty( $customer_data['Customer']['DisplayName'] ) ) {
-                    $customer_name = trim( (string) $customer_data['Customer']['DisplayName'] );
-                    DQ_Logger::info( 'Resolved customer DisplayName from QBO API', [
-                        'post_id' => $post_id,
-                        'customer_id' => $customer_id,
-                        'display_name' => $customer_name
-                    ] );
+                
+                // Validate customer ID format (alphanumeric and hyphens only)
+                if ( preg_match( '/^[A-Z0-9\-]+$/i', $customer_id ) ) {
+                    $customer_data = DQ_API::get( 'customer/' . $customer_id );
+                    if ( ! is_wp_error( $customer_data ) && ! empty( $customer_data['Customer']['DisplayName'] ) ) {
+                        $customer_name = trim( (string) $customer_data['Customer']['DisplayName'] );
+                        DQ_Logger::info( 'Resolved customer DisplayName from QBO API', [
+                            'post_id' => $post_id,
+                            'customer_id' => $customer_id,
+                            'display_name' => $customer_name
+                        ] );
+                    } else {
+                        DQ_Logger::warning( 'Could not resolve customer DisplayName from QBO API', [
+                            'post_id' => $post_id,
+                            'customer_id' => $customer_id,
+                            'error' => is_wp_error( $customer_data ) ? $customer_data->get_error_message() : 'No DisplayName in response'
+                        ] );
+                    }
                 } else {
-                    DQ_Logger::warning( 'Could not resolve customer DisplayName from QBO API', [
+                    DQ_Logger::error( 'Invalid customer ID format in CustomerRef', [
                         'post_id' => $post_id,
-                        'customer_id' => $customer_id,
-                        'error' => is_wp_error( $customer_data ) ? $customer_data->get_error_message() : 'No DisplayName in response'
+                        'customer_id' => $customer_id
                     ] );
                 }
             }
@@ -71,20 +80,7 @@ class DQ_QI_Sync {
                 $term_id = null;
                 
                 if ( $term ) {
-                    // Extract term_id from term_exists return value
-                    // Modern WordPress (5.x+): array with 'term_id' key
-                    // Legacy WordPress (4.x): indexed array [term_id, term_taxonomy_id]
-                    // By ID lookup: integer term_id
-                    if ( is_array( $term ) ) {
-                        if ( isset( $term['term_id'] ) ) {
-                            $term_id = (int) $term['term_id'];
-                        } elseif ( isset( $term[0] ) ) {
-                            $term_id = (int) $term[0];
-                        }
-                    } elseif ( is_numeric( $term ) ) {
-                        $term_id = (int) $term;
-                    }
-                    
+                    $term_id = self::extract_term_id( $term );
                     DQ_Logger::info( 'Found existing qbo_customers term', [
                         'post_id' => $post_id,
                         'customer_name' => $customer_name,
@@ -101,8 +97,7 @@ class DQ_QI_Sync {
                         ] );
                         $term_id = null;
                     } else {
-                        // wp_insert_term returns array with 'term_id' key
-                        $term_id = isset( $term['term_id'] ) ? (int) $term['term_id'] : null;
+                        $term_id = self::extract_term_id( $term );
                         DQ_Logger::info( 'Created new qbo_customers term', [
                             'post_id' => $post_id,
                             'customer_name' => $customer_name,
@@ -114,6 +109,8 @@ class DQ_QI_Sync {
                 // If we have a valid term_id, assign it to the post
                 if ( $term_id ) {
                     // Assign term to post (creates the taxonomy relationship)
+                    // Note: The 'false' parameter replaces all existing terms for this taxonomy
+                    // This ensures only one customer per invoice (consistent with QBO behavior)
                     $set_result = wp_set_object_terms( $post_id, $term_id, 'qbo_customers', false );
                     
                     if ( is_wp_error( $set_result ) ) {
@@ -124,7 +121,9 @@ class DQ_QI_Sync {
                             'error' => $set_result->get_error_message()
                         ] );
                     } else {
-                        // Also update the ACF field (ACF will return it as term object based on return_format)
+                        // Also update the ACF taxonomy field 'qi_customer'
+                        // This field is configured to link to the qbo_customers taxonomy
+                        // ACF will return it as a WP_Term object based on the field's return_format setting
                         $updated = update_field( 'qi_customer', $term_id, $post_id );
                         if ( $updated ) {
                             DQ_Logger::info( 'Updated qi_customer field from QBO CustomerRef', [
@@ -302,20 +301,7 @@ class DQ_QI_Sync {
                 $term_id = null;
                 
                 if ( $term ) {
-                    // Correctly extract term_id from term_exists return value
-                    // Modern WordPress (5.x+): array with 'term_id' and 'term_taxonomy_id' keys
-                    // Legacy WordPress (4.x): indexed array [term_id, term_taxonomy_id]
-                    // By ID lookup: integer term_id
-                    if ( is_array( $term ) ) {
-                        if ( isset( $term['term_id'] ) ) {
-                            $term_id = (int) $term['term_id'];
-                        } elseif ( isset( $term[0] ) ) {
-                            $term_id = (int) $term[0];
-                        }
-                    } elseif ( is_numeric( $term ) ) {
-                        $term_id = (int) $term;
-                    }
-                    
+                    $term_id = self::extract_term_id( $term );
                     DQ_Logger::info( 'Found existing purchase_order term', [
                         'post_id' => $post_id,
                         'po_value' => $po_value,
@@ -332,8 +318,7 @@ class DQ_QI_Sync {
                         ] );
                         $term_id = null;
                     } else {
-                        // wp_insert_term returns array with 'term_id' key
-                        $term_id = isset( $term['term_id'] ) ? (int) $term['term_id'] : null;
+                        $term_id = self::extract_term_id( $term );
                         DQ_Logger::info( 'Created new purchase_order term', [
                             'post_id' => $post_id,
                             'po_value' => $po_value,
@@ -727,5 +712,34 @@ class DQ_QI_Sync {
             $out[] = $t;
         }
         return $out;
+    }
+
+    /**
+     * Extract term_id from term_exists return value.
+     * 
+     * Handles multiple WordPress versions and return formats:
+     * - Modern WordPress (5.x+): array with 'term_id' and 'term_taxonomy_id' keys
+     * - Legacy WordPress (4.x): indexed array [term_id, term_taxonomy_id]
+     * - By ID lookup: integer term_id
+     * 
+     * @param mixed $term Return value from term_exists()
+     * @return int|null The term ID, or null if it cannot be determined
+     */
+    private static function extract_term_id( $term ) {
+        if ( ! $term ) {
+            return null;
+        }
+        
+        if ( is_array( $term ) ) {
+            if ( isset( $term['term_id'] ) ) {
+                return (int) $term['term_id'];
+            } elseif ( isset( $term[0] ) ) {
+                return (int) $term[0];
+            }
+        } elseif ( is_numeric( $term ) ) {
+            return (int) $term;
+        }
+        
+        return null;
     }
 }
