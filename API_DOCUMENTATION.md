@@ -124,6 +124,7 @@ Authorization: Bearer <token>
 - `order` (string, optional): Sort order - "ASC" or "DESC" (default: DESC)
 - `date_from` (string, optional): Filter by schedule date >= date_from (format: YYYY-MM-DD, filters schedule_date_time field)
 - `date_to` (string, optional): Filter by schedule date <= date_to (format: YYYY-MM-DD, filters schedule_date_time field)
+- `exclude_closed` (boolean, optional): When true, excludes workorders with "closed" status from results. Ignored if `status` parameter is provided. (default: false)
 
 **Success Response (200 OK):**
 ```json
@@ -172,6 +173,16 @@ GET /workorders?status=open&orderby=date&order=DESC
 4. **Get all scheduled workorders sorted by schedule date (ascending - nearest first):**
 ```
 GET /workorders?status=scheduled&orderby=schedule_date&order=ASC
+```
+
+5. **Get all workorders excluding closed ones (main table view):**
+```
+GET /workorders?exclude_closed=true
+```
+
+6. **Get only closed workorders (when exclude_closed is ignored due to status filter):**
+```
+GET /workorders?status=closed
 ```
 
 **Important Notes:**

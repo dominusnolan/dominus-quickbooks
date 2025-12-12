@@ -160,6 +160,11 @@ class DQ_Workorder_REST_API {
                     'sanitize_callback' => 'sanitize_text_field',
                     'validate_callback' => array( __CLASS__, 'validate_date_param' ),
                 ),
+                'exclude_closed' => array(
+                    'type'              => 'boolean',
+                    'default'           => false,
+                    'sanitize_callback' => 'rest_sanitize_boolean',
+                ),
             ),
         ) );
 
@@ -379,13 +384,14 @@ class DQ_Workorder_REST_API {
      * @return WP_REST_Response|WP_Error The response containing workorder data.
      */
     public static function rest_get_workorders( $request ) {
-        $page      = $request->get_param( 'page' );
-        $per_page  = $request->get_param( 'per_page' );
-        $status    = $request->get_param( 'status' );
-        $orderby   = $request->get_param( 'orderby' );
-        $order     = $request->get_param( 'order' );
-        $date_from = $request->get_param( 'date_from' );
-        $date_to   = $request->get_param( 'date_to' );
+        $page           = $request->get_param( 'page' );
+        $per_page       = $request->get_param( 'per_page' );
+        $status         = $request->get_param( 'status' );
+        $orderby        = $request->get_param( 'orderby' );
+        $order          = $request->get_param( 'order' );
+        $date_from      = $request->get_param( 'date_from' );
+        $date_to        = $request->get_param( 'date_to' );
+        $exclude_closed = $request->get_param( 'exclude_closed' );
 
         $user = wp_get_current_user();
 
@@ -419,6 +425,21 @@ class DQ_Workorder_REST_API {
                     'field'    => 'slug',
                     'terms'    => $status,
                 ),
+            );
+        }
+
+        // Exclude closed workorders if requested (and no specific status filter)
+        if ( $exclude_closed && empty( $status ) ) {
+            if ( ! isset( $args['tax_query'] ) ) {
+                $args['tax_query'] = array();
+            }
+            
+            // Add exclusion for 'closed' category
+            $args['tax_query'][] = array(
+                'taxonomy' => 'category',
+                'field'    => 'slug',
+                'terms'    => array( 'closed', 'close' ),
+                'operator' => 'NOT IN',
             );
         }
 
