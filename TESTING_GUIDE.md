@@ -130,6 +130,7 @@ curl https://staging.milaymechanical.com/wp-json/dq-quickbooks/v1/workorders \
       "wo_state": "CA",
       "wo_customer_email": "customer@example.com",
       "schedule_date": "2025-12-15 09:00:00",
+      "re_schedule": "",
       "closed_on": "",
       "permalink": "https://staging.milaymechanical.com/workorder/wo-2025-001/"
     }
@@ -319,6 +320,7 @@ curl https://staging.milaymechanical.com/wp-json/dq-quickbooks/v1/workorders/456
   "wo_state": "CA",
   "wo_customer_email": "customer@example.com",
   "schedule_date": "2025-12-15 09:00:00",
+  "re_schedule": "",
   "closed_on": "",
   "permalink": "https://staging.milaymechanical.com/workorder/wo-2025-001/"
 }

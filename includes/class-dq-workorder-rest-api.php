@@ -618,6 +618,7 @@ class DQ_Workorder_REST_API {
 
         // Get ACF fields
         $schedule_date = self::get_acf_or_meta( $post_id, 'schedule_date_time' );
+        $re_schedule   = self::get_acf_or_meta( $post_id, 're-schedule' );
         $closed_on     = self::get_acf_or_meta( $post_id, 'closed_on' );
         $date_service_completed_by_fse = self::get_acf_or_meta( $post_id, 'date_service_completed_by_fse' );
         $wo_location   = self::get_acf_or_meta( $post_id, 'wo_location' );
@@ -632,6 +633,7 @@ class DQ_Workorder_REST_API {
             'wo_customer_email'               => $wo_customer_email ? $wo_customer_email : '',
             'wo_location'                     => $wo_location ? $wo_location : '',
             'schedule_date'                   => $schedule_date ? $schedule_date : '',
+            're_schedule'                     => $re_schedule ? $re_schedule : '',
             'closed_on'                       => $closed_on ? $closed_on : '',
             'date_service_completed_by_fse'   => $date_service_completed_by_fse ? $date_service_completed_by_fse : '',
             'permalink'                       => get_permalink( $post_id ),
