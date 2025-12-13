@@ -617,7 +617,18 @@ class DQ_Workorder_REST_API {
         $wo_customer_email = get_post_meta( $post_id, 'wo_customer_email', true );
 
         // Get ACF fields
-        $schedule_date = self::get_acf_or_meta( $post_id, 'schedule_date_time' );
+        // Fetch the raw value
+        $rawScheduleDate = self::get_acf_or_meta( $post_id, 'schedule_date_time' );
+        $schedule_date = '';
+        if ($rawScheduleDate) {
+            // Try ACF's Date Picker Display format
+            $dt = DateTime::createFromFormat('m/d/Y', $rawScheduleDate);
+            if ($dt !== false) {
+                $schedule_date = $dt->format('Y-m-d 00:00:00');
+            } else {
+                $schedule_date = $rawScheduleDate; // fallback
+            }
+        }
         $re_schedule   = self::get_acf_or_meta( $post_id, 're-schedule' );
         $closed_on     = self::get_acf_or_meta( $post_id, 'closed_on' );
         $date_service_completed_by_fse = self::get_acf_or_meta( $post_id, 'date_service_completed_by_fse' );
