@@ -610,7 +610,7 @@ class DQ_Workorder_REST_API {
         $post_id = $post->ID;
 
         // Get status from taxonomy (category)
-        $status = self:: get_workorder_status( $post_id );
+        $status = self::get_workorder_status( $post_id );
 
         // Get post meta fields
         $wo_state          = get_post_meta( $post_id, 'wo_state', true );
@@ -630,9 +630,8 @@ class DQ_Workorder_REST_API {
         $re_schedule   = self::get_acf_or_meta( $post_id, 're-schedule' );
         $closed_on     = self::get_acf_or_meta( $post_id, 'closed_on' );
         $date_service_completed_by_fse = self::get_acf_or_meta( $post_id, 'date_service_completed_by_fse' );
-        $wo_location   = self:: get_acf_or_meta( $post_id, 'wo_location' );
+        $wo_location   = self::get_acf_or_meta( $post_id, 'wo_location' );
         
-        // NEW: Get the two new ACF fields
         $installed_product_id = self::get_acf_or_meta( $post_id, 'installed_product_id' );
         $wo_type_of_work      = self::get_acf_or_meta( $post_id, 'wo_type_of_work' );
 
@@ -647,11 +646,10 @@ class DQ_Workorder_REST_API {
             'wo_location'                     => $wo_location ? $wo_location : '',
             'schedule_date'                   => $schedule_date ? $schedule_date : '',
             're_schedule'                     => $re_schedule ? $re_schedule : '',
-            'closed_on'                       => $closed_on ? $closed_on :  '',
+            'closed_on'                       => $closed_on ? $closed_on : '',
             'date_service_completed_by_fse'   => $date_service_completed_by_fse ? $date_service_completed_by_fse : '',
             'permalink'                       => get_permalink( $post_id ),
-            // NEW: Add the two new fields
-            'installed_product_id'            => $installed_product_id ?  $installed_product_id : '',
+            'installed_product_id'            => $installed_product_id ? $installed_product_id : '',
             'wo_type_of_work'                 => $wo_type_of_work ? $wo_type_of_work :  '',
         );
     }
