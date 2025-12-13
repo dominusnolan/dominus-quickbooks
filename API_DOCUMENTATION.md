@@ -140,6 +140,7 @@ Authorization: Bearer <token>
       "wo_customer_email": "customer@example.com",
       "wo_location": "Los Angeles, CA",
       "schedule_date": "2025-12-15 09:00:00",
+      "re_schedule": "",
       "closed_on": "",
       "permalink": "https://staging.milaymechanical.com/workorder/wo-2025-001/"
     }
@@ -213,6 +214,7 @@ Authorization: Bearer <token>
   "wo_customer_email": "customer@example.com",
   "wo_location": "Los Angeles, CA",
   "schedule_date": "2025-12-15 09:00:00",
+  "re_schedule": "",
   "closed_on": "",
   "permalink": "https://staging.milaymechanical.com/workorder/wo-2025-001/"
 }
